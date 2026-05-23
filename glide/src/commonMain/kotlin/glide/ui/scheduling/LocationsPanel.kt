@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.LocationStore
 import glide.data.ScheduledClassStore
+import glide.data.SchedulePanelState
 import glide.model.ClassLocation
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.FormPanelSection
@@ -88,6 +89,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
     var formError by remember { mutableStateOf<String?>(null) }
 
     val locations = LocationStore.sortedForPanel()
+    val classFilterId = SchedulePanelState.selectedClassId
 
     fun clearSelection() {
         selectedId = null
@@ -120,6 +122,12 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         if (selectedId != null && locations.none { it.id == selectedId }) {
             clearSelection()
         }
+    }
+
+    LaunchedEffect(classFilterId, locations) {
+        val classId = classFilterId ?: return@LaunchedEffect
+        val locationId = ScheduledClassStore.findById(classId)?.locationId ?: return@LaunchedEffect
+        locations.find { it.id == locationId }?.let { loadIntoForm(it) }
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {

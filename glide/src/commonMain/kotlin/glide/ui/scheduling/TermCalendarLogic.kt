@@ -41,6 +41,21 @@ fun defaultRecurringClassTermIds(terms: List<AcademicTerm>, today: LocalDate = L
     return sorted.drop(startIndex).map { it.id }.toSet()
 }
 
+fun termIdForClassSelection(
+    scheduledClass: ScheduledClass,
+    terms: List<AcademicTerm>,
+    today: LocalDate = LocalDate.now(),
+): String? {
+    val classTerms = terms.filter { it.id in scheduledClass.termIds }
+    if (classTerms.isEmpty()) return null
+    findCurrentTerm(classTerms, today)?.id?.let { return it }
+    classTerms.firstOrNull { term ->
+        val start = parseIsoLocalDate(term.startDate) ?: return@firstOrNull false
+        start.isAfter(today)
+    }?.id?.let { return it }
+    return classTerms.lastOrNull()?.id
+}
+
 fun defaultTermSelectionId(terms: List<AcademicTerm>, today: LocalDate = LocalDate.now()): String? {
     if (terms.isEmpty()) return null
     findCurrentTerm(terms, today)?.id?.let { return it }

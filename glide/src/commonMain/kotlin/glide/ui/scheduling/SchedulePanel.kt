@@ -59,6 +59,7 @@ import glide.data.PackEnrollmentStore
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
 import glide.data.ScheduledClassStore
+import glide.data.SchedulePanelState
 import glide.data.TermStore
 import glide.data.resolveMainContact
 import glide.data.toUserMessage
@@ -170,25 +171,36 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
     var formError by remember { mutableStateOf<String?>(null) }
 
     val locations = LocationStore.sortedForPanel()
-    val classes = ScheduledClassStore.forSchedulePanel()
+    val soldPlanFilterId = SchedulePanelState.selectedSoldPlanId
+    val classes = ScheduledClassStore.forSchedulePanelFromSoldPlan(soldPlanFilterId)
+    val soldPlanFilterLabel = soldPlanFilterId?.let { groupId ->
+        PeopleGroupStore.findById(groupId)?.let { group ->
+            group.resolveMainContact().name.takeIf { it.isNotBlank() }
+                ?: group.planId?.let { PlanStore.findById(it)?.name }?.takeIf { it.isNotBlank() }
+        }
+    }
 
-    fun clearSelection() {
+    fun clearLocalSelection() {
         selectedId = null
         isCreating = true
         form.load(ClassFormState.defaultForCreate(terms))
         formError = null
+    }
+
+    fun clearSelection() {
+        clearLocalSelection()
+        SchedulePanelState.onClassCleared()
     }
 
     fun resetFormForCreate() {
-        selectedId = null
-        isCreating = true
-        form.load(ClassFormState.defaultForCreate(terms))
-        formError = null
+        clearLocalSelection()
+        SchedulePanelState.onClassCleared()
     }
 
-    fun loadIntoForm(scheduledClass: ScheduledClass) {
+    fun syncClassIntoForm(scheduledClass: ScheduledClass) {
         selectedId = scheduledClass.id
         isCreating = false
+        SchedulePanelState.syncClassContext(scheduledClass.id)
         form.load(
             ClassFormState(
                 name = scheduledClass.name,
@@ -208,7 +220,43 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
         formError = null
     }
 
-    LaunchedEffect(classes, selectedId) {
+    fun loadIntoForm(scheduledClass: ScheduledClass) {
+        selectedId = scheduledClass.id
+        isCreating = false
+        SchedulePanelState.onClassSelected(scheduledClass.id)
+        form.load(
+            ClassFormState(
+                name = scheduledClass.name,
+                termIds = scheduledClass.termIds.toSet(),
+                customerGroupIds = scheduledClass.customerGroupIds.toSet(),
+                locationId = scheduledClass.locationId,
+                scheduleKind = scheduledClass.scheduleKind(),
+                dayOfWeek = scheduledClass.dayOfWeek,
+                singleDate = scheduledClass.singleDate.orEmpty(),
+                startTime = scheduledClass.startTime,
+                endTime = scheduledClass.endTime,
+                notes = scheduledClass.notes,
+                calendarColorArgb = scheduledClass.calendarColorArgb,
+                classId = scheduledClass.id,
+            ),
+        )
+        formError = null
+    }
+
+    LaunchedEffect(soldPlanFilterId, classes) {
+        val soldPlanId = soldPlanFilterId ?: return@LaunchedEffect
+        val scheduledClass = ScheduledClassStore.findClassContainingCustomerGroup(soldPlanId)
+        if (scheduledClass == null) {
+            if (selectedId != null) clearLocalSelection()
+            return@LaunchedEffect
+        }
+        if (selectedId != scheduledClass.id) {
+            syncClassIntoForm(scheduledClass)
+        }
+    }
+
+    LaunchedEffect(classes, selectedId, soldPlanFilterId) {
+        if (soldPlanFilterId != null) return@LaunchedEffect
         if (selectedId != null && classes.none { it.id == selectedId }) {
             clearSelection()
         }
@@ -239,6 +287,10 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
             if (!compact) {
                 Text(
                     text = when {
+                        soldPlanFilterId != null -> {
+                            val label = soldPlanFilterLabel ?: "this sold plan"
+                            "Showing class for $label. Use Clear filter to reset."
+                        }
                         terms.isEmpty() && locations.isEmpty() ->
                             "Create terms and locations in their panels, then add weekly or single-day classes here."
                         terms.isEmpty() ->
@@ -265,8 +317,15 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             text = "${classes.size} class${if (classes.size == 1) "" else "es"}",
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        GlideButton(onClick = { resetFormForCreate() }) {
-                            Text(if (compact) "New" else "New class")
+                        Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (soldPlanFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearSoldPlanFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            GlideButton(onClick = { resetFormForCreate() }) {
+                                Text(if (compact) "New" else "New class")
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(spacing.field))
@@ -289,7 +348,11 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "No classes yet.",
+                                text = when {
+                                    soldPlanFilterId != null ->
+                                        "This sold plan is not assigned to a class."
+                                    else -> "No classes yet."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

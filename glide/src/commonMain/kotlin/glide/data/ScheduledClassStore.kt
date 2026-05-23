@@ -73,6 +73,12 @@ object ScheduledClassStore {
         return filtered.sortedWith(compareScheduledClasses())
     }
 
+    fun forSchedulePanelFromSoldPlan(soldPlanId: String?): List<ScheduledClass> {
+        if (soldPlanId == null) return forSchedulePanel()
+        val scheduledClass = findClassContainingCustomerGroup(soldPlanId) ?: return emptyList()
+        return listOf(scheduledClass)
+    }
+
     fun countForTerm(termId: String): Int = _classes.count { it.spansTerm(termId) }
 
     fun countForLocation(locationId: String): Int = _classes.count { it.usesLocation(locationId) }

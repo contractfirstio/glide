@@ -32,6 +32,14 @@ object PeopleGroupStore {
             else -> customers
         }
 
+    /** Sold plans enrolled on the selected class in scheduling view. */
+    fun forSchedulingSoldPlans(classId: String? = null): List<PeopleGroup> {
+        if (classId == null) return customers
+        val scheduledClass = ScheduledClassStore.findById(classId) ?: return customers
+        val enrolledIds = scheduledClass.customerGroupIds.toSet()
+        return customers.filter { it.id in enrolledIds }
+    }
+
     /** Sample / dev data only — inserts an already-converted customer group. */
     internal fun seedCustomer(group: PeopleGroup) {
         require(group.type == PeopleGroupType.CUSTOMER) {

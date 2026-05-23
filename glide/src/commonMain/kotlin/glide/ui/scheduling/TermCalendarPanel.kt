@@ -45,6 +45,7 @@ import glide.data.AppViewMode
 import glide.data.AppViewState
 import glide.data.AttendancePanelState
 import glide.data.LocationStore
+import glide.data.SchedulePanelState
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
 import glide.data.millisUntilNextAttendanceReminderCheck
@@ -104,6 +105,7 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
     val viewMode = AppViewState.mode
     val attendanceVisible = AttendancePanelState.visible
     val activeAttendanceSession = if (attendanceVisible) AttendancePanelState.sessionKey else null
+    val classFilterId = SchedulePanelState.selectedClassId
     val listState = rememberLazyListState()
     var attendanceRefreshTick by remember { mutableIntStateOf(0) }
 
@@ -167,6 +169,12 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
             if (!attendanceVisible) return@LaunchedEffect
             val iso = activeAttendanceSession?.sessionDate ?: return@LaunchedEffect
             findTermContainingIsoDate(termsChronological, iso)?.id?.let { selectedTermId = it }
+        }
+
+        LaunchedEffect(classFilterId, termsChronological) {
+            val classId = classFilterId ?: return@LaunchedEffect
+            val scheduledClass = ScheduledClassStore.findById(classId) ?: return@LaunchedEffect
+            termIdForClassSelection(scheduledClass, termsChronological)?.let { selectedTermId = it }
         }
 
         LaunchedEffect(attendanceVisible, activeAttendanceSession, selectedTerm.id, months) {

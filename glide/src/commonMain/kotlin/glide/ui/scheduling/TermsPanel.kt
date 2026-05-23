@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.ScheduledClassStore
+import glide.data.SchedulePanelState
 import glide.data.TermStore
 import glide.data.validateTermDisablingRollingPlans
 import glide.model.AcademicTerm
@@ -101,6 +102,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
     var formError by remember { mutableStateOf<String?>(null) }
 
     val terms = TermStore.sortedForPanel()
+    val classFilterId = SchedulePanelState.selectedClassId
 
     fun clearSelection() {
         selectedId = null
@@ -135,6 +137,13 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         if (selectedId != null && terms.none { it.id == selectedId }) {
             clearSelection()
         }
+    }
+
+    LaunchedEffect(classFilterId, terms) {
+        val classId = classFilterId ?: return@LaunchedEffect
+        val scheduledClass = ScheduledClassStore.findById(classId) ?: return@LaunchedEffect
+        val termId = termIdForClassSelection(scheduledClass, terms) ?: return@LaunchedEffect
+        terms.find { it.id == termId }?.let { loadIntoForm(it) }
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {

@@ -18,9 +18,11 @@ object AppViewState {
         when (newMode) {
             AppViewMode.SCHEDULING -> {
                 BillingPanelState.close()
+                SchedulePanelState.clear()
             }
             AppViewMode.CUSTOMER_MANAGEMENT -> {
                 AttendancePanelState.clear()
+                SchedulePanelState.clear()
                 if (BillingPanelState.peopleGroupId != null) {
                     BillingPanelState.reopenForCurrentGroup()
                 }

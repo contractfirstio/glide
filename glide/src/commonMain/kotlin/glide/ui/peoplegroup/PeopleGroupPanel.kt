@@ -52,6 +52,7 @@ import glide.data.ContactsPanelState
 import glide.data.PlansPanelState
 import glide.data.RelatedPanelState
 import glide.data.RelatedPersonStore
+import glide.data.SchedulePanelState
 import glide.data.PackEnrollmentStore
 import glide.data.PeopleGroupNavigation
 import glide.data.PeopleGroupStore
@@ -259,15 +260,30 @@ private fun PeopleGroupPanel(
     } else {
         null
     }
-    val groups = when (ui.type) {
-        PeopleGroupType.LEAD -> PeopleGroupStore.leads
-        PeopleGroupType.CUSTOMER ->
-            PeopleGroupStore.forCustomersPanel(contactFilterId, relatedFilterId, planFilterId)
+    val schedulingSoldPlansPanel =
+        ui.type == PeopleGroupType.CUSTOMER && AppViewState.mode == AppViewMode.SCHEDULING
+    val soldPlanFilterId = if (schedulingSoldPlansPanel) {
+        SchedulePanelState.selectedSoldPlanId
+    } else {
+        null
+    }
+    val classFilterId = if (schedulingSoldPlansPanel && soldPlanFilterId == null) {
+        SchedulePanelState.selectedClassId
+    } else {
+        null
+    }
+    val groups = when {
+        schedulingSoldPlansPanel -> PeopleGroupStore.forSchedulingSoldPlans(classFilterId)
+        ui.type == PeopleGroupType.LEAD -> PeopleGroupStore.leads
+        else -> PeopleGroupStore.forCustomersPanel(contactFilterId, relatedFilterId, planFilterId)
     }
     val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val relatedFilterLabel = relatedFilterId?.let {
         RelatedPersonStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    }
+    val classFilterLabel = classFilterId?.let {
+        ScheduledClassStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
@@ -287,7 +303,9 @@ private fun PeopleGroupPanel(
 
     fun clearSelection() {
         clearLocalSelection()
-        if (ui.type == PeopleGroupType.CUSTOMER) {
+        if (schedulingSoldPlansPanel) {
+            SchedulePanelState.onSoldPlanCleared()
+        } else if (ui.type == PeopleGroupType.CUSTOMER) {
             BillingPanelState.onCustomerGroupCleared()
         }
     }
@@ -312,6 +330,9 @@ private fun PeopleGroupPanel(
             ),
         )
         formError = null
+        if (schedulingSoldPlansPanel) {
+            SchedulePanelState.onSoldPlanSelected(group.id)
+        }
     }
 
     val pendingLeadId = PeopleGroupNavigation.pendingLeadId
@@ -334,7 +355,7 @@ private fun PeopleGroupPanel(
     }
 
     LaunchedEffect(BillingPanelState.peopleGroupId) {
-        if (ui.type != PeopleGroupType.CUSTOMER) return@LaunchedEffect
+        if (ui.type != PeopleGroupType.CUSTOMER || schedulingSoldPlansPanel) return@LaunchedEffect
         when (BillingPanelState.peopleGroupId) {
             null -> if (selectedId != null) clearLocalSelection()
             else -> if (selectedId != null && selectedId != BillingPanelState.peopleGroupId) {
@@ -343,16 +364,17 @@ private fun PeopleGroupPanel(
         }
     }
 
-    LaunchedEffect(contactFilterId, planFilterId, relatedFilterId) {
+    LaunchedEffect(contactFilterId, planFilterId, relatedFilterId, classFilterId, soldPlanFilterId) {
+        if (ui.type == PeopleGroupType.CUSTOMER && soldPlanFilterId != null) return@LaunchedEffect
         if (ui.type == PeopleGroupType.CUSTOMER &&
-            (contactFilterId != null || planFilterId != null || relatedFilterId != null) &&
+            (contactFilterId != null || planFilterId != null || relatedFilterId != null || classFilterId != null) &&
             selectedId != null
         ) {
             clearLocalSelection()
         }
     }
 
-    LaunchedEffect(contactFilterId, planFilterId, relatedFilterId, groups, selectedId) {
+    LaunchedEffect(contactFilterId, planFilterId, relatedFilterId, classFilterId, soldPlanFilterId, groups, selectedId) {
         if (ui.type == PeopleGroupType.CUSTOMER &&
             selectedId != null &&
             groups.none { it.id == selectedId }
@@ -360,9 +382,6 @@ private fun PeopleGroupPanel(
             clearSelection()
         }
     }
-
-    val schedulingSoldPlansPanel =
-        ui.type == PeopleGroupType.CUSTOMER && AppViewState.mode == AppViewMode.SCHEDULING
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val compact = maxWidth < GlideLayout.CompactWidthBreakpoint
@@ -383,6 +402,10 @@ private fun PeopleGroupPanel(
             if (!compact) {
                 Text(
                     text = when {
+                        schedulingSoldPlansPanel && classFilterId != null -> {
+                            val label = classFilterLabel ?: "this class"
+                            "Showing sold plans on $label. Use Clear filter to reset."
+                        }
                         ui.type == PeopleGroupType.CUSTOMER && planFilterId != null -> {
                             val label = planFilterLabel ?: "this plan"
                             "Showing customer groups on $label. Use Clear filter in Plans to reset."
@@ -417,6 +440,11 @@ private fun PeopleGroupPanel(
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (schedulingSoldPlansPanel && classFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearClassFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
                             if (ui.type == PeopleGroupType.CUSTOMER && planFilterId != null) {
                                 GlideTextButton(onClick = { PlansPanelState.clearPlanFilter() }) {
                                     Text("Clear filter")
@@ -471,6 +499,8 @@ private fun PeopleGroupPanel(
                                         "No customer groups for this related person."
                                     ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null ->
                                         "No customer groups for this contact."
+                                    schedulingSoldPlansPanel && classFilterId != null ->
+                                        "No sold plans on this class."
                                     else -> ui.emptyListMessage
                                 },
                                 style = MaterialTheme.typography.bodySmall,
@@ -501,7 +531,7 @@ private fun PeopleGroupPanel(
                                             clearSelection()
                                         } else {
                                             loadIntoForm(group)
-                                            if (ui.type == PeopleGroupType.CUSTOMER) {
+                                            if (!schedulingSoldPlansPanel && ui.type == PeopleGroupType.CUSTOMER) {
                                                 BillingPanelState.onCustomerGroupSelected(group.id)
                                             }
                                         }
