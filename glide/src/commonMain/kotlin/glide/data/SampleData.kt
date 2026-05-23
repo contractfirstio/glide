@@ -287,6 +287,20 @@ object SampleData {
                 createdAtMillis = now - 4 * day,
             ),
         )
+        ScheduledClassStore.create(
+            ScheduledClass(
+                id = "sample-class-open-day",
+                name = "Spring Open Day Workshop",
+                termIds = listOf(springTerm.id),
+                locationId = studioA.id,
+                dayOfWeek = DayOfWeek.WEDNESDAY,
+                singleDate = "2026-03-18",
+                startTime = "14:00",
+                endTime = "16:00",
+                notes = "One-off open day — single date only",
+                createdAtMillis = now - 4 * day,
+            ),
+        )
     }
 
     private fun seedCustomerBilling(

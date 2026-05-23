@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
 import glide.model.AcademicTerm
+import glide.model.findOverlappingTerm
 import glide.ui.layout.GlideLayout
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.leads.parseIsoDateToMillis
@@ -72,6 +73,15 @@ private data class TermFormState(
         notes = notes.trim(),
         createdAtMillis = createdAtMillis,
     )
+}
+
+private fun overlapErrorMessage(overlapping: AcademicTerm): String {
+    val range = buildString {
+        if (overlapping.startDate.isNotBlank()) append(formatIsoDateForDisplay(overlapping.startDate))
+        if (overlapping.startDate.isNotBlank() && overlapping.endDate.isNotBlank()) append(" – ")
+        if (overlapping.endDate.isNotBlank()) append(formatIsoDateForDisplay(overlapping.endDate))
+    }
+    return "Dates overlap with \"${overlapping.name}\" ($range). Terms must not share any dates."
 }
 
 @Composable
@@ -133,7 +143,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         ) {
             if (!compact) {
                 Text(
-                    text = "Define academic terms and school breaks for your schedule.",
+                    text = "Define academic terms and school breaks. Term dates cannot overlap.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -246,11 +256,20 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                                     formError = "Name, start date, and end date are required. End must be on or after start."
                                     return@GlideButton
                                 }
+                                val excludeId = if (isCreating) null else selectedId
+                                val candidate = formState.toTerm(existingId = excludeId)
+                                val overlapping = findOverlappingTerm(terms, candidate, excludeTermId = excludeId)
+                                if (overlapping != null) {
+                                    formError = overlapErrorMessage(overlapping)
+                                    return@GlideButton
+                                }
                                 formError = null
                                 if (isCreating) {
-                                    val term = formState.toTerm()
-                                    TermStore.create(term)
-                                    loadIntoForm(term)
+                                    if (!TermStore.create(candidate)) {
+                                        formError = "Could not create term — dates overlap an existing term."
+                                        return@GlideButton
+                                    }
+                                    loadIntoForm(candidate)
                                 } else {
                                     val existing = selectedId?.let { TermStore.findById(it) }
                                     if (existing != null) {
@@ -258,7 +277,10 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
-                                        TermStore.update(updated)
+                                        if (!TermStore.update(updated)) {
+                                            formError = "Could not save term — dates overlap an existing term."
+                                            return@GlideButton
+                                        }
                                         loadIntoForm(updated)
                                     }
                                 }

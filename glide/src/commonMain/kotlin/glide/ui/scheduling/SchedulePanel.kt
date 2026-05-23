@@ -54,11 +54,17 @@ import glide.data.memberCount
 import glide.data.resolveMainContact
 import glide.data.toUserMessage
 import glide.model.ClassLocation
+import glide.model.ClassScheduleKind
 import glide.model.DayOfWeek
 import glide.model.ScheduledClass
 import glide.model.compareTime24h
 import glide.model.isValidTime24h
+import glide.model.parseScheduleIsoDate
+import glide.model.scheduleKind
 import glide.model.scheduleLine
+import glide.model.toModelDayOfWeek
+import glide.ui.shared.IsoDateField
+import glide.ui.leads.parseIsoDateToMillis
 import glide.ui.layout.GlideLayout
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.peoplegroup.EntitySearchPicker
@@ -79,7 +85,9 @@ private data class ClassFormState(
     val termIds: Set<String> = emptySet(),
     val customerGroupIds: Set<String> = emptySet(),
     val locationId: String? = null,
+    val scheduleKind: ClassScheduleKind = ClassScheduleKind.RECURRING,
     val dayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
+    val singleDate: String = "",
     val startTime: String = "09:00",
     val endTime: String = "10:00",
     val notes: String = "",
@@ -89,50 +97,76 @@ private data class ClassFormState(
     fun isValid(): Boolean {
         if (name.isBlank()) return false
         if (!isValidTime24h(startTime) || !isValidTime24h(endTime)) return false
-        return compareTime24h(startTime, endTime) < 0
+        if (compareTime24h(startTime, endTime) >= 0) return false
+        return when (scheduleKind) {
+            ClassScheduleKind.RECURRING -> true
+            ClassScheduleKind.SINGLE_DAY -> parseIsoDateToMillis(singleDate) != null
+        }
     }
 
     fun toScheduledClass(
         existingId: String? = null,
         createdAtMillis: Long = System.currentTimeMillis(),
-    ): ScheduledClass = ScheduledClass(
-        id = existingId ?: UUID.randomUUID().toString(),
-        name = name.trim(),
-        termIds = termIds.toList(),
-        customerGroupIds = customerGroupIds.toList(),
-        locationId = locationId,
-        dayOfWeek = dayOfWeek,
-        startTime = startTime,
-        endTime = endTime,
-        notes = notes.trim(),
-        calendarColorArgb = calendarColorArgb,
-        createdAtMillis = createdAtMillis,
-    )
+    ): ScheduledClass {
+        val resolvedSingleDate = when (scheduleKind) {
+            ClassScheduleKind.RECURRING -> null
+            ClassScheduleKind.SINGLE_DAY -> singleDate.trim().takeIf { it.isNotBlank() }
+        }
+        val resolvedDayOfWeek = resolvedSingleDate?.let { iso ->
+            parseScheduleIsoDate(iso)?.dayOfWeek?.toModelDayOfWeek()
+        } ?: dayOfWeek
+        return ScheduledClass(
+            id = existingId ?: UUID.randomUUID().toString(),
+            name = name.trim(),
+            termIds = termIds.toList(),
+            customerGroupIds = customerGroupIds.toList(),
+            locationId = locationId,
+            dayOfWeek = resolvedDayOfWeek,
+            singleDate = resolvedSingleDate,
+            startTime = startTime,
+            endTime = endTime,
+            notes = notes.trim(),
+            calendarColorArgb = calendarColorArgb,
+            createdAtMillis = createdAtMillis,
+        )
+    }
+
+    fun withAutoTermForSingleDay(terms: List<glide.model.AcademicTerm>): ClassFormState {
+        if (scheduleKind != ClassScheduleKind.SINGLE_DAY) return this
+        if (singleDate.isBlank()) return copy(termIds = emptySet())
+        val term = findTermContainingIsoDate(terms, singleDate)
+        return copy(termIds = term?.let { setOf(it.id) } ?: emptySet())
+    }
+
+    companion object {
+        fun defaultForCreate(terms: List<glide.model.AcademicTerm>): ClassFormState =
+            ClassFormState(termIds = defaultRecurringClassTermIds(terms))
+    }
 }
 
 @Composable
 fun SchedulePanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var formState by remember { mutableStateOf(ClassFormState()) }
+    val terms = TermStore.sortedForPanel()
+    var formState by remember { mutableStateOf(ClassFormState.defaultForCreate(terms)) }
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
-    val terms = TermStore.sortedForPanel()
     val locations = LocationStore.sortedForPanel()
     val classes = ScheduledClassStore.forSchedulePanel()
 
     fun clearSelection() {
         selectedId = null
         isCreating = true
-        formState = ClassFormState()
+        formState = ClassFormState.defaultForCreate(terms)
         formError = null
     }
 
     fun resetFormForCreate() {
         selectedId = null
         isCreating = true
-        formState = ClassFormState()
+        formState = ClassFormState.defaultForCreate(terms)
         formError = null
     }
 
@@ -144,7 +178,9 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
             termIds = scheduledClass.termIds.toSet(),
             customerGroupIds = scheduledClass.customerGroupIds.toSet(),
             locationId = scheduledClass.locationId,
+            scheduleKind = scheduledClass.scheduleKind(),
             dayOfWeek = scheduledClass.dayOfWeek,
+            singleDate = scheduledClass.singleDate.orEmpty(),
             startTime = scheduledClass.startTime,
             endTime = scheduledClass.endTime,
             notes = scheduledClass.notes,
@@ -186,13 +222,13 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                 Text(
                     text = when {
                         terms.isEmpty() && locations.isEmpty() ->
-                            "Create terms and locations in their panels, then add recurring classes here."
+                            "Create terms and locations in their panels, then add weekly or single-day classes here."
                         terms.isEmpty() ->
-                            "Create terms in the Terms panel, then add recurring classes here."
+                            "Create terms in the Terms panel, then add weekly or single-day classes here."
                         locations.isEmpty() ->
-                            "Define recurring classes. Add locations in the Locations panel to assign rooms."
+                            "Add weekly or one-off classes. Assign locations in the Locations panel."
                         else ->
-                            "Define recurring classes and link them to terms and locations."
+                            "Add weekly recurring classes or single-day classes with one date."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -284,6 +320,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             terms = terms,
                             locations = locations,
                             spacing = spacing,
+                            isCreating = isCreating,
                         )
 
                         if (!isCreating && selectedId != null) {
@@ -317,18 +354,27 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                         GlideButton(
                             onClick = {
                                 if (!formState.isValid()) {
-                                    formError = "Name, valid start/end times (HH:MM), and end after start are required."
+                                    formError = when (formState.scheduleKind) {
+                                        ClassScheduleKind.RECURRING ->
+                                            "Name, valid start/end times (HH:MM), and end after start are required."
+                                        ClassScheduleKind.SINGLE_DAY ->
+                                            "Name, class date, valid start/end times (HH:MM), and end after start are required."
+                                    }
                                     return@GlideButton
                                 }
                                 formError = null
+                                val stateToSave = formState.withAutoTermForSingleDay(terms)
+                                if (stateToSave != formState) {
+                                    formState = stateToSave
+                                }
                                 if (isCreating) {
-                                    val scheduledClass = formState.toScheduledClass()
+                                    val scheduledClass = stateToSave.toScheduledClass()
                                     ScheduledClassStore.create(scheduledClass)
                                     loadIntoForm(scheduledClass)
                                 } else {
                                     val existing = selectedId?.let { ScheduledClassStore.findById(it) }
                                     if (existing != null) {
-                                        val updated = formState.toScheduledClass(
+                                        val updated = stateToSave.toScheduledClass(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
@@ -644,7 +690,9 @@ private fun ClassForm(
     terms: List<glide.model.AcademicTerm>,
     locations: List<ClassLocation>,
     spacing: GlideLayout.Spacing,
+    isCreating: Boolean,
 ) {
+    var scheduleKindExpanded by remember { mutableStateOf(false) }
     var dayExpanded by remember { mutableStateOf(false) }
     var locationExpanded by remember { mutableStateOf(false) }
     var termsExpanded by remember { mutableStateOf(false) }
@@ -723,7 +771,11 @@ private fun ClassForm(
             )
         } else {
             Text(
-                text = "Select all terms this class spans (e.g. rolling classes across seasons).",
+                text = if (isCreating && state.scheduleKind == ClassScheduleKind.RECURRING) {
+                    "Current and future terms are selected by default for new weekly classes. Adjust as needed."
+                } else {
+                    "Select all terms this class spans (e.g. rolling classes across seasons)."
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -841,17 +893,17 @@ private fun ClassForm(
     Spacer(modifier = Modifier.height(spacing.field))
 
     Column {
-        GlideFieldLabel("Day")
+        GlideFieldLabel("Schedule")
         Spacer(modifier = Modifier.height(2.dp))
         ExposedDropdownMenuBox(
-            expanded = dayExpanded,
-            onExpandedChange = { dayExpanded = it },
+            expanded = scheduleKindExpanded,
+            onExpandedChange = { scheduleKindExpanded = it },
         ) {
             OutlinedTextField(
-                value = state.dayOfWeek.label,
+                value = state.scheduleKind.label,
                 onValueChange = {},
                 readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dayExpanded) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = scheduleKindExpanded) },
                 shape = MaterialTheme.shapes.small,
                 textStyle = MaterialTheme.typography.bodySmall.copy(
                     color = MaterialTheme.colorScheme.onSurface,
@@ -866,16 +918,120 @@ private fun ClassForm(
                     .menuAnchor(),
             )
             ExposedDropdownMenu(
-                expanded = dayExpanded,
-                onDismissRequest = { dayExpanded = false },
+                expanded = scheduleKindExpanded,
+                onDismissRequest = { scheduleKindExpanded = false },
             ) {
-                DayOfWeek.entries.forEach { day ->
+                ClassScheduleKind.entries.forEach { kind ->
                     DropdownMenuItem(
-                        text = { Text(day.label, style = MaterialTheme.typography.bodySmall) },
+                        text = { Text(kind.label, style = MaterialTheme.typography.bodySmall) },
                         onClick = {
-                            onStateChange(state.copy(dayOfWeek = day))
-                            dayExpanded = false
+                            onStateChange(
+                                when (kind) {
+                                    ClassScheduleKind.RECURRING -> {
+                                        val recurring = state.copy(
+                                            scheduleKind = kind,
+                                            singleDate = "",
+                                        )
+                                        if (isCreating) {
+                                            recurring.copy(termIds = defaultRecurringClassTermIds(terms))
+                                        } else {
+                                            recurring
+                                        }
+                                    }
+                                    ClassScheduleKind.SINGLE_DAY ->
+                                        state.copy(scheduleKind = kind).withAutoTermForSingleDay(terms)
+                                },
+                            )
+                            scheduleKindExpanded = false
                         },
+                    )
+                }
+            }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(spacing.field))
+
+    when (state.scheduleKind) {
+        ClassScheduleKind.RECURRING -> {
+            Column {
+                GlideFieldLabel("Day of week")
+                Spacer(modifier = Modifier.height(2.dp))
+                ExposedDropdownMenuBox(
+                    expanded = dayExpanded,
+                    onExpandedChange = { dayExpanded = it },
+                ) {
+                    OutlinedTextField(
+                        value = state.dayOfWeek.label,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dayExpanded) },
+                        shape = MaterialTheme.shapes.small,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
+                            .menuAnchor(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded = dayExpanded,
+                        onDismissRequest = { dayExpanded = false },
+                    ) {
+                        DayOfWeek.entries.forEach { day ->
+                            DropdownMenuItem(
+                                text = { Text(day.label, style = MaterialTheme.typography.bodySmall) },
+                                onClick = {
+                                    onStateChange(state.copy(dayOfWeek = day))
+                                    dayExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        ClassScheduleKind.SINGLE_DAY -> {
+            IsoDateField(
+                label = "Class date",
+                value = state.singleDate,
+                onValueChange = { isoDate ->
+                    val day = parseScheduleIsoDate(isoDate)?.dayOfWeek?.toModelDayOfWeek()
+                    onStateChange(
+                        state.copy(
+                            singleDate = isoDate,
+                            dayOfWeek = day ?: state.dayOfWeek,
+                        ).withAutoTermForSingleDay(terms),
+                    )
+                },
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            val autoTerm = state.termIds.singleOrNull()?.let { id -> terms.find { it.id == id } }
+            when {
+                state.singleDate.isBlank() -> {
+                    Text(
+                        text = "Pick a date — the term that includes that day is selected automatically.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                autoTerm != null -> {
+                    Text(
+                        text = "Term set automatically: ${autoTerm.name}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                else -> {
+                    Text(
+                        text = "No term includes this date. Adjust term dates in the Terms panel.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
             }

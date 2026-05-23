@@ -43,6 +43,7 @@ import glide.data.TermStore
 import java.time.LocalDate
 import glide.model.AcademicTerm
 import glide.model.ScheduledClass
+import glide.model.compareScheduledClasses
 import glide.model.scheduleLine
 import glide.model.timeRangeLine
 import glide.ui.layout.GlideLayout
@@ -106,7 +107,7 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
         val termIndex = termsChronological.indexOfFirst { it.id == selectedTerm.id }
         val termClasses = remember(selectedTerm.id, allClasses) {
             allClasses.filter { selectedTerm.id in it.termIds }
-                .sortedWith(compareBy({ it.dayOfWeek.sortOrder }, { it.startTime }, { it.name }))
+                .sortedWith(compareScheduledClasses())
         }
         val months = remember(selectedTerm) { monthsInTerm(selectedTerm) }
 

@@ -3,49 +3,40 @@ package glide.ui.scheduling
 import glide.data.PeopleGroupStore
 import glide.data.rosterNameLabels
 import glide.model.AcademicTerm
-import glide.model.DayOfWeek
 import glide.model.ScheduledClass
+import glide.model.containsDate
+import glide.model.dateRange
+import glide.model.occursOn
+import glide.model.parseIsoLocalDate
 import glide.model.spansTerm
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
-
-private val IsoDateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
-
-fun parseIsoLocalDate(isoDate: String): LocalDate? {
-    if (isoDate.isBlank()) return null
-    return try {
-        LocalDate.parse(isoDate, IsoDateFormatter)
-    } catch (_: DateTimeParseException) {
-        null
-    }
-}
-
-fun DayOfWeek.toJavaDayOfWeek(): java.time.DayOfWeek = when (this) {
-    DayOfWeek.MONDAY -> java.time.DayOfWeek.MONDAY
-    DayOfWeek.TUESDAY -> java.time.DayOfWeek.TUESDAY
-    DayOfWeek.WEDNESDAY -> java.time.DayOfWeek.WEDNESDAY
-    DayOfWeek.THURSDAY -> java.time.DayOfWeek.THURSDAY
-    DayOfWeek.FRIDAY -> java.time.DayOfWeek.FRIDAY
-    DayOfWeek.SATURDAY -> java.time.DayOfWeek.SATURDAY
-    DayOfWeek.SUNDAY -> java.time.DayOfWeek.SUNDAY
-}
-
-fun AcademicTerm.dateRange(): ClosedRange<LocalDate>? {
-    val start = parseIsoLocalDate(startDate) ?: return null
-    val end = parseIsoLocalDate(endDate) ?: return null
-    if (end.isBefore(start)) return null
-    return start..end
-}
-
-fun AcademicTerm.containsDate(date: LocalDate): Boolean {
-    val range = dateRange() ?: return false
-    return date in range
-}
 
 fun findCurrentTerm(terms: List<AcademicTerm>, today: LocalDate = LocalDate.now()): AcademicTerm? =
     terms.firstOrNull { it.containsDate(today) }
+
+/** Term whose date range includes [isoDate], or null if none match. */
+fun findTermContainingIsoDate(terms: List<AcademicTerm>, isoDate: String): AcademicTerm? {
+    val date = parseIsoLocalDate(isoDate) ?: return null
+    val matches = terms.filter { it.containsDate(date) }
+    return when {
+        matches.isEmpty() -> null
+        matches.size == 1 -> matches.first()
+        else -> matches.minWithOrNull(compareBy({ it.startDate }, { it.name }))
+    }
+}
+
+/** Current term (if any) and every later term — default for new weekly classes. */
+fun defaultRecurringClassTermIds(terms: List<AcademicTerm>, today: LocalDate = LocalDate.now()): Set<String> {
+    if (terms.isEmpty()) return emptySet()
+    val sorted = terms.sortedBy { it.startDate }
+    val startIndex = sorted.indexOfFirst { it.containsDate(today) }.takeIf { it >= 0 }
+        ?: sorted.indexOfFirst { term ->
+            parseIsoLocalDate(term.startDate)?.let { !it.isBefore(today) } == true
+        }.takeIf { it >= 0 }
+        ?: return emptySet()
+    return sorted.drop(startIndex).map { it.id }.toSet()
+}
 
 fun defaultTermSelectionId(terms: List<AcademicTerm>, today: LocalDate = LocalDate.now()): String? {
     if (terms.isEmpty()) return null
@@ -81,7 +72,7 @@ fun classesOnDate(
     classes: List<ScheduledClass>,
 ): List<ScheduledClass> =
     classes
-        .filter { it.spansTerm(termId) && it.dayOfWeek.toJavaDayOfWeek() == date.dayOfWeek }
+        .filter { it.spansTerm(termId) && it.occursOn(date) }
         .sortedWith(compareBy({ it.startTime }, { it.endTime }, { it.name }))
 
 /** One line per customer group on the class: main contact and related names, comma-separated. */

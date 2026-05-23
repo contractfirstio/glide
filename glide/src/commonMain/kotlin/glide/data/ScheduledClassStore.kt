@@ -2,6 +2,7 @@ package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
 import glide.model.ScheduledClass
+import glide.model.compareScheduledClasses
 import glide.model.hasCustomerGroup
 import glide.model.spansTerm
 import glide.model.usesLocation
@@ -61,11 +62,7 @@ object ScheduledClassStore {
         } else {
             _classes
         }
-        return filtered.sortedWith(
-            compareBy<ScheduledClass> { it.dayOfWeek.sortOrder }
-                .thenBy { it.startTime }
-                .thenBy { it.name },
-        )
+        return filtered.sortedWith(compareScheduledClasses())
     }
 
     fun countForTerm(termId: String): Int = _classes.count { it.spansTerm(termId) }

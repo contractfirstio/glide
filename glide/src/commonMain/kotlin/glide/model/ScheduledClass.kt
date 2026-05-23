@@ -1,6 +1,15 @@
 package glide.model
 
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.util.Locale
 import java.util.UUID
+
+enum class ClassScheduleKind(val label: String) {
+    RECURRING("Weekly (recurring)"),
+    SINGLE_DAY("Single day"),
+}
 
 enum class DayOfWeek(val label: String, val sortOrder: Int) {
     MONDAY("Monday", 1),
@@ -19,6 +28,8 @@ data class ScheduledClass(
     val customerGroupIds: List<String> = emptyList(),
     val locationId: String? = null,
     val dayOfWeek: DayOfWeek,
+    /** ISO yyyy-MM-dd when this class runs once; null means weekly on [dayOfWeek]. */
+    val singleDate: String? = null,
     /** 24-hour time, e.g. 09:00 */
     val startTime: String,
     val endTime: String,
@@ -30,8 +41,74 @@ data class ScheduledClass(
 
 fun ScheduledClass.usesLocation(locationId: String): Boolean = this.locationId == locationId
 
-fun ScheduledClass.scheduleLine(): String =
-    "${dayOfWeek.label} · $startTime–$endTime"
+fun ScheduledClass.isSingleDay(): Boolean = !singleDate.isNullOrBlank()
+
+fun ScheduledClass.scheduleKind(): ClassScheduleKind =
+    if (isSingleDay()) ClassScheduleKind.SINGLE_DAY else ClassScheduleKind.RECURRING
+
+fun ScheduledClass.scheduleLine(): String {
+    val time = "$startTime–$endTime"
+    return if (isSingleDay()) {
+        "${formatScheduleIsoDate(singleDate!!)} · $time"
+    } else {
+        "${dayOfWeek.label} · $time"
+    }
+}
+
+private val ScheduleDateDisplayFormatter = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.UK)
+
+fun formatScheduleIsoDate(isoDate: String): String {
+    if (isoDate.isBlank()) return ""
+    return try {
+        ScheduleDateDisplayFormatter.format(LocalDate.parse(isoDate))
+    } catch (_: DateTimeParseException) {
+        isoDate
+    }
+}
+
+fun parseScheduleIsoDate(isoDate: String): LocalDate? {
+    if (isoDate.isBlank()) return null
+    return try {
+        LocalDate.parse(isoDate)
+    } catch (_: DateTimeParseException) {
+        null
+    }
+}
+
+fun DayOfWeek.toJavaDayOfWeek(): java.time.DayOfWeek = when (this) {
+    DayOfWeek.MONDAY -> java.time.DayOfWeek.MONDAY
+    DayOfWeek.TUESDAY -> java.time.DayOfWeek.TUESDAY
+    DayOfWeek.WEDNESDAY -> java.time.DayOfWeek.WEDNESDAY
+    DayOfWeek.THURSDAY -> java.time.DayOfWeek.THURSDAY
+    DayOfWeek.FRIDAY -> java.time.DayOfWeek.FRIDAY
+    DayOfWeek.SATURDAY -> java.time.DayOfWeek.SATURDAY
+    DayOfWeek.SUNDAY -> java.time.DayOfWeek.SUNDAY
+}
+
+fun java.time.DayOfWeek.toModelDayOfWeek(): DayOfWeek = when (this) {
+    java.time.DayOfWeek.MONDAY -> DayOfWeek.MONDAY
+    java.time.DayOfWeek.TUESDAY -> DayOfWeek.TUESDAY
+    java.time.DayOfWeek.WEDNESDAY -> DayOfWeek.WEDNESDAY
+    java.time.DayOfWeek.THURSDAY -> DayOfWeek.THURSDAY
+    java.time.DayOfWeek.FRIDAY -> DayOfWeek.FRIDAY
+    java.time.DayOfWeek.SATURDAY -> DayOfWeek.SATURDAY
+    java.time.DayOfWeek.SUNDAY -> DayOfWeek.SUNDAY
+}
+
+fun ScheduledClass.occursOn(date: LocalDate): Boolean {
+    if (isSingleDay()) {
+        return parseScheduleIsoDate(singleDate!!) == date
+    }
+    return dayOfWeek.toJavaDayOfWeek() == date.dayOfWeek
+}
+
+fun compareScheduledClasses(): Comparator<ScheduledClass> = compareBy(
+    { !it.isSingleDay() },
+    { it.singleDate ?: "" },
+    { it.dayOfWeek.sortOrder },
+    { it.startTime },
+    { it.name.lowercase(Locale.UK) },
+)
 
 fun ScheduledClass.timeRangeLine(): String = "$startTime–$endTime"
 
