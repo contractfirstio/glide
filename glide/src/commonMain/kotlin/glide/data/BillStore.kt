@@ -1,6 +1,7 @@
 package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
+import glide.billing.InvoiceExporter
 import glide.model.Bill
 import glide.model.BillStatus
 import glide.model.PackEnrollment
@@ -18,29 +19,41 @@ object BillStore {
 
     fun findById(id: String): Bill? = _bills.find { it.id == id }
 
-    fun issueInitialPackBill(enrollment: PackEnrollment): Bill {
-        val snapshot = enrollment.planSnapshot
-        val bill = Bill(
-            enrollmentId = enrollment.id,
-            peopleGroupId = enrollment.peopleGroupId,
-            description = snapshot.planName,
-            amountMinor = snapshot.priceAmountMinor,
-            currencyCode = snapshot.currencyCode,
-        )
-        _bills.add(bill)
-        return bill
-    }
+    fun issueInitialPackBill(
+        enrollment: PackEnrollment,
+        exportInvoice: Boolean = true,
+    ): Bill = addIssuedBill(
+        enrollment = enrollment,
+        description = enrollment.planSnapshot.planName,
+        exportInvoice = exportInvoice,
+    )
 
-    fun issuePackBill(enrollment: PackEnrollment): Bill {
+    fun issuePackBill(
+        enrollment: PackEnrollment,
+        exportInvoice: Boolean = true,
+    ): Bill = addIssuedBill(
+        enrollment = enrollment,
+        description = "${enrollment.planSnapshot.planName} (renewal)",
+        exportInvoice = exportInvoice,
+    )
+
+    private fun addIssuedBill(
+        enrollment: PackEnrollment,
+        description: String,
+        exportInvoice: Boolean,
+    ): Bill {
         val snapshot = enrollment.planSnapshot
         val bill = Bill(
             enrollmentId = enrollment.id,
             peopleGroupId = enrollment.peopleGroupId,
-            description = "${snapshot.planName} (renewal)",
+            description = description,
             amountMinor = snapshot.priceAmountMinor,
             currencyCode = snapshot.currencyCode,
         )
         _bills.add(bill)
+        if (exportInvoice) {
+            InvoiceExporter.onBillIssued(bill)
+        }
         return bill
     }
 

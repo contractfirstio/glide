@@ -91,7 +91,7 @@ object SampleData {
             createdAtMillis = now - 10 * day,
         )
         seedCustomerBilling(emmaGroup, rollingPack) { enrollment ->
-            BillStore.issueInitialPackBill(enrollment)
+            BillStore.issueInitialPackBill(enrollment, exportInvoice = false)
         }
 
         // Customer 2: fully paid — test paid bill display
@@ -104,7 +104,7 @@ object SampleData {
             createdAtMillis = now - 8 * day,
         )
         seedCustomerBilling(jamesGroup, rollingPack) { enrollment ->
-            val bill = BillStore.issueInitialPackBill(enrollment)
+            val bill = BillStore.issueInitialPackBill(enrollment, exportInvoice = false)
             PaymentStore.recordFullPayment(
                 bill = bill,
                 method = PaymentMethod.BANK_TRANSFER,
@@ -125,14 +125,14 @@ object SampleData {
             createdAtMillis = now - 6 * day,
         )
         seedCustomerBilling(sarahGroup, rollingPack) { enrollment ->
-            val first = BillStore.issueInitialPackBill(enrollment)
+            val first = BillStore.issueInitialPackBill(enrollment, exportInvoice = false)
             PaymentStore.recordFullPayment(
                 bill = first,
                 method = PaymentMethod.CARD,
                 reference = "CARD-22901",
                 receivedAtMillis = now - 5 * day,
             )
-            BillStore.issuePackBill(enrollment)
+            BillStore.issuePackBill(enrollment, exportInvoice = false)
         }
 
         // Leads for non-billing UI smoke tests
