@@ -86,6 +86,7 @@ object BillStore {
         val bill = _bills[index]
         return if (issued) {
             if (hasOutstandingAttendanceSubmissions()) return false
+            if (soldPackBlocksBillIssuance(bill.peopleGroupId)) return false
             if (bill.status != BillStatus.SCHEDULED) return false
             _bills[index] = bill.copy(
                 status = BillStatus.ISSUED,
@@ -105,9 +106,11 @@ object BillStore {
     }
 
     fun generateInvoice(billId: String): Boolean {
+        val bill = findById(billId) ?: return false
         if (hasOutstandingAttendanceSubmissions()) return false
-        val bill = reconcileBillCredits(billId) ?: return false
-        InvoiceExporter.exportInvoice(bill)
+        if (soldPackBlocksBillIssuance(bill.peopleGroupId)) return false
+        val reconciled = reconcileBillCredits(billId) ?: return false
+        InvoiceExporter.exportInvoice(reconciled)
         return true
     }
 

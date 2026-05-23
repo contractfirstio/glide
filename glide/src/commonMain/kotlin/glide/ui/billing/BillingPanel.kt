@@ -39,10 +39,14 @@ import glide.data.attendanceBlocksBillIssuanceMessage
 import glide.data.creditAppliedMinor
 import glide.data.BillingService
 import glide.data.openPendingAttendanceSession
+import glide.data.openSoldPackClassAssignment
+import glide.data.soldPackBlocksBillIssuance
+import glide.data.soldPackBlocksBillIssuanceMessage
 import glide.ui.scheduling.rememberPendingAttendanceSessions
 import glide.data.PackEnrollmentStore
 import glide.data.RollingPackBillingService
 import glide.data.RollingPackCancellationService
+import glide.data.ScheduledClassStore
 import glide.data.countScheduledPackSessionsInPeriod
 import glide.model.PackEnrollmentStatus
 import glide.data.PaymentStore
@@ -92,6 +96,7 @@ fun BillingPanel(
     val group = PeopleGroupStore.findById(peopleGroupId)
     val enrollment = PackEnrollmentStore.displayForPeopleGroup(peopleGroupId)
     val ongoingEnrollment = PackEnrollmentStore.forPeopleGroup(peopleGroupId)
+    ScheduledClassStore.classes
     val bills = enrollment?.let { e ->
         BillStore.forEnrollment(e.id)
     } ?: emptyList()
@@ -105,6 +110,8 @@ fun BillingPanel(
 
     val pendingAttendance = rememberPendingAttendanceSessions()
     val billingBlockedByAttendance = pendingAttendance.isNotEmpty()
+    val billingBlockedByUnassignedClass = soldPackBlocksBillIssuance(peopleGroupId)
+    val billingBlocked = billingBlockedByAttendance || billingBlockedByUnassignedClass
 
     val spacing = GlideLayout.comfortable
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
@@ -179,6 +186,18 @@ fun BillingPanel(
                 )
                 GlideTextButton(onClick = { openPendingAttendanceSession(pendingAttendance.first()) }) {
                     Text("Open attendance")
+                }
+            }
+
+            if (billingBlockedByUnassignedClass) {
+                Spacer(modifier = Modifier.height(spacing.field))
+                Text(
+                    text = soldPackBlocksBillIssuanceMessage(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                GlideTextButton(onClick = { openSoldPackClassAssignment(peopleGroupId) }) {
+                    Text("Assign to class")
                 }
             }
 
@@ -262,16 +281,22 @@ fun BillingPanel(
                         dateFormat = dateFormat,
                         selected = bill.id == selectedBillId,
                         payment = PaymentStore.forBill(bill.id),
-                        billingBlockedByAttendance = billingBlockedByAttendance,
+                        billingBlocked = billingBlocked,
                         onClick = { selectedBillId = bill.id },
                         onIssuedChange = { issued ->
                             if (issued && billingBlockedByAttendance) {
                                 billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
                                 return@BillRow
                             }
+                            if (issued && billingBlockedByUnassignedClass) {
+                                billingActionMessage = soldPackBlocksBillIssuanceMessage()
+                                return@BillRow
+                            }
                             if (!BillStore.setIssued(bill.id, issued)) {
                                 if (issued && billingBlockedByAttendance) {
                                     billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                                } else if (issued && billingBlockedByUnassignedClass) {
+                                    billingActionMessage = soldPackBlocksBillIssuanceMessage()
                                 }
                                 return@BillRow
                             }
@@ -282,8 +307,18 @@ fun BillingPanel(
                                 billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
                                 return@BillRow
                             }
+                            if (billingBlockedByUnassignedClass) {
+                                billingActionMessage = soldPackBlocksBillIssuanceMessage()
+                                return@BillRow
+                            }
                             if (!BillStore.generateInvoice(bill.id)) {
-                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                                billingActionMessage = when {
+                                    billingBlockedByAttendance ->
+                                        attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                                    billingBlockedByUnassignedClass ->
+                                        soldPackBlocksBillIssuanceMessage()
+                                    else -> "Could not generate invoice."
+                                }
                             } else {
                                 billingActionMessage = null
                             }
@@ -299,7 +334,7 @@ fun BillingPanel(
                 FormPanelSummaryCard(role = FormPanelSectionRole.Tertiary) {
                     BillDetailActions(
                         bill = selectedBill,
-                        billingBlockedByAttendance = billingBlockedByAttendance,
+                        billingBlocked = billingBlocked,
                         onRecordPayment = {
                             paymentError = null
                             showPaymentDialog = true
@@ -313,8 +348,18 @@ fun BillingPanel(
                                 billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
                                 return@BillDetailActions
                             }
+                            if (billingBlockedByUnassignedClass) {
+                                billingActionMessage = soldPackBlocksBillIssuanceMessage()
+                                return@BillDetailActions
+                            }
                             if (!BillStore.generateInvoice(selectedBill.id)) {
-                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                                billingActionMessage = when {
+                                    billingBlockedByAttendance ->
+                                        attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                                    billingBlockedByUnassignedClass ->
+                                        soldPackBlocksBillIssuanceMessage()
+                                    else -> "Could not generate invoice."
+                                }
                             } else {
                                 billingActionMessage = null
                             }
@@ -469,12 +514,12 @@ private fun BillRow(
     dateFormat: SimpleDateFormat,
     selected: Boolean,
     payment: glide.model.Payment?,
-    billingBlockedByAttendance: Boolean,
+    billingBlocked: Boolean,
     onClick: () -> Unit,
     onIssuedChange: (Boolean) -> Unit,
     onGenerateInvoice: () -> Unit,
 ) {
-    val canIssue = !billingBlockedByAttendance || bill.isIssuedToCustomer()
+    val canIssue = !billingBlocked || bill.isIssuedToCustomer()
     val background = if (selected) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
@@ -565,12 +610,12 @@ private fun BillRow(
 @Composable
 private fun BillDetailActions(
     bill: Bill,
-    billingBlockedByAttendance: Boolean,
+    billingBlocked: Boolean,
     onRecordPayment: () -> Unit,
     onVoid: () -> Unit,
     onGenerateInvoice: () -> Unit,
 ) {
-    val canIssue = !billingBlockedByAttendance || bill.isIssuedToCustomer()
+    val canIssue = !billingBlocked || bill.isIssuedToCustomer()
     Column(
         modifier = Modifier.fillMaxWidth(),
     ) {

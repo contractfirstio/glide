@@ -28,7 +28,9 @@ import glide.ui.billing.PendingBillIssuanceAlertBanner
 import glide.ui.billing.rememberOverdueBillPayments
 import glide.ui.billing.rememberPendingBillsToIssue
 import glide.ui.scheduling.PendingAttendanceAlertBanner
+import glide.ui.scheduling.UnassignedSoldPackAlertBanner
 import glide.ui.scheduling.rememberPendingAttendanceSessions
+import glide.ui.scheduling.rememberUnassignedSoldPacks
 import glide.ui.theme.GlideCanvasBackground
 import glide.ui.theme.GlideTheme
 
@@ -40,6 +42,7 @@ fun App() {
         val pendingAttendance = rememberPendingAttendanceSessions()
         val pendingBillsToIssue = rememberPendingBillsToIssue()
         val overdueBillPayments = rememberOverdueBillPayments()
+        val unassignedSoldPacks = rememberUnassignedSoldPacks()
         LaunchedEffect(Unit) {
             focusRequester.requestFocus()
             RollingPackBillingService.syncAllActiveRollingPackBilling()
@@ -75,6 +78,7 @@ fun App() {
                 }
                 PendingBillIssuanceAlertBanner(pending = pendingBillsToIssue)
                 OverdueBillPaymentAlertBanner(overdue = overdueBillPayments)
+                UnassignedSoldPackAlertBanner(unassigned = unassignedSoldPacks)
                 FloatingPanelsHost(modifier = Modifier.weight(1f))
             }
         }

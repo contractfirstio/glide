@@ -55,6 +55,49 @@ object InvoicePdfWriter {
                 }
                 y -= LINE_GAP * 2
 
+                content.classSchedule?.let { schedule ->
+                    y = drawLine(stream, fontBold, 11f, MARGIN, y, "Class")
+                    y = drawLine(stream, fontRegular, 10f, MARGIN, y, schedule.className)
+                    y = drawWrappedParagraph(
+                        stream = stream,
+                        font = fontRegular,
+                        fontSize = 10f,
+                        x = MARGIN,
+                        y = y,
+                        maxWidth = pageWidth - MARGIN * 2,
+                        text = schedule.classDetails,
+                    )
+                    y -= LINE_GAP
+                    y = drawLine(stream, fontBold, 11f, MARGIN, y, "Students")
+                    y = drawWrappedParagraph(
+                        stream = stream,
+                        font = fontRegular,
+                        fontSize = 10f,
+                        x = MARGIN,
+                        y = y,
+                        maxWidth = pageWidth - MARGIN * 2,
+                        text = schedule.studentNamesLabel,
+                    )
+                    y -= LINE_GAP
+                    y = drawLine(
+                        stream,
+                        fontRegular,
+                        10f,
+                        MARGIN,
+                        y,
+                        "Pack period starts: ${schedule.billingWindowStartLabel}",
+                    )
+                    y = drawLine(
+                        stream,
+                        fontRegular,
+                        10f,
+                        MARGIN,
+                        y,
+                        "First scheduled class: ${schedule.firstScheduledSessionLabel}",
+                    )
+                    y -= LINE_GAP * 2
+                }
+
                 val headerY = y
                 drawAt(stream, fontBold, 10f, MARGIN, headerY, "Description")
                 drawAtRight(stream, fontBold, 10f, amountRightX, headerY, "Amount")
@@ -151,6 +194,25 @@ object InvoicePdfWriter {
     ): Float {
         drawAt(stream, font, fontSize, x, y, text)
         return y - lineStep(fontSize)
+    }
+
+    private fun drawWrappedParagraph(
+        stream: PDPageContentStream,
+        font: PDType1Font,
+        fontSize: Float,
+        x: Float,
+        y: Float,
+        maxWidth: Float,
+        text: String,
+    ): Float {
+        var rowY = y
+        wrapLines(font, fontSize, text, maxWidth).forEach { line ->
+            if (line.isNotEmpty()) {
+                drawAt(stream, font, fontSize, x, rowY, line)
+            }
+            rowY -= lineStep(fontSize)
+        }
+        return rowY
     }
 
     private fun drawAt(
