@@ -20,14 +20,11 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import glide.data.AppViewMode
 import glide.data.AppViewState
-import glide.data.ClassAttendanceStore
 import glide.data.RollingPackBillingService
-import glide.data.ScheduledClassStore
-import glide.data.TermStore
-import glide.data.findPastSessionsNeedingAttendance
 import glide.ui.components.AppChrome
 import glide.ui.components.FloatingPanelsHost
 import glide.ui.scheduling.PendingAttendanceAlertBanner
+import glide.ui.scheduling.rememberPendingAttendanceSessions
 import glide.ui.theme.GlideCanvasBackground
 import glide.ui.theme.GlideTheme
 
@@ -35,11 +32,8 @@ import glide.ui.theme.GlideTheme
 fun App() {
     GlideTheme {
         val focusRequester = remember { FocusRequester() }
-        ClassAttendanceStore.records
-        ScheduledClassStore.classes
-        TermStore.terms
         val viewMode = AppViewState.mode
-        val pendingAttendance = findPastSessionsNeedingAttendance()
+        val pendingAttendance = rememberPendingAttendanceSessions()
         LaunchedEffect(Unit) {
             focusRequester.requestFocus()
             RollingPackBillingService.syncAllActiveRollingPackBilling()

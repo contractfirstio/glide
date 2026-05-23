@@ -1,6 +1,7 @@
 package glide.model
 
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.util.Locale
@@ -101,6 +102,28 @@ fun ScheduledClass.occursOn(date: LocalDate): Boolean {
     }
     return dayOfWeek.toJavaDayOfWeek() == date.dayOfWeek
 }
+
+/** True when [sessionDate] is in the past, or it is today and [endTime] has been reached. */
+fun ScheduledClass.sessionHasEndedForAttendance(
+    sessionDate: LocalDate,
+    today: LocalDate = LocalDate.now(),
+    now: LocalTime = LocalTime.now(),
+): Boolean {
+    if (sessionDate.isAfter(today)) return false
+    if (sessionDate.isBefore(today)) return true
+    if (!isValidTime24h(endTime)) return false
+    return compareTime24h(endTime, formatTime24h(now)) <= 0
+}
+
+/** Attendance can only be recorded after the class has finished. */
+fun ScheduledClass.canTakeAttendance(
+    sessionDate: LocalDate,
+    today: LocalDate = LocalDate.now(),
+    now: LocalTime = LocalTime.now(),
+): Boolean = sessionHasEndedForAttendance(sessionDate, today, now)
+
+private fun formatTime24h(time: LocalTime): String =
+    "${time.hour.toString().padStart(2, '0')}:${time.minute.toString().padStart(2, '0')}"
 
 fun compareScheduledClasses(): Comparator<ScheduledClass> = compareBy(
     { !it.isSingleDay() },

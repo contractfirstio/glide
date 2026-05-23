@@ -11,11 +11,8 @@ import glide.data.AppViewMode
 import glide.data.AppViewState
 import glide.data.AttendancePanelState
 import glide.data.BillingPanelState
-import glide.data.ClassAttendanceStore
-import glide.data.ScheduledClassStore
-import glide.data.TermStore
-import glide.data.findPastSessionsNeedingAttendance
 import glide.ui.scheduling.PendingAttendanceAlertBanner
+import glide.ui.scheduling.rememberPendingAttendanceSessions
 import glide.ui.billing.BillingFloatingPanel
 import glide.ui.scheduling.AttendanceFloatingPanel
 import glide.ui.customers.CustomersFloatingPanel
@@ -34,10 +31,7 @@ import glide.ui.scheduling.TermsFloatingPanel
 @Composable
 fun FloatingPanelsHost(modifier: Modifier = Modifier) {
     val viewMode = AppViewState.mode
-    ClassAttendanceStore.records
-    ScheduledClassStore.classes
-    TermStore.terms
-    val pendingAttendance = findPastSessionsNeedingAttendance()
+    val pendingAttendance = rememberPendingAttendanceSessions()
     Column(modifier = modifier.fillMaxSize()) {
         if (viewMode == AppViewMode.SCHEDULING) {
             PendingAttendanceAlertBanner(

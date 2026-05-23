@@ -35,14 +35,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import glide.data.BillStore
 import glide.data.BillingCreditStore
-import glide.data.ClassAttendanceStore
-import glide.data.ScheduledClassStore
-import glide.data.TermStore
 import glide.data.attendanceBlocksBillIssuanceMessage
 import glide.data.creditAppliedMinor
 import glide.data.BillingService
-import glide.data.findPastSessionsNeedingAttendance
 import glide.data.openPendingAttendanceSession
+import glide.ui.scheduling.rememberPendingAttendanceSessions
 import glide.data.PackEnrollmentStore
 import glide.data.RollingPackBillingService
 import glide.data.countScheduledPackSessionsInPeriod
@@ -98,10 +95,7 @@ fun BillingPanel(
     var paymentError by remember(peopleGroupId) { mutableStateOf<String?>(null) }
     var billingActionMessage by remember(peopleGroupId) { mutableStateOf<String?>(null) }
 
-    ClassAttendanceStore.records
-    ScheduledClassStore.classes
-    TermStore.terms
-    val pendingAttendance = findPastSessionsNeedingAttendance()
+    val pendingAttendance = rememberPendingAttendanceSessions()
     val billingBlockedByAttendance = pendingAttendance.isNotEmpty()
 
     val spacing = GlideLayout.comfortable

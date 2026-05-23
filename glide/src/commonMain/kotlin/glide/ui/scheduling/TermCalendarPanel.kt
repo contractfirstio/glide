@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,9 +41,12 @@ import glide.data.AttendancePanelState
 import glide.data.LocationStore
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
+import glide.data.millisUntilNextAttendanceReminderCheck
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 import glide.model.AcademicTerm
 import glide.model.ScheduledClass
+import glide.model.canTakeAttendance
 import glide.model.compareScheduledClasses
 import glide.model.scheduleLine
 import glide.model.timeRangeLine
@@ -62,6 +66,15 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
     val termsChronological = TermStore.sortedChronologically()
     val allClasses = ScheduledClassStore.classes
     val colorPicker = rememberClassColorPickerState()
+    var attendanceRefreshTick by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(millisUntilNextAttendanceReminderCheck())
+            attendanceRefreshTick++
+        }
+    }
+    attendanceRefreshTick
 
     var selectedTermId by remember { mutableStateOf<String?>(null) }
 
@@ -376,14 +389,16 @@ private fun TermCalendarClassBlock(
     val locationName = scheduledClass.locationId?.let { LocationStore.findById(it)?.name }
     val rosterLines = rosterLinesForClass(scheduledClass, sessionDate)
     val blockTextColor = Color(0xFF0A1018)
+    val canTakeAttendance = scheduledClass.canTakeAttendance(sessionDate)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(2.dp))
-            .clickable {
-                onOpenAttendance(scheduledClass.id, sessionDate)
-            }
+            .clickable(
+                enabled = canTakeAttendance,
+                onClick = { onOpenAttendance(scheduledClass.id, sessionDate) },
+            )
             .background(scheduledClass.resolvedCalendarColor())
             .padding(horizontal = 3.dp, vertical = 3.dp),
     ) {

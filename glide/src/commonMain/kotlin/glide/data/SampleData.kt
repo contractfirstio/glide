@@ -3,6 +3,7 @@ package glide.data
 import glide.model.AcademicTerm
 import glide.model.AttendanceStatus
 import glide.model.ClassAttendanceRecord
+import glide.model.ClassSessionKey
 import glide.model.ClassLocation
 import glide.model.Contact
 import glide.model.DayOfWeek
@@ -375,17 +376,23 @@ object SampleData {
             }
             for (date in sessionDates) {
                 val attendees = attendeesForClass(scheduledClass, date)
+                if (attendees.isEmpty()) continue
+                val session = ClassSessionKey(
+                    scheduledClassId = scheduledClass.id,
+                    sessionDate = date.toString(),
+                )
                 for (attendee in attendees) {
                     ClassAttendanceStore.seed(
                         ClassAttendanceRecord(
-                            scheduledClassId = scheduledClass.id,
-                            sessionDate = date.toString(),
+                            scheduledClassId = session.scheduledClassId,
+                            sessionDate = session.sessionDate,
                             attendeeKey = attendee.key,
                             status = AttendanceStatus.PRESENT,
                             recordedAtMillis = recordedAtMillis,
                         ),
                     )
                 }
+                ClassAttendanceStore.markSessionSubmitted(session)
             }
         }
     }

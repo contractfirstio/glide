@@ -41,6 +41,7 @@ import glide.model.formatMoney
 import glide.model.ClassAttendee
 import glide.model.ClassSessionKey
 import glide.model.ScheduledClass
+import glide.model.canTakeAttendance
 import glide.model.scheduleLine
 import glide.ui.layout.GlideLayout
 import glide.ui.leads.formatIsoDateForDisplay
@@ -74,6 +75,11 @@ fun AttendancePanel(
         else attendeesForClass(scheduledClass, sessionDate)
     }
     val attendeeKeys = remember(attendees) { attendees.map { it.key } }
+    val canTakeAttendance = scheduledClass != null && sessionDate != null &&
+        scheduledClass.canTakeAttendance(sessionDate)
+    ClassAttendanceStore.records
+    val isSubmitted = ClassAttendanceStore.isSessionSubmitted(session)
+    val canEditAttendance = canTakeAttendance && !isSubmitted
 
     var draftByAttendeeKey by remember(session) {
         mutableStateOf(ClassAttendanceStore.draftForSession(session, attendeeKeys))
@@ -94,6 +100,12 @@ fun AttendancePanel(
     }
 
     fun finalizeSave(applyCredits: Boolean) {
+        if (isSubmitted) {
+            saveMessageIsError = true
+            saveMessage = "Attendance was already submitted and cannot be changed."
+            showCreditDialog = false
+            return
+        }
         if (applyCredits) {
             val absent = AttendanceCreditService.absentAttendees(attendees, draftByAttendeeKey)
             val result = AttendanceCreditService.applyCreditsForAbsentAttendees(
@@ -101,28 +113,43 @@ fun AttendancePanel(
                 className = scheduledClass?.name ?: "Class",
                 absentAttendees = absent,
             )
-            ClassAttendanceStore.saveSession(session, draftByAttendeeKey, attendeeKeys)
+            if (!ClassAttendanceStore.saveSession(session, draftByAttendeeKey, attendeeKeys)) {
+                saveMessageIsError = true
+                saveMessage = "Could not save attendance."
+                showCreditDialog = false
+                return
+            }
             highlightUnmarked = false
             saveMessageIsError = false
             saveMessage = when {
                 result.creditsAdded > 0 -> {
                     val creditLabel = formatMoney(result.totalCreditMinor, result.currencyCode)
-                    "Attendance saved. $creditLabel credited toward next pack bill."
+                    "Attendance submitted. $creditLabel credited toward next pack bill."
                 }
                 result.creditsSkipped > 0 ->
-                    "Attendance saved. No billing credits were added (enrollment missing or already credited)."
-                else -> "Attendance saved."
+                    "Attendance submitted. No billing credits were added (enrollment missing or already credited)."
+                else -> "Attendance submitted."
             }
         } else {
-            ClassAttendanceStore.saveSession(session, draftByAttendeeKey, attendeeKeys)
+            if (!ClassAttendanceStore.saveSession(session, draftByAttendeeKey, attendeeKeys)) {
+                saveMessageIsError = true
+                saveMessage = "Could not save attendance."
+                showCreditDialog = false
+                return
+            }
             highlightUnmarked = false
             saveMessageIsError = false
-            saveMessage = "Attendance saved."
+            saveMessage = "Attendance submitted."
         }
         showCreditDialog = false
     }
 
     fun attemptSave() {
+        if (isSubmitted) {
+            saveMessageIsError = true
+            saveMessage = "Attendance was already submitted and cannot be changed."
+            return
+        }
         val unmarked = ClassAttendanceStore.unmarkedAttendeeKeys(draftByAttendeeKey, attendeeKeys)
         if (unmarked.isNotEmpty()) {
             highlightUnmarked = true
@@ -193,6 +220,22 @@ fun AttendancePanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            if (!canTakeAttendance) {
+                Spacer(modifier = Modifier.height(spacing.field))
+                Text(
+                    text = "Attendance opens after this class ends (${scheduledClass.endTime}).",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (isSubmitted) {
+                Spacer(modifier = Modifier.height(spacing.field))
+                Text(
+                    text = "Attendance submitted — cannot be changed.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             saveMessage?.let { message ->
                 Spacer(modifier = Modifier.height(spacing.field))
                 Text(
@@ -236,6 +279,7 @@ fun AttendancePanel(
                             highlightUnmarked = false
                         },
                         modifier = Modifier.weight(1f),
+                        enabled = canEditAttendance,
                     ) {
                         Text("All present")
                     }
@@ -247,6 +291,7 @@ fun AttendancePanel(
                             highlightUnmarked = false
                         },
                         modifier = Modifier.weight(1f),
+                        enabled = canEditAttendance,
                     ) {
                         Text("All absent")
                     }
@@ -267,6 +312,7 @@ fun AttendancePanel(
                             attendee = attendee,
                             status = draftByAttendeeKey[attendee.key],
                             needsMark = highlightUnmarked && draftByAttendeeKey[attendee.key] == null,
+                            enabled = canEditAttendance,
                             onPresent = {
                                 draftByAttendeeKey = draftByAttendeeKey + (attendee.key to AttendanceStatus.PRESENT)
                                 saveMessage = null
@@ -291,15 +337,17 @@ fun AttendancePanel(
 
             Spacer(modifier = Modifier.height(spacing.field))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(spacing.field),
-            ) {
-                GlideButton(
-                    onClick = { attemptSave() },
-                    modifier = Modifier.weight(1f),
+            if (canEditAttendance) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(spacing.field),
                 ) {
-                    Text(saveLabel)
+                    GlideButton(
+                        onClick = { attemptSave() },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(saveLabel)
+                    }
                 }
             }
         }
@@ -345,6 +393,7 @@ private fun AttendanceRow(
     attendee: ClassAttendee,
     status: AttendanceStatus?,
     needsMark: Boolean,
+    enabled: Boolean,
     onPresent: () -> Unit,
     onAbsent: () -> Unit,
     onClear: () -> Unit,
@@ -389,6 +438,7 @@ private fun AttendanceRow(
         AttendanceToggle(
             label = "Present",
             checked = status == AttendanceStatus.PRESENT,
+            enabled = enabled,
             onCheckedChange = { checked ->
                 if (checked) onPresent() else if (status == AttendanceStatus.PRESENT) onClear()
             },
@@ -396,6 +446,7 @@ private fun AttendanceRow(
         AttendanceToggle(
             label = "Absent",
             checked = status == AttendanceStatus.ABSENT,
+            enabled = enabled,
             onCheckedChange = { checked ->
                 if (checked) onAbsent() else if (status == AttendanceStatus.ABSENT) onClear()
             },
@@ -407,15 +458,17 @@ private fun AttendanceRow(
 private fun AttendanceToggle(
     label: String,
     checked: Boolean,
+    enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.clickable { onCheckedChange(!checked) },
+        modifier = Modifier.clickable(enabled = enabled) { onCheckedChange(!checked) },
     ) {
         Checkbox(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            enabled = enabled,
             colors = CheckboxDefaults.colors(
                 checkedColor = MaterialTheme.colorScheme.primary,
             ),
