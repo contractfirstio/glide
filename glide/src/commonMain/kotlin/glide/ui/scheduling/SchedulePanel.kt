@@ -46,6 +46,7 @@ import glide.data.enrolledHeadcount
 import glide.data.headcountForCustomerGroups
 import glide.data.AddCustomerGroupResult
 import glide.data.PackClassScheduleStore
+import glide.data.RollingPackBillingService
 import glide.data.assignPackClassSchedule
 import glide.data.isCustomerGroupAvailableForClass
 import glide.data.tryAddCustomerGroup
@@ -401,6 +402,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                         ScheduledClassStore.update(updated)
                                         updated.customerGroupIds.forEach { groupId ->
                                             assignPackClassSchedule(groupId, updated)
+                                            RollingPackBillingService.syncRollingPackBilling(groupId)
                                         }
                                         loadIntoForm(updated)
                                     }
@@ -601,6 +603,7 @@ private fun ClassCustomerGroupsSection(
                 if (result == AddCustomerGroupResult.Success) {
                     onCustomerGroupIdsChange(customerGroupIds + groupId)
                     scheduledClass?.let { cls -> assignPackClassSchedule(groupId, cls) }
+                    RollingPackBillingService.syncRollingPackBilling(groupId)
                     enrollmentMessage = result.toUserMessage()
                 } else {
                     enrollmentMessage = result.toUserMessage()

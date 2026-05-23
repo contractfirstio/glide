@@ -34,4 +34,10 @@ object PackEnrollmentStore {
         create(enrollment)
         return enrollment
     }
+
+    fun resetPackPeriod(enrollmentId: String, startMillis: Long = System.currentTimeMillis()) {
+        val index = _enrollments.indexOfFirst { it.id == enrollmentId }
+        if (index < 0) return
+        _enrollments[index] = _enrollments[index].copy(packPeriodStartedAtMillis = startMillis)
+    }
 }

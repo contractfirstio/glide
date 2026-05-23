@@ -13,5 +13,7 @@ data class PackEnrollment(
     val planSnapshot: PlanSnapshot,
     val status: PackEnrollmentStatus = PackEnrollmentStatus.ACTIVE,
     val startedAtMillis: Long = System.currentTimeMillis(),
+    /** Scheduled class sessions in this pack period count from this time (resets when a pack bill is paid). */
+    val packPeriodStartedAtMillis: Long = startedAtMillis,
     val notes: String = "",
 )

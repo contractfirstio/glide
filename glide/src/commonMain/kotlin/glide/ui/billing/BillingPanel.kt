@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +38,8 @@ import glide.data.BillingCreditStore
 import glide.data.creditAppliedMinor
 import glide.data.BillingService
 import glide.data.PackEnrollmentStore
+import glide.data.RollingPackBillingService
+import glide.data.countScheduledPackSessionsInPeriod
 import glide.data.PaymentStore
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
@@ -90,6 +93,10 @@ fun BillingPanel(
 
     val spacing = GlideLayout.comfortable
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
+
+    LaunchedEffect(enrollment?.id) {
+        enrollment?.let { RollingPackBillingService.syncRollingPackBilling(it.peopleGroupId) }
+    }
 
     Column(
         modifier = modifier
@@ -298,6 +305,19 @@ private fun EnrollmentSummary(
                 text = "Credit on next bill: ${formatMoney(pendingCredit, snapshot.currencyCode)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        if (snapshot.rolling) {
+            val packSize = snapshot.lessonCount.coerceAtLeast(1)
+            val scheduled = countScheduledPackSessionsInPeriod(
+                peopleGroupId = enrollment.peopleGroupId,
+                periodStartedAtMillis = enrollment.packPeriodStartedAtMillis,
+            )
+            val remaining = (packSize - scheduled).coerceAtLeast(0)
+            Text(
+                text = "Pack billing: $scheduled of $packSize scheduled classes · $remaining until renewal",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

@@ -177,7 +177,10 @@ fun extendClassesWithRollingGroupsForNewTerm(newTerm: AcademicTerm) {
         ScheduledClassStore.update(updated)
         updated.customerGroupIds
             .filter { groupId -> PackEnrollmentStore.forPeopleGroup(groupId)?.planSnapshot?.rolling == true }
-            .forEach { groupId -> assignPackClassSchedule(groupId, updated) }
+            .forEach { groupId ->
+                assignPackClassSchedule(groupId, updated)
+                RollingPackBillingService.syncRollingPackBilling(groupId)
+            }
     }
 }
 

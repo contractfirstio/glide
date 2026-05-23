@@ -20,6 +20,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import glide.data.AppViewMode
 import glide.data.AppViewState
+import glide.data.RollingPackBillingService
 import glide.ui.components.AppChrome
 import glide.ui.components.FloatingPanelsHost
 import glide.ui.theme.GlideCanvasBackground
@@ -31,6 +32,7 @@ fun App() {
         val focusRequester = remember { FocusRequester() }
         LaunchedEffect(Unit) {
             focusRequester.requestFocus()
+            RollingPackBillingService.syncAllActiveRollingPackBilling()
         }
 
         Box(

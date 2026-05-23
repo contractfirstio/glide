@@ -107,8 +107,12 @@ object BillStore {
         val bill = _bills[index]
         if (bill.status != BillStatus.ISSUED) return false
         _bills[index] = bill.copy(status = BillStatus.PAID, paidAtMillis = paidAtMillis)
+        RollingPackBillingService.onPackBillPaid(bill.enrollmentId, paidAtMillis)
         return true
     }
+
+    fun hasScheduledRenewalBill(enrollmentId: String): Boolean =
+        forEnrollment(enrollmentId).any { it.status == BillStatus.SCHEDULED && it.isRenewalBill() }
 
     fun voidBill(billId: String): Boolean {
         val index = _bills.indexOfFirst { it.id == billId }
