@@ -14,18 +14,27 @@ object RelatedPersonStore {
         _people.filter { isOnCustomerPack(it.id) }
 
     /**
-     * Related people for the Related panel — all on customer packs, or only those in
-     * [customerGroupId] when a customer group is selected in the Customers panel.
+     * Related people for the Related panel — all on customer packs, those in
+     * [customerGroupId] when a customer group is selected, or everyone linked to [contactId]
+     * across that contact's leads and customer groups.
      */
-    fun forRelatedPanel(customerGroupId: String?): List<RelatedPerson> =
-        when (customerGroupId) {
-            null -> onCustomerPacks
-            else ->
+    fun forRelatedPanel(customerGroupId: String?, contactId: String? = null): List<RelatedPerson> =
+        when {
+            customerGroupId != null ->
                 PeopleGroupStore.findById(customerGroupId)
                     ?.takeIf { it.type == PeopleGroupType.CUSTOMER }
                     ?.resolveRelatedPeople()
                     ?: emptyList()
+            contactId != null -> relatedPeopleForMainContact(contactId)
+            else -> onCustomerPacks
         }
+
+    private fun relatedPeopleForMainContact(contactId: String): List<RelatedPerson> =
+        PeopleGroupStore.all
+            .filter { it.mainContactId == contactId }
+            .flatMap { it.relatedPersonIds }
+            .distinct()
+            .mapNotNull { findById(it) }
 
     fun isOnCustomerPack(personId: String): Boolean =
         PeopleGroupStore.customers.any { personId in it.relatedPersonIds }

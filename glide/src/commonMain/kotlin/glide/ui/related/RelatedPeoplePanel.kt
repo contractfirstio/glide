@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.BillingPanelState
+import glide.data.ContactStore
 import glide.data.ContactsPanelState
 import glide.data.PeopleGroupStore
 import glide.data.RelatedPersonStore
@@ -79,10 +80,11 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
 
     val customerGroupId = BillingPanelState.peopleGroupId
     val contactFilterId = ContactsPanelState.selectedContactId
-    val people = RelatedPersonStore.forRelatedPanel(customerGroupId)
+    val people = RelatedPersonStore.forRelatedPanel(customerGroupId, contactFilterId)
     val customerGroupLabel = customerGroupId?.let { id ->
         PeopleGroupStore.findById(id)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
     }
+    val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
 
     fun clearSelection() {
         selectedId = null
@@ -96,18 +98,8 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
         }
     }
 
-    LaunchedEffect(customerGroupId, contactFilterId) {
-        if (customerGroupId == null && contactFilterId != null && selectedId != null) {
-            clearSelection()
-        }
-        if (customerGroupId != null && selectedId != null) {
-            clearSelection()
-        }
-    }
-
     fun loadIntoForm(person: RelatedPerson) {
         BillingPanelState.onCustomerGroupCleared()
-        ContactsPanelState.clearContactFilter()
         selectedId = person.id
         formState = RelatedPersonFormState(
             name = person.name,
@@ -130,11 +122,17 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
         ) {
             if (!compact) {
                 Text(
-                    text = if (customerGroupId == null) {
-                        "Edit related people on customer packs. They appear here after a lead becomes a customer."
-                    } else {
-                        val label = customerGroupLabel ?: "this customer group"
-                        "Showing related people for $label. Use Show all or Clear in Customers to reset."
+                    text = when {
+                        customerGroupId != null -> {
+                            val label = customerGroupLabel ?: "this customer group"
+                            "Showing related people for $label. Use Show all to reset."
+                        }
+                        contactFilterId != null -> {
+                            val label = contactFilterLabel ?: "this contact"
+                            "Showing related people for $label. Use Clear filter in Contacts to reset."
+                        }
+                        else ->
+                            "Edit related people on customer packs. They appear here after a lead becomes a customer."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -153,9 +151,16 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                             text = "${people.size} related ${if (people.size == 1) "person" else "people"}",
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        if (customerGroupId != null) {
-                            GlideTextButton(onClick = { BillingPanelState.onCustomerGroupCleared() }) {
-                                Text("Show all")
+                        Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (contactFilterId != null) {
+                                GlideTextButton(onClick = { ContactsPanelState.clearContactFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            if (customerGroupId != null) {
+                                GlideTextButton(onClick = { BillingPanelState.onCustomerGroupCleared() }) {
+                                    Text("Show all")
+                                }
                             }
                         }
                     }
@@ -179,10 +184,13 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = if (customerGroupId == null) {
-                                    "No one on a customer pack yet. Add related people on a lead, then make the lead a customer."
-                                } else {
-                                    "No related people in this customer group."
+                                text = when {
+                                    customerGroupId != null ->
+                                        "No related people in this customer group."
+                                    contactFilterId != null ->
+                                        "No related people linked to this contact."
+                                    else ->
+                                        "No one on a customer pack yet. Add related people on a lead, then make the lead a customer."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
