@@ -50,7 +50,7 @@ import glide.data.assignPackClassSchedule
 import glide.data.isCustomerGroupAvailableForClass
 import glide.data.tryAddCustomerGroup
 import glide.data.validateCustomerGroupsForClass
-import glide.data.toScheduleMessage
+import glide.data.validatePackSchedulesForClass
 import glide.data.PeopleGroupStore
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
@@ -391,6 +391,13 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
+                                        validatePackSchedulesForClass(
+                                            updated.customerGroupIds,
+                                            updated,
+                                        )?.let { message ->
+                                            formError = message
+                                            return@GlideButton
+                                        }
                                         ScheduledClassStore.update(updated)
                                         updated.customerGroupIds.forEach { groupId ->
                                             assignPackClassSchedule(groupId, updated)
@@ -593,10 +600,8 @@ private fun ClassCustomerGroupsSection(
                 )
                 if (result == AddCustomerGroupResult.Success) {
                     onCustomerGroupIdsChange(customerGroupIds + groupId)
-                    val scheduleMessage = scheduledClass?.let { cls ->
-                        assignPackClassSchedule(groupId, cls).toScheduleMessage()
-                    }
-                    enrollmentMessage = scheduleMessage ?: result.toUserMessage()
+                    scheduledClass?.let { cls -> assignPackClassSchedule(groupId, cls) }
+                    enrollmentMessage = result.toUserMessage()
                 } else {
                     enrollmentMessage = result.toUserMessage()
                 }
@@ -611,8 +616,7 @@ private fun ClassCustomerGroupsSection(
                 color = if (
                     message.contains("exceeded", ignoreCase = true) ||
                     message.contains("already", ignoreCase = true) ||
-                    message.contains("no matching dates", ignoreCase = true) ||
-                    message.contains("no class dates", ignoreCase = true)
+                    message.contains("Create a new term", ignoreCase = true)
                 ) {
                     MaterialTheme.colorScheme.error
                 } else {

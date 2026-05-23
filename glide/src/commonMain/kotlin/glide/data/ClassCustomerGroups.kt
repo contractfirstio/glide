@@ -9,7 +9,10 @@ sealed class AddCustomerGroupResult {
     data object GroupNotFound : AddCustomerGroupResult()
     data object NotACustomerGroup : AddCustomerGroupResult()
     data class AlreadyOnAnotherClass(val className: String) : AddCustomerGroupResult()
-    data class NoClassSessionsAvailable(val packSessions: Int) : AddCustomerGroupResult()
+    data class PackCannotBeFullyScheduled(
+        val packSessions: Int,
+        val availableSessions: Int,
+    ) : AddCustomerGroupResult()
     data class CapacityExceeded(
         val currentHeadcount: Int,
         val groupHeadcount: Int,
@@ -53,10 +56,15 @@ fun tryAddCustomerGroup(
         return AddCustomerGroupResult.AlreadyOnAnotherClass(other.name)
     }
 
-    sessionLimitForPeopleGroup(groupId)?.let { limit ->
-        val cls = scheduledClass ?: classId?.let { ScheduledClassStore.findById(it) }
-        if (cls != null && computeClassSessionDates(cls, limit).isEmpty()) {
-            return AddCustomerGroupResult.NoClassSessionsAvailable(limit)
+    val cls = scheduledClass ?: classId?.let { ScheduledClassStore.findById(it) }
+    if (cls != null) {
+        packScheduleCheckForClass(groupId, cls)?.let { check ->
+            if (!check.canFullySchedule) {
+                return AddCustomerGroupResult.PackCannotBeFullyScheduled(
+                    packSessions = check.requiredSessions,
+                    availableSessions = check.availableSessions,
+                )
+            }
         }
     }
 
@@ -82,8 +90,8 @@ fun AddCustomerGroupResult.toUserMessage(): String = when (this) {
     AddCustomerGroupResult.NotACustomerGroup -> "Only customer groups can be assigned to classes."
     is AddCustomerGroupResult.AlreadyOnAnotherClass ->
         "This group is already assigned to \"$className\". A customer group can only be on one class."
-    is AddCustomerGroupResult.NoClassSessionsAvailable ->
-        "This pack has $packSessions classes but there are no matching dates on this class in its terms."
+    is AddCustomerGroupResult.PackCannotBeFullyScheduled ->
+        packCannotFullyScheduleMessage(packSessions, availableSessions)
     is AddCustomerGroupResult.CapacityExceeded ->
         "Room capacity exceeded ($currentHeadcount + $groupHeadcount > $maxCapacity)."
 }

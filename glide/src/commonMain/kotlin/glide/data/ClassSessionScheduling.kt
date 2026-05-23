@@ -1,19 +1,30 @@
 package glide.data
 
+import glide.model.PlanKind
+import glide.model.PlanSnapshot
 import glide.model.ScheduledClass
 import glide.model.containsDate
 import glide.model.dateRange
 import glide.model.occursOn
-import glide.model.parseIsoLocalDate
 import java.time.LocalDate
 
-/** First [maxSessions] class occurrence dates across the class's linked terms. */
-fun computeClassSessionDates(
+data class PackScheduleCheck(
+    val requiredSessions: Int,
+    val availableSessions: Int,
+) {
+    val canFullySchedule: Boolean get() = availableSessions >= requiredSessions
+}
+
+fun requiredClassSessionsForPack(snapshot: PlanSnapshot): Int = when (snapshot.kind) {
+    PlanKind.SINGLE_LESSON_PACK -> 1
+    else -> snapshot.lessonCount.coerceAtLeast(1)
+}
+
+/** All future class occurrence dates across the class's linked terms (from today). */
+fun computeAllClassSessionDates(
     scheduledClass: ScheduledClass,
-    maxSessions: Int,
     startFrom: LocalDate = LocalDate.now(),
 ): List<String> {
-    if (maxSessions <= 0) return emptyList()
     val terms = scheduledClass.termIds.mapNotNull { TermStore.findById(it) }.sortedBy { it.startDate }
     val dates = mutableListOf<LocalDate>()
     for (term in terms) {
@@ -26,7 +37,24 @@ fun computeClassSessionDates(
             date = date.plusDays(1)
         }
     }
-    return dates.distinct().sorted().take(maxSessions).map { it.toString() }
+    return dates.distinct().sorted().map { it.toString() }
+}
+
+fun packScheduleCheckForClass(peopleGroupId: String, scheduledClass: ScheduledClass): PackScheduleCheck? {
+    val snapshot = PackEnrollmentStore.forPeopleGroup(peopleGroupId)?.planSnapshot ?: return null
+    val required = requiredClassSessionsForPack(snapshot)
+    val available = computeAllClassSessionDates(scheduledClass).size
+    return PackScheduleCheck(required, available)
+}
+
+/** First [maxSessions] class occurrence dates across the class's linked terms. */
+fun computeClassSessionDates(
+    scheduledClass: ScheduledClass,
+    maxSessions: Int,
+    startFrom: LocalDate = LocalDate.now(),
+): List<String> {
+    if (maxSessions <= 0) return emptyList()
+    return computeAllClassSessionDates(scheduledClass, startFrom).take(maxSessions)
 }
 
 fun sessionLimitForPeopleGroup(peopleGroupId: String): Int? =
@@ -39,21 +67,23 @@ fun assignPackClassSchedule(peopleGroupId: String, scheduledClass: ScheduledClas
         return PackScheduleAssignment.Unlimited
     }
     val dates = computeClassSessionDates(scheduledClass, limit)
-    if (dates.isEmpty()) {
+    if (dates.size < limit) {
         PackClassScheduleStore.remove(peopleGroupId, scheduledClass.id)
-        return PackScheduleAssignment.NoSessionsAvailable(limit)
+        return if (dates.isEmpty()) {
+            PackScheduleAssignment.NoSessionsAvailable(limit)
+        } else {
+            PackScheduleAssignment.Partial(limit, dates.size)
+        }
     }
     PackClassScheduleStore.set(peopleGroupId, scheduledClass.id, dates)
-    return if (dates.size < limit) {
-        PackScheduleAssignment.Partial(limit, dates.size)
-    } else {
-        PackScheduleAssignment.Fixed(limit)
-    }
+    return PackScheduleAssignment.Fixed(limit)
 }
 
 fun ensurePackClassSchedule(peopleGroupId: String, scheduledClass: ScheduledClass) {
     val limit = sessionLimitForPeopleGroup(peopleGroupId) ?: return
     if (PackClassScheduleStore.sessionDatesFor(peopleGroupId, scheduledClass.id) != null) return
+    val check = packScheduleCheckForClass(peopleGroupId, scheduledClass) ?: return
+    if (!check.canFullySchedule) return
     assignPackClassSchedule(peopleGroupId, scheduledClass)
 }
 
@@ -69,10 +99,34 @@ fun PackScheduleAssignment.toScheduleMessage(): String? = when (this) {
     is PackScheduleAssignment.Fixed ->
         "Scheduled for $sessions class session${if (sessions == 1) "" else "s"} on this class."
     is PackScheduleAssignment.Partial ->
-        "Only $scheduledSessions session${if (scheduledSessions == 1) "" else "s"} available in the class terms " +
-            "(pack has $packSessions)."
+        packCannotFullyScheduleMessage(packSessions, scheduledSessions)
     is PackScheduleAssignment.NoSessionsAvailable ->
-        "No class dates available in the linked terms for this pack ($packSessions sessions)."
+        packCannotFullyScheduleMessage(packSessions, 0)
+}
+
+fun packCannotFullyScheduleMessage(requiredSessions: Int, availableSessions: Int): String =
+    if (availableSessions == 0) {
+        "This pack needs $requiredSessions class session${if (requiredSessions == 1) "" else "s"} but there are " +
+            "no matching dates on this class in its linked terms. Create a new term to extend the calendar."
+    } else {
+        "This pack needs $requiredSessions class session${if (requiredSessions == 1) "" else "s"} but only " +
+            "$availableSessions ${if (availableSessions == 1) "is" else "are"} available in the linked terms. " +
+            "Create a new term to extend the calendar."
+    }
+
+fun validatePackSchedulesForClass(
+    customerGroupIds: List<String>,
+    scheduledClass: ScheduledClass,
+): String? {
+    for (groupId in customerGroupIds) {
+        val check = packScheduleCheckForClass(groupId, scheduledClass) ?: continue
+        if (!check.canFullySchedule) {
+            val label = PeopleGroupStore.findById(groupId)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+                ?: "A customer group"
+            return "$label: ${packCannotFullyScheduleMessage(check.requiredSessions, check.availableSessions)}"
+        }
+    }
+    return null
 }
 
 fun isPeopleGroupOnClassSession(
@@ -81,6 +135,10 @@ fun isPeopleGroupOnClassSession(
     sessionDate: LocalDate,
 ): Boolean {
     if (peopleGroupId !in scheduledClass.customerGroupIds) return false
+    if (sessionLimitForPeopleGroup(peopleGroupId) != null) {
+        val check = packScheduleCheckForClass(peopleGroupId, scheduledClass)
+        if (check != null && !check.canFullySchedule) return false
+    }
     ensurePackClassSchedule(peopleGroupId, scheduledClass)
     return PackClassScheduleStore.isScheduledForSession(peopleGroupId, scheduledClass.id, sessionDate)
 }
