@@ -56,6 +56,7 @@ import glide.data.PackEnrollmentStore
 import glide.data.PeopleGroupNavigation
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
+import glide.data.ScheduledClassStore
 import glide.model.formatMoney
 import glide.data.classAttendeeCount
 import glide.data.memberCount
@@ -360,6 +361,9 @@ private fun PeopleGroupPanel(
         }
     }
 
+    val schedulingSoldPlansPanel =
+        ui.type == PeopleGroupType.CUSTOMER && AppViewState.mode == AppViewMode.SCHEDULING
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val compact = maxWidth < GlideLayout.CompactWidthBreakpoint
         val spacing = if (compact) GlideLayout.compact else GlideLayout.comfortable
@@ -391,6 +395,8 @@ private fun PeopleGroupPanel(
                             val label = contactFilterLabel ?: "this contact"
                             "Showing customer groups for $label. Use Clear filter to reset."
                         }
+                        schedulingSoldPlansPanel ->
+                            "Select a sold plan to see class assignment and balance."
                         else -> ui.subtitle
                     },
                     style = MaterialTheme.typography.bodySmall,
@@ -509,12 +515,22 @@ private fun PeopleGroupPanel(
 
             val formSection: @Composable (Modifier) -> Unit = { formModifier ->
                 val showForm = selectedId != null || (ui.allowCreate && isCreating)
+                val selectedGroup = selectedId?.let { PeopleGroupStore.findById(it) }
 
                 Column(modifier = formModifier.fillMaxHeight()) {
                     Text(
                         text = when {
-                            !showForm -> ui.editFormTitle
+                            !showForm -> if (schedulingSoldPlansPanel) {
+                                "Sold plan details"
+                            } else {
+                                ui.editFormTitle
+                            }
                             isCreating -> ui.createFormTitle
+                            schedulingSoldPlansPanel && selectedGroup != null -> {
+                                val main = selectedGroup.resolveMainContact()
+                                val plan = planNameForGroup(selectedGroup)
+                                if (main.name.isNotBlank()) "$plan · ${main.name}" else plan
+                            }
                             else -> ui.editFormTitle
                         },
                         style = MaterialTheme.typography.titleSmall,
@@ -534,7 +550,11 @@ private fun PeopleGroupPanel(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = ui.noSelectionMessage,
+                                text = if (schedulingSoldPlansPanel) {
+                                    "Select a sold plan to see which class it is on and any outstanding balance."
+                                } else {
+                                    ui.noSelectionMessage
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(spacing.outer),
@@ -549,28 +569,31 @@ private fun PeopleGroupPanel(
                             if (ui.readOnly && selectedId != null) {
                                 val group = PeopleGroupStore.findById(selectedId!!)
                                 if (group != null) {
-                                    CustomerGroupDetailView(
-                                        group = group,
-                                        spacing = spacing,
-                                        onOpenBilling = {
-                                            if (AppViewState.mode == AppViewMode.SCHEDULING) {
-                                                AppViewState.switchTo(AppViewMode.CUSTOMER_MANAGEMENT)
-                                            } else {
+                                    if (schedulingSoldPlansPanel) {
+                                        SchedulingSoldPlanDetailView(
+                                            group = group,
+                                            spacing = spacing,
+                                        )
+                                    } else {
+                                        CustomerGroupDetailView(
+                                            group = group,
+                                            spacing = spacing,
+                                            onOpenBilling = {
                                                 BillingPanelState.reopenForCurrentGroup()
-                                            }
-                                        },
-                                        onCloneToLead = {
-                                            cloneMessage = null
-                                            val lead = PeopleGroupStore.cloneToLead(group.id)
-                                            if (lead != null) {
-                                                PeopleGroupNavigation.openLead(lead.id)
-                                                cloneMessage =
-                                                    "Lead created from this customer group. Open the Leads panel to edit and convert."
-                                            } else {
-                                                cloneMessage = "Could not create a lead from this group."
-                                            }
-                                        },
-                                    )
+                                            },
+                                            onCloneToLead = {
+                                                cloneMessage = null
+                                                val lead = PeopleGroupStore.cloneToLead(group.id)
+                                                if (lead != null) {
+                                                    PeopleGroupNavigation.openLead(lead.id)
+                                                    cloneMessage =
+                                                        "Lead created from this customer group. Open the Leads panel to edit and convert."
+                                                } else {
+                                                    cloneMessage = "Could not create a lead from this group."
+                                                }
+                                            },
+                                        )
+                                    }
                                 }
 
                                 cloneMessage?.let { message ->
@@ -907,6 +930,57 @@ private fun PeopleGroup.relatedPeopleSummary(compact: Boolean): String? {
     if (related.isEmpty()) return null
     val labels = related.joinToString { formatPersonLabel(it.name, it.dateOfBirth) }
     return if (compact) labels else "Related: $labels"
+}
+
+@Composable
+private fun SchedulingSoldPlanDetailView(
+    group: PeopleGroup,
+    spacing: GlideLayout.Spacing,
+) {
+    val enrollment = PackEnrollmentStore.displayForPeopleGroup(group.id)
+    val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
+    val currencyCode = enrollment?.planSnapshot?.currencyCode
+    val scheduledClass = ScheduledClassStore.findClassContainingCustomerGroup(group.id)
+
+    FormPanelSection(
+        title = planNameForGroup(group),
+        description = "Class assignment and pack balance.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        GlideFieldLabel("Class")
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = scheduledClass?.name?.takeIf { it.isNotBlank() } ?: "Not assigned to a class",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = if (scheduledClass != null) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        GlideFieldLabel("Outstanding balance")
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = when {
+                enrollment == null -> "No billing enrollment"
+                outstanding > 0 -> formatMoney(
+                    outstanding,
+                    currencyCode ?: enrollment.planSnapshot.currencyCode,
+                )
+                else -> "No outstanding bills"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = when {
+                enrollment == null -> MaterialTheme.colorScheme.onSurfaceVariant
+                outstanding > 0 -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.primary
+            },
+        )
+    }
 }
 
 @Composable

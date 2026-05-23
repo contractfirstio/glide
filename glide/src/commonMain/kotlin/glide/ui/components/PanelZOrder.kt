@@ -16,9 +16,9 @@ object PanelZOrder {
     )
 
     private val schedulingOrder = mutableStateListOf(
-        SchedulingPanelSlots.CUSTOMER_GROUPS,
-        SchedulingPanelSlots.TERMS,
         SchedulingPanelSlots.LOCATIONS,
+        SchedulingPanelSlots.TERMS,
+        SchedulingPanelSlots.CUSTOMER_GROUPS,
         SchedulingPanelSlots.SCHEDULE,
         SchedulingPanelSlots.CALENDAR,
     )

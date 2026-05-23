@@ -92,16 +92,16 @@ object GlideLayout {
      * calendar class is clicked.
      * ```
      * [ Classes       ] [ Term calendar ] [ Attendance* ]
-     * [ Locations     ] [ Terms         ] [ Customer groups ]
+     * [ Sold Plans    ] [ Terms         ] [ Locations     ]
      * ```
      */
     fun schedulingPanelGridCell(slot: Int): Pair<Int, Int> = when (slot) {
         SchedulingPanelSlots.SCHEDULE -> 0 to 0
         SchedulingPanelSlots.CALENDAR -> 0 to 1
         SchedulingPanelSlots.ATTENDANCE -> 0 to 2
-        SchedulingPanelSlots.LOCATIONS -> 1 to 0
+        SchedulingPanelSlots.CUSTOMER_GROUPS -> 1 to 0
         SchedulingPanelSlots.TERMS -> 1 to 1
-        SchedulingPanelSlots.CUSTOMER_GROUPS -> 1 to 2
+        SchedulingPanelSlots.LOCATIONS -> 1 to 2
         else -> 0 to 0
     }
 
