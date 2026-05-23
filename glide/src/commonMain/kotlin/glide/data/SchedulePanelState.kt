@@ -6,19 +6,25 @@ import androidx.compose.runtime.setValue
 import glide.model.PeopleGroupType
 
 /**
- * Cross-panel scheduling filters — class selection drives sold plans, term, calendar, and location;
- * sold plan selection drives classes, term, calendar, and location.
+ * Cross-panel scheduling filters — selections in classes, sold plans, terms, and locations
+ * drive filtering and context sync across the scheduling view.
  */
 object SchedulePanelState {
     var selectedClassId by mutableStateOf<String?>(null)
         private set
     var selectedSoldPlanId by mutableStateOf<String?>(null)
         private set
+    var selectedTermFilterId by mutableStateOf<String?>(null)
+        private set
+    var selectedLocationFilterId by mutableStateOf<String?>(null)
+        private set
 
     /** Class selected in the Classes panel — filters sold plans and syncs term, calendar, and location. */
     fun onClassSelected(classId: String) {
         if (ScheduledClassStore.findById(classId) == null) return
         selectedSoldPlanId = null
+        selectedTermFilterId = null
+        selectedLocationFilterId = null
         selectedClassId = classId
     }
 
@@ -27,10 +33,30 @@ object SchedulePanelState {
         val group = PeopleGroupStore.findById(groupId) ?: return
         if (group.type != PeopleGroupType.CUSTOMER) return
         selectedSoldPlanId = groupId
+        selectedTermFilterId = null
+        selectedLocationFilterId = null
         selectedClassId = ScheduledClassStore.findClassContainingCustomerGroup(groupId)?.id
     }
 
-    /** Updates term/calendar/location context without clearing the sold-plan filter. */
+    /** Term selected in the Terms panel — filters classes, sold plans, and locations. */
+    fun onTermSelected(termId: String) {
+        if (TermStore.findById(termId) == null) return
+        selectedSoldPlanId = null
+        selectedClassId = null
+        selectedLocationFilterId = null
+        selectedTermFilterId = termId
+    }
+
+    /** Location selected in the Locations panel — filters classes, sold plans, and terms. */
+    fun onLocationSelected(locationId: String) {
+        if (LocationStore.findById(locationId) == null) return
+        selectedSoldPlanId = null
+        selectedClassId = null
+        selectedTermFilterId = null
+        selectedLocationFilterId = locationId
+    }
+
+    /** Updates class context without clearing the sold-plan filter. */
     fun syncClassContext(classId: String) {
         if (ScheduledClassStore.findById(classId) != null) {
             selectedClassId = classId
@@ -46,16 +72,22 @@ object SchedulePanelState {
     /** Clears the class filter from the Sold Plans panel. Does not change Classes panel selection. */
     fun clearClassFilter() {
         selectedClassId = null
-        selectedSoldPlanId?.let { soldPlanId ->
-            selectedClassId = ScheduledClassStore.findClassContainingCustomerGroup(soldPlanId)?.id
-        }
+        restoreClassContextFromSoldPlan()
+    }
+
+    /** Clears the location filter from the Terms panel. Does not change Locations panel selection. */
+    fun clearLocationFilter() {
+        selectedLocationFilterId = null
+    }
+
+    /** Clears the term filter from the Locations panel. Does not change Terms panel selection. */
+    fun clearTermFilter() {
+        selectedTermFilterId = null
     }
 
     fun onClassCleared() {
         selectedClassId = null
-        selectedSoldPlanId?.let { soldPlanId ->
-            selectedClassId = ScheduledClassStore.findClassContainingCustomerGroup(soldPlanId)?.id
-        }
+        restoreClassContextFromSoldPlan()
     }
 
     fun onSoldPlanCleared() {
@@ -63,8 +95,24 @@ object SchedulePanelState {
         selectedClassId = null
     }
 
+    fun onTermCleared() {
+        selectedTermFilterId = null
+    }
+
+    fun onLocationCleared() {
+        selectedLocationFilterId = null
+    }
+
     fun clear() {
         selectedClassId = null
         selectedSoldPlanId = null
+        selectedTermFilterId = null
+        selectedLocationFilterId = null
+    }
+
+    private fun restoreClassContextFromSoldPlan() {
+        selectedSoldPlanId?.let { soldPlanId ->
+            selectedClassId = ScheduledClassStore.findClassContainingCustomerGroup(soldPlanId)?.id
+        }
     }
 }

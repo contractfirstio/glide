@@ -105,7 +105,9 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
     val viewMode = AppViewState.mode
     val attendanceVisible = AttendancePanelState.visible
     val activeAttendanceSession = if (attendanceVisible) AttendancePanelState.sessionKey else null
-    val classFilterId = SchedulePanelState.selectedClassId
+    val classSyncId = SchedulePanelState.selectedClassId
+    val termFilterId = SchedulePanelState.selectedTermFilterId
+    val locationFilterId = SchedulePanelState.selectedLocationFilterId
     val listState = rememberLazyListState()
     var attendanceRefreshTick by remember { mutableIntStateOf(0) }
 
@@ -171,8 +173,18 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
             findTermContainingIsoDate(termsChronological, iso)?.id?.let { selectedTermId = it }
         }
 
-        LaunchedEffect(classFilterId, termsChronological) {
-            val classId = classFilterId ?: return@LaunchedEffect
+        LaunchedEffect(termFilterId, termsChronological) {
+            termFilterId?.let { selectedTermId = it }
+        }
+
+        LaunchedEffect(locationFilterId, termsChronological, allClasses) {
+            val locationId = locationFilterId ?: return@LaunchedEffect
+            termIdForLocationSelection(locationId, termsChronological, allClasses)?.let { selectedTermId = it }
+        }
+
+        LaunchedEffect(classSyncId, termsChronological) {
+            if (termFilterId != null || locationFilterId != null) return@LaunchedEffect
+            val classId = classSyncId ?: return@LaunchedEffect
             val scheduledClass = ScheduledClassStore.findById(classId) ?: return@LaunchedEffect
             termIdForClassSelection(scheduledClass, termsChronological)?.let { selectedTermId = it }
         }

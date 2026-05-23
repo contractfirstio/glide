@@ -172,13 +172,21 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
 
     val locations = LocationStore.sortedForPanel()
     val soldPlanFilterId = SchedulePanelState.selectedSoldPlanId
-    val classes = ScheduledClassStore.forSchedulePanelFromSoldPlan(soldPlanFilterId)
+    val termFilterId = SchedulePanelState.selectedTermFilterId
+    val locationFilterId = SchedulePanelState.selectedLocationFilterId
+    val classes = ScheduledClassStore.forSchedulingPanel(
+        soldPlanId = soldPlanFilterId,
+        termId = termFilterId,
+        locationId = locationFilterId,
+    )
     val soldPlanFilterLabel = soldPlanFilterId?.let { groupId ->
         PeopleGroupStore.findById(groupId)?.let { group ->
             group.resolveMainContact().name.takeIf { it.isNotBlank() }
                 ?: group.planId?.let { PlanStore.findById(it)?.name }?.takeIf { it.isNotBlank() }
         }
     }
+    val termFilterLabel = termFilterId?.let { TermStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+    val locationFilterLabel = locationFilterId?.let { LocationStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
 
     fun clearLocalSelection() {
         selectedId = null
@@ -255,8 +263,8 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
         }
     }
 
-    LaunchedEffect(classes, selectedId, soldPlanFilterId) {
-        if (soldPlanFilterId != null) return@LaunchedEffect
+    LaunchedEffect(classes, selectedId, soldPlanFilterId, termFilterId, locationFilterId) {
+        if (soldPlanFilterId != null || termFilterId != null || locationFilterId != null) return@LaunchedEffect
         if (selectedId != null && classes.none { it.id == selectedId }) {
             clearSelection()
         }
@@ -291,6 +299,14 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             val label = soldPlanFilterLabel ?: "this sold plan"
                             "Showing class for $label. Use Clear filter to reset."
                         }
+                        termFilterId != null -> {
+                            val label = termFilterLabel ?: "this term"
+                            "Showing classes in $label. Use Clear filter to reset."
+                        }
+                        locationFilterId != null -> {
+                            val label = locationFilterLabel ?: "this location"
+                            "Showing classes at $label. Use Clear filter to reset."
+                        }
                         terms.isEmpty() && locations.isEmpty() ->
                             "Create terms and locations in their panels, then add weekly or single-day classes here."
                         terms.isEmpty() ->
@@ -323,6 +339,16 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                     Text("Clear filter")
                                 }
                             }
+                            if (termFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearTermFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            if (locationFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearLocationFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
                             GlideButton(onClick = { resetFormForCreate() }) {
                                 Text(if (compact) "New" else "New class")
                             }
@@ -351,6 +377,10 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                 text = when {
                                     soldPlanFilterId != null ->
                                         "This sold plan is not assigned to a class."
+                                    termFilterId != null ->
+                                        "No classes in this term."
+                                    locationFilterId != null ->
+                                        "No classes at this location."
                                     else -> "No classes yet."
                                 },
                                 style = MaterialTheme.typography.bodySmall,

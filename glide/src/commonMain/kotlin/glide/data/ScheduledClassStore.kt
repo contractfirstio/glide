@@ -73,11 +73,43 @@ object ScheduledClassStore {
         return filtered.sortedWith(compareScheduledClasses())
     }
 
-    fun forSchedulePanelFromSoldPlan(soldPlanId: String?): List<ScheduledClass> {
-        if (soldPlanId == null) return forSchedulePanel()
-        val scheduledClass = findClassContainingCustomerGroup(soldPlanId) ?: return emptyList()
-        return listOf(scheduledClass)
+    fun forSchedulingPanel(
+        soldPlanId: String? = null,
+        termId: String? = null,
+        locationId: String? = null,
+    ): List<ScheduledClass> {
+        soldPlanId?.let { groupId ->
+            val scheduledClass = findClassContainingCustomerGroup(groupId)
+            return listOfNotNull(scheduledClass)
+        }
+        var filtered: List<ScheduledClass> = _classes
+        termId?.let { id -> filtered = filtered.filter { it.spansTerm(id) } }
+        locationId?.let { id -> filtered = filtered.filter { it.usesLocation(id) } }
+        return filtered.sortedWith(compareScheduledClasses())
     }
+
+    fun forSchedulePanelFromSoldPlan(soldPlanId: String?): List<ScheduledClass> =
+        forSchedulingPanel(soldPlanId = soldPlanId)
+
+    fun customerGroupIdsForTerm(termId: String): Set<String> =
+        _classes.filter { it.spansTerm(termId) }
+            .flatMap { it.customerGroupIds }
+            .toSet()
+
+    fun customerGroupIdsForLocation(locationId: String): Set<String> =
+        _classes.filter { it.usesLocation(locationId) }
+            .flatMap { it.customerGroupIds }
+            .toSet()
+
+    fun termIdsForLocation(locationId: String): Set<String> =
+        _classes.filter { it.usesLocation(locationId) }
+            .flatMap { it.termIds }
+            .toSet()
+
+    fun locationIdsForTerm(termId: String): Set<String> =
+        _classes.filter { it.spansTerm(termId) }
+            .mapNotNull { it.locationId }
+            .toSet()
 
     fun countForTerm(termId: String): Int = _classes.count { it.spansTerm(termId) }
 

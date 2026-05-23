@@ -32,12 +32,26 @@ object PeopleGroupStore {
             else -> customers
         }
 
-    /** Sold plans enrolled on the selected class in scheduling view. */
-    fun forSchedulingSoldPlans(classId: String? = null): List<PeopleGroup> {
-        if (classId == null) return customers
-        val scheduledClass = ScheduledClassStore.findById(classId) ?: return customers
-        val enrolledIds = scheduledClass.customerGroupIds.toSet()
-        return customers.filter { it.id in enrolledIds }
+    /** Sold plans enrolled on classes matching the active scheduling filter. */
+    fun forSchedulingSoldPlans(
+        classId: String? = null,
+        termId: String? = null,
+        locationId: String? = null,
+    ): List<PeopleGroup> {
+        val enrolledIds = when {
+            classId != null ->
+                ScheduledClassStore.findById(classId)?.customerGroupIds?.toSet()
+            termId != null ->
+                ScheduledClassStore.customerGroupIdsForTerm(termId)
+            locationId != null ->
+                ScheduledClassStore.customerGroupIdsForLocation(locationId)
+            else -> null
+        }
+        return when {
+            enrolledIds == null -> customers
+            enrolledIds.isEmpty() -> emptyList()
+            else -> customers.filter { it.id in enrolledIds }
+        }
     }
 
     /** Sample / dev data only — inserts an already-converted customer group. */

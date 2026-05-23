@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import glide.data.LocationStore
 import glide.data.ScheduledClassStore
 import glide.data.SchedulePanelState
+import glide.data.TermStore
 import glide.model.ClassLocation
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.FormPanelSection
@@ -88,24 +89,40 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
-    val locations = LocationStore.sortedForPanel()
-    val classFilterId = SchedulePanelState.selectedClassId
+    val allLocations = LocationStore.sortedForPanel()
+    val termFilterId = SchedulePanelState.selectedTermFilterId
+    val locationFilterId = SchedulePanelState.selectedLocationFilterId
+    val classSyncId = SchedulePanelState.selectedClassId.takeIf {
+        termFilterId == null && locationFilterId == null
+    }
+    val locations = if (termFilterId != null) {
+        val locationIds = ScheduledClassStore.locationIdsForTerm(termFilterId)
+        allLocations.filter { it.id in locationIds }
+    } else {
+        allLocations
+    }
+    val termFilterLabel = termFilterId?.let {
+        TermStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() }
+    }
 
-    fun clearSelection() {
+    fun clearLocalSelection() {
         selectedId = null
         isCreating = true
         form.load(LocationFormState())
         formError = null
+    }
+
+    fun clearSelection() {
+        clearLocalSelection()
+        SchedulePanelState.onLocationCleared()
     }
 
     fun resetFormForCreate() {
-        selectedId = null
-        isCreating = true
-        form.load(LocationFormState())
-        formError = null
+        clearLocalSelection()
+        SchedulePanelState.onLocationCleared()
     }
 
-    fun loadIntoForm(location: ClassLocation) {
+    fun syncLocationIntoForm(location: ClassLocation) {
         selectedId = location.id
         isCreating = false
         form.load(
@@ -118,16 +135,30 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         formError = null
     }
 
-    LaunchedEffect(locations, selectedId) {
-        if (selectedId != null && locations.none { it.id == selectedId }) {
+    fun loadIntoForm(location: ClassLocation) {
+        selectedId = location.id
+        isCreating = false
+        SchedulePanelState.onLocationSelected(location.id)
+        form.load(
+            LocationFormState(
+                name = location.name,
+                maxCapacityText = location.maxCapacity?.toString() ?: "",
+                notes = location.notes,
+            ),
+        )
+        formError = null
+    }
+
+    LaunchedEffect(allLocations, selectedId, termFilterId) {
+        if (selectedId != null && allLocations.none { it.id == selectedId }) {
             clearSelection()
         }
     }
 
-    LaunchedEffect(classFilterId, locations) {
-        val classId = classFilterId ?: return@LaunchedEffect
+    LaunchedEffect(classSyncId, allLocations) {
+        val classId = classSyncId ?: return@LaunchedEffect
         val locationId = ScheduledClassStore.findById(classId)?.locationId ?: return@LaunchedEffect
-        locations.find { it.id == locationId }?.let { loadIntoForm(it) }
+        allLocations.find { it.id == locationId }?.let { syncLocationIntoForm(it) }
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -147,7 +178,14 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         ) {
             if (!compact) {
                 Text(
-                    text = "Define rooms, studios, and capacity, then assign locations to classes in the Schedule panel.",
+                    text = when {
+                        termFilterId != null -> {
+                            val label = termFilterLabel ?: "this term"
+                            "Showing locations used in $label. Use Clear filter in Terms to reset."
+                        }
+                        else ->
+                            "Define rooms, studios, and capacity, then assign locations to classes in the Schedule panel."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -165,8 +203,15 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                             text = "${locations.size} location${if (locations.size == 1) "" else "s"}",
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        GlideButton(onClick = { resetFormForCreate() }) {
-                            Text(if (compact) "New" else "New location")
+                        Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (termFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearTermFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            GlideButton(onClick = { resetFormForCreate() }) {
+                                Text(if (compact) "New" else "New location")
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(spacing.field))
@@ -189,7 +234,10 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "No locations yet.",
+                                text = when {
+                                    termFilterId != null -> "No locations used in this term."
+                                    else -> "No locations yet."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

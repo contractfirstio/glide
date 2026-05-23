@@ -49,10 +49,12 @@ import glide.data.BillStore
 import glide.data.BillingPanelState
 import glide.data.ContactStore
 import glide.data.ContactsPanelState
+import glide.data.LocationStore
 import glide.data.PlansPanelState
 import glide.data.RelatedPanelState
 import glide.data.RelatedPersonStore
 import glide.data.SchedulePanelState
+import glide.data.TermStore
 import glide.data.PackEnrollmentStore
 import glide.data.PeopleGroupNavigation
 import glide.data.PeopleGroupStore
@@ -262,18 +264,35 @@ private fun PeopleGroupPanel(
     }
     val schedulingSoldPlansPanel =
         ui.type == PeopleGroupType.CUSTOMER && AppViewState.mode == AppViewMode.SCHEDULING
-    val soldPlanFilterId = if (schedulingSoldPlansPanel) {
-        SchedulePanelState.selectedSoldPlanId
-    } else {
-        null
-    }
+    val soldPlanFilterId = SchedulePanelState.selectedSoldPlanId
+    val termFilterId = SchedulePanelState.selectedTermFilterId
+    val locationFilterId = SchedulePanelState.selectedLocationFilterId
     val classFilterId = if (schedulingSoldPlansPanel && soldPlanFilterId == null) {
         SchedulePanelState.selectedClassId
     } else {
         null
     }
+    val soldPlansTermFilterId = if (schedulingSoldPlansPanel && soldPlanFilterId == null && classFilterId == null) {
+        termFilterId
+    } else {
+        null
+    }
+    val soldPlansLocationFilterId = if (
+        schedulingSoldPlansPanel &&
+        soldPlanFilterId == null &&
+        classFilterId == null &&
+        termFilterId == null
+    ) {
+        locationFilterId
+    } else {
+        null
+    }
     val groups = when {
-        schedulingSoldPlansPanel -> PeopleGroupStore.forSchedulingSoldPlans(classFilterId)
+        schedulingSoldPlansPanel -> PeopleGroupStore.forSchedulingSoldPlans(
+            classId = classFilterId,
+            termId = soldPlansTermFilterId,
+            locationId = soldPlansLocationFilterId,
+        )
         ui.type == PeopleGroupType.LEAD -> PeopleGroupStore.leads
         else -> PeopleGroupStore.forCustomersPanel(contactFilterId, relatedFilterId, planFilterId)
     }
@@ -284,6 +303,12 @@ private fun PeopleGroupPanel(
     }
     val classFilterLabel = classFilterId?.let {
         ScheduledClassStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    }
+    val termFilterLabel = soldPlansTermFilterId?.let {
+        TermStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    }
+    val locationFilterLabel = soldPlansLocationFilterId?.let {
+        LocationStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
@@ -364,17 +389,28 @@ private fun PeopleGroupPanel(
         }
     }
 
-    LaunchedEffect(contactFilterId, planFilterId, relatedFilterId, classFilterId, soldPlanFilterId) {
+    LaunchedEffect(contactFilterId, planFilterId, relatedFilterId, classFilterId, soldPlanFilterId, soldPlansTermFilterId, soldPlansLocationFilterId) {
         if (ui.type == PeopleGroupType.CUSTOMER && soldPlanFilterId != null) return@LaunchedEffect
         if (ui.type == PeopleGroupType.CUSTOMER &&
-            (contactFilterId != null || planFilterId != null || relatedFilterId != null || classFilterId != null) &&
+            (contactFilterId != null || planFilterId != null || relatedFilterId != null ||
+                classFilterId != null || soldPlansTermFilterId != null || soldPlansLocationFilterId != null) &&
             selectedId != null
         ) {
             clearLocalSelection()
         }
     }
 
-    LaunchedEffect(contactFilterId, planFilterId, relatedFilterId, classFilterId, soldPlanFilterId, groups, selectedId) {
+    LaunchedEffect(
+        contactFilterId,
+        planFilterId,
+        relatedFilterId,
+        classFilterId,
+        soldPlanFilterId,
+        soldPlansTermFilterId,
+        soldPlansLocationFilterId,
+        groups,
+        selectedId,
+    ) {
         if (ui.type == PeopleGroupType.CUSTOMER &&
             selectedId != null &&
             groups.none { it.id == selectedId }
@@ -405,6 +441,14 @@ private fun PeopleGroupPanel(
                         schedulingSoldPlansPanel && classFilterId != null -> {
                             val label = classFilterLabel ?: "this class"
                             "Showing sold plans on $label. Use Clear filter to reset."
+                        }
+                        schedulingSoldPlansPanel && soldPlansTermFilterId != null -> {
+                            val label = termFilterLabel ?: "this term"
+                            "Showing sold plans in $label. Use Clear filter to reset."
+                        }
+                        schedulingSoldPlansPanel && soldPlansLocationFilterId != null -> {
+                            val label = locationFilterLabel ?: "this location"
+                            "Showing sold plans at $label. Use Clear filter to reset."
                         }
                         ui.type == PeopleGroupType.CUSTOMER && planFilterId != null -> {
                             val label = planFilterLabel ?: "this plan"
@@ -442,6 +486,16 @@ private fun PeopleGroupPanel(
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
                             if (schedulingSoldPlansPanel && classFilterId != null) {
                                 GlideTextButton(onClick = { SchedulePanelState.clearClassFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            if (schedulingSoldPlansPanel && soldPlansTermFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearTermFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            if (schedulingSoldPlansPanel && soldPlansLocationFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearLocationFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
@@ -501,6 +555,10 @@ private fun PeopleGroupPanel(
                                         "No customer groups for this contact."
                                     schedulingSoldPlansPanel && classFilterId != null ->
                                         "No sold plans on this class."
+                                    schedulingSoldPlansPanel && soldPlansTermFilterId != null ->
+                                        "No sold plans in this term."
+                                    schedulingSoldPlansPanel && soldPlansLocationFilterId != null ->
+                                        "No sold plans at this location."
                                     else -> ui.emptyListMessage
                                 },
                                 style = MaterialTheme.typography.bodySmall,

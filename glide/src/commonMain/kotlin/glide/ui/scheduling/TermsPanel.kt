@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import glide.data.LocationStore
 import glide.data.ScheduledClassStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
@@ -101,24 +102,40 @@ fun TermsPanel(modifier: Modifier = Modifier) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
-    val terms = TermStore.sortedForPanel()
-    val classFilterId = SchedulePanelState.selectedClassId
+    val allTerms = TermStore.sortedForPanel()
+    val termFilterId = SchedulePanelState.selectedTermFilterId
+    val locationFilterId = SchedulePanelState.selectedLocationFilterId
+    val classSyncId = SchedulePanelState.selectedClassId.takeIf {
+        termFilterId == null && locationFilterId == null
+    }
+    val terms = if (locationFilterId != null) {
+        val termIds = ScheduledClassStore.termIdsForLocation(locationFilterId)
+        allTerms.filter { it.id in termIds }
+    } else {
+        allTerms
+    }
+    val locationFilterLabel = locationFilterId?.let {
+        LocationStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() }
+    }
 
-    fun clearSelection() {
+    fun clearLocalSelection() {
         selectedId = null
         isCreating = true
         form.load(TermFormState())
         formError = null
+    }
+
+    fun clearSelection() {
+        clearLocalSelection()
+        SchedulePanelState.onTermCleared()
     }
 
     fun resetFormForCreate() {
-        selectedId = null
-        isCreating = true
-        form.load(TermFormState())
-        formError = null
+        clearLocalSelection()
+        SchedulePanelState.onTermCleared()
     }
 
-    fun loadIntoForm(term: AcademicTerm) {
+    fun syncTermIntoForm(term: AcademicTerm) {
         selectedId = term.id
         isCreating = false
         form.load(
@@ -133,17 +150,33 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         formError = null
     }
 
-    LaunchedEffect(terms, selectedId) {
-        if (selectedId != null && terms.none { it.id == selectedId }) {
+    fun loadIntoForm(term: AcademicTerm) {
+        selectedId = term.id
+        isCreating = false
+        SchedulePanelState.onTermSelected(term.id)
+        form.load(
+            TermFormState(
+                name = term.name,
+                startDate = term.startDate,
+                endDate = term.endDate,
+                notes = term.notes,
+                acceptsRollingPlans = term.acceptsRollingPlans,
+            ),
+        )
+        formError = null
+    }
+
+    LaunchedEffect(allTerms, selectedId, locationFilterId) {
+        if (selectedId != null && allTerms.none { it.id == selectedId }) {
             clearSelection()
         }
     }
 
-    LaunchedEffect(classFilterId, terms) {
-        val classId = classFilterId ?: return@LaunchedEffect
+    LaunchedEffect(classSyncId, allTerms) {
+        val classId = classSyncId ?: return@LaunchedEffect
         val scheduledClass = ScheduledClassStore.findById(classId) ?: return@LaunchedEffect
-        val termId = termIdForClassSelection(scheduledClass, terms) ?: return@LaunchedEffect
-        terms.find { it.id == termId }?.let { loadIntoForm(it) }
+        val resolvedTermId = termIdForClassSelection(scheduledClass, allTerms) ?: return@LaunchedEffect
+        allTerms.find { it.id == resolvedTermId }?.let { syncTermIntoForm(it) }
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -163,7 +196,13 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         ) {
             if (!compact) {
                 Text(
-                    text = "Define academic terms and school breaks. Term dates cannot overlap.",
+                    text = when {
+                        locationFilterId != null -> {
+                            val label = locationFilterLabel ?: "this location"
+                            "Showing terms with classes at $label. Use Clear filter in Locations to reset."
+                        }
+                        else -> "Define academic terms and school breaks. Term dates cannot overlap."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -181,8 +220,15 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             text = "${terms.size} term${if (terms.size == 1) "" else "s"}",
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        GlideButton(onClick = { resetFormForCreate() }) {
-                            Text(if (compact) "New" else "New term")
+                        Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (locationFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearLocationFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            GlideButton(onClick = { resetFormForCreate() }) {
+                                Text(if (compact) "New" else "New term")
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(spacing.field))
@@ -205,7 +251,10 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "No terms yet.",
+                                text = when {
+                                    locationFilterId != null -> "No terms with classes at this location."
+                                    else -> "No terms yet."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
