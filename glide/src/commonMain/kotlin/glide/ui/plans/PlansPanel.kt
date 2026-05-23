@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.PlanStore
+import glide.data.PlansPanelState
 import glide.model.Plan
 import glide.model.PlanKind
 import glide.model.formatMoney
@@ -114,15 +115,30 @@ fun PlansPanel(modifier: Modifier = Modifier) {
     var formError by remember { mutableStateOf<String?>(null) }
 
     val plans = PlanStore.plans
+    val planFilterId = PlansPanelState.selectedPlanId
+    val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+
+    fun clearLocalSelection() {
+        selectedId = null
+        isCreating = false
+        formState = PlanFormState()
+        formError = null
+    }
+
+    fun clearSelection() {
+        clearLocalSelection()
+        PlansPanelState.clearPlanFilter()
+    }
 
     fun resetFormForCreate() {
-        selectedId = null
+        clearLocalSelection()
         isCreating = true
         formState = PlanFormState()
         formError = null
     }
 
     fun loadIntoForm(plan: Plan) {
+        PlansPanelState.onPlanSelected(plan.id)
         selectedId = plan.id
         isCreating = false
         formState = PlanFormState(
@@ -153,7 +169,12 @@ fun PlansPanel(modifier: Modifier = Modifier) {
         ) {
             if (!compact) {
                 Text(
-                    text = "Define plan types and packs offered to customers.",
+                    text = if (planFilterId != null) {
+                        val label = planFilterLabel ?: "this plan"
+                        "Filtering customer groups, contacts, and related people for $label. Use Clear filter to reset."
+                    } else {
+                        "Define plan types and packs offered to customers."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -171,8 +192,15 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             text = "${plans.size} plan${if (plans.size == 1) "" else "s"}",
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        GlideButton(onClick = { resetFormForCreate() }) {
-                            Text(if (compact) "New" else "New plan")
+                        Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (planFilterId != null) {
+                                GlideTextButton(onClick = { PlansPanelState.clearPlanFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            GlideButton(onClick = { resetFormForCreate() }) {
+                                Text(if (compact) "New" else "New plan")
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(spacing.field))
@@ -334,7 +362,9 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                     onClick = {
                         PlanStore.delete(selectedId!!)
                         showDeleteConfirm = false
-                        resetFormForCreate()
+                        clearSelection()
+                        isCreating = true
+                        formState = PlanFormState()
                     },
                 ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)

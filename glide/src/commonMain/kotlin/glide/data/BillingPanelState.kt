@@ -23,6 +23,7 @@ object BillingPanelState {
         }
         ContactsPanelState.clearContactFilter()
         RelatedPanelState.clearRelatedPersonFilter()
+        PlansPanelState.clearPlanFilter()
         peopleGroupId = groupId
         visible = true
     }

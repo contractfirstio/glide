@@ -14,17 +14,19 @@ object PeopleGroupStore {
     val customers: List<PeopleGroup> get() = _groups.filter { it.type == PeopleGroupType.CUSTOMER }
 
     /**
-     * Customer groups for the Customers panel — all groups, those whose main contact is
-     * [contactId], or those that include [relatedPersonId].
+     * Customer groups for the Customers panel — all groups, those on [planId], whose main
+     * contact is [contactId], or those that include [relatedPersonId].
      */
     fun forCustomersPanel(
         contactId: String? = null,
         relatedPersonId: String? = null,
+        planId: String? = null,
     ): List<PeopleGroup> =
         when {
             relatedPersonId != null ->
                 customers.filter { relatedPersonId in it.relatedPersonIds }
             contactId != null -> customers.filter { it.mainContactId == contactId }
+            planId != null -> customers.filter { it.planId == planId }
             else -> customers
         }
 

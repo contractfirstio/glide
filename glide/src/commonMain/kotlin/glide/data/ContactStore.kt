@@ -11,10 +11,11 @@ object ContactStore {
 
     /**
      * Contacts for the Contacts panel — all contacts, the main contact for [customerGroupId],
-     * or main contacts on groups that include [relatedPersonId].
+     * main contacts on groups with [planId], or on groups that include [relatedPersonId].
      */
     fun forContactsPanel(
         customerGroupId: String? = null,
+        planId: String? = null,
         relatedPersonId: String? = null,
     ): List<Contact> =
         when {
@@ -25,6 +26,12 @@ object ContactStore {
                     ?.let { findById(it) }
                     ?.let { listOf(it) }
                     ?: emptyList()
+            planId != null ->
+                PeopleGroupStore.all
+                    .filter { it.planId == planId }
+                    .mapNotNull { it.mainContactId }
+                    .distinct()
+                    .mapNotNull { findById(it) }
             relatedPersonId != null ->
                 PeopleGroupStore.all
                     .filter { relatedPersonId in it.relatedPersonIds }

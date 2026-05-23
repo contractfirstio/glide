@@ -15,6 +15,7 @@ object ContactsPanelState {
         if (ContactStore.findById(contactId) != null) {
             BillingPanelState.onCustomerGroupCleared()
             RelatedPanelState.clearRelatedPersonFilter()
+            PlansPanelState.clearPlanFilter()
             selectedContactId = contactId
         }
     }

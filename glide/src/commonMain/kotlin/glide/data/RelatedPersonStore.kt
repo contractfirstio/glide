@@ -21,6 +21,7 @@ object RelatedPersonStore {
     fun forRelatedPanel(
         customerGroupId: String? = null,
         contactId: String? = null,
+        planId: String? = null,
         relatedPersonId: String? = null,
     ): List<RelatedPerson> =
         when {
@@ -30,10 +31,18 @@ object RelatedPersonStore {
                     ?.resolveRelatedPeople()
                     ?: emptyList()
             contactId != null -> relatedPeopleForMainContact(contactId)
+            planId != null -> relatedPeopleForPlan(planId)
             relatedPersonId != null ->
                 findById(relatedPersonId)?.let { listOf(it) } ?: emptyList()
             else -> onCustomerPacks
         }
+
+    private fun relatedPeopleForPlan(planId: String): List<RelatedPerson> =
+        PeopleGroupStore.all
+            .filter { it.planId == planId }
+            .flatMap { it.relatedPersonIds }
+            .distinct()
+            .mapNotNull { findById(it) }
 
     private fun relatedPeopleForMainContact(contactId: String): List<RelatedPerson> =
         PeopleGroupStore.all

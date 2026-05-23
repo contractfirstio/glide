@@ -45,6 +45,7 @@ import glide.data.BillStore
 import glide.data.BillingPanelState
 import glide.data.ContactStore
 import glide.data.ContactsPanelState
+import glide.data.PlansPanelState
 import glide.data.RelatedPanelState
 import glide.data.RelatedPersonStore
 import glide.data.PackEnrollmentStore
@@ -196,6 +197,11 @@ private fun PeopleGroupPanel(
     } else {
         null
     }
+    val planFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
+        PlansPanelState.selectedPlanId
+    } else {
+        null
+    }
     val relatedFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
         RelatedPanelState.selectedRelatedPersonId
     } else {
@@ -203,9 +209,11 @@ private fun PeopleGroupPanel(
     }
     val groups = when (ui.type) {
         PeopleGroupType.LEAD -> PeopleGroupStore.leads
-        PeopleGroupType.CUSTOMER -> PeopleGroupStore.forCustomersPanel(contactFilterId, relatedFilterId)
+        PeopleGroupType.CUSTOMER ->
+            PeopleGroupStore.forCustomersPanel(contactFilterId, relatedFilterId, planFilterId)
     }
     val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+    val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val relatedFilterLabel = relatedFilterId?.let {
         RelatedPersonStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
@@ -268,16 +276,16 @@ private fun PeopleGroupPanel(
         }
     }
 
-    LaunchedEffect(contactFilterId, relatedFilterId) {
+    LaunchedEffect(contactFilterId, planFilterId, relatedFilterId) {
         if (ui.type == PeopleGroupType.CUSTOMER &&
-            (contactFilterId != null || relatedFilterId != null) &&
+            (contactFilterId != null || planFilterId != null || relatedFilterId != null) &&
             selectedId != null
         ) {
             clearLocalSelection()
         }
     }
 
-    LaunchedEffect(contactFilterId, relatedFilterId, groups, selectedId) {
+    LaunchedEffect(contactFilterId, planFilterId, relatedFilterId, groups, selectedId) {
         if (ui.type == PeopleGroupType.CUSTOMER &&
             selectedId != null &&
             groups.none { it.id == selectedId }
@@ -305,6 +313,10 @@ private fun PeopleGroupPanel(
             if (!compact) {
                 Text(
                     text = when {
+                        ui.type == PeopleGroupType.CUSTOMER && planFilterId != null -> {
+                            val label = planFilterLabel ?: "this plan"
+                            "Showing customer groups on $label. Use Clear filter in Plans to reset."
+                        }
                         ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null -> {
                             val label = relatedFilterLabel ?: "this related person"
                             "Showing customer groups for $label. Use Clear filter in Related to reset."
@@ -333,6 +345,11 @@ private fun PeopleGroupPanel(
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (ui.type == PeopleGroupType.CUSTOMER && planFilterId != null) {
+                                GlideTextButton(onClick = { PlansPanelState.clearPlanFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
                             if (ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null) {
                                 GlideTextButton(onClick = { RelatedPanelState.clearRelatedPersonFilter() }) {
                                     Text("Clear filter")
@@ -376,6 +393,8 @@ private fun PeopleGroupPanel(
                         ) {
                             Text(
                                 text = when {
+                                    ui.type == PeopleGroupType.CUSTOMER && planFilterId != null ->
+                                        "No customer groups on this plan."
                                     ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null ->
                                         "No customer groups for this related person."
                                     ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null ->
