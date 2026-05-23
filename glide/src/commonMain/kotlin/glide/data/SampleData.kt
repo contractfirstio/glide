@@ -203,6 +203,13 @@ object SampleData {
         deferredBillingActions.forEach { it() }
         RollingPackBillingService.syncAllActiveRollingPackBilling()
 
+        // Issued renewal overdue for payment alert testing
+        BillStore.forPeopleGroup(SAMPLE_CUSTOMER_SARAH)
+            .firstOrNull { it.status == glide.model.BillStatus.SCHEDULED && it.isRenewalBill() }
+            ?.let { renewal ->
+                BillStore.setIssued(renewal.id, issued = true, issuedAtMillis = now - 10 * day)
+            }
+
         val ella = RelatedPerson(
             id = "sample-related-ella",
             name = "Ella O'Brien",

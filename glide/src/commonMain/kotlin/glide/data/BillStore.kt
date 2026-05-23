@@ -87,11 +87,19 @@ object BillStore {
         return if (issued) {
             if (hasOutstandingAttendanceSubmissions()) return false
             if (bill.status != BillStatus.SCHEDULED) return false
-            _bills[index] = bill.copy(status = BillStatus.ISSUED, issuedAtMillis = issuedAtMillis)
+            _bills[index] = bill.copy(
+                status = BillStatus.ISSUED,
+                issuedAtMillis = issuedAtMillis,
+                dueAtMillis = bill.dueAtMillis ?: issuedAtMillis,
+            )
             true
         } else {
             if (bill.status != BillStatus.ISSUED) return false
-            _bills[index] = bill.copy(status = BillStatus.SCHEDULED, issuedAtMillis = null)
+            _bills[index] = bill.copy(
+                status = BillStatus.SCHEDULED,
+                issuedAtMillis = null,
+                dueAtMillis = null,
+            )
             true
         }
     }

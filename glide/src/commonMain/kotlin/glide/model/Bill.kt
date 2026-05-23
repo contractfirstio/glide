@@ -33,3 +33,27 @@ fun Bill.isIssuedToCustomer(): Boolean =
     status == BillStatus.ISSUED || status == BillStatus.PAID
 
 fun Bill.displayDateMillis(): Long = issuedAtMillis ?: createdAtMillis
+
+/** When payment is expected; explicit [dueAtMillis] or issue date (on receipt). */
+fun Bill.effectivePaymentDueAtMillis(): Long? =
+    when (status) {
+        BillStatus.ISSUED -> dueAtMillis ?: issuedAtMillis
+        else -> null
+    }
+
+private const val DAY_MILLIS = 24L * 60 * 60 * 1000
+
+/** Whole days after [effectivePaymentDueAtMillis]; null if not issued or not yet due. */
+fun Bill.daysPastPaymentDue(nowMillis: Long = System.currentTimeMillis()): Int? {
+    if (status != BillStatus.ISSUED || amountMinor <= 0) return null
+    val due = effectivePaymentDueAtMillis() ?: return null
+    if (nowMillis < due) return null
+    return ((nowMillis - due) / DAY_MILLIS).toInt()
+}
+
+fun Bill.isPaymentOverdueByAtLeastDays(
+    days: Long = PAYMENT_OVERDUE_ALERT_DAYS,
+    nowMillis: Long = System.currentTimeMillis(),
+): Boolean = (daysPastPaymentDue(nowMillis) ?: 0) >= days
+
+const val PAYMENT_OVERDUE_ALERT_DAYS = 2L
