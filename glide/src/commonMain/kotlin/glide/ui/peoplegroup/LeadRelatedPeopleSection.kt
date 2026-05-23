@@ -49,84 +49,98 @@ fun LeadRelatedPeopleSection(
         }
     }
 
-    GlideFieldLabel("Related people")
-    Spacer(modifier = Modifier.height(spacing.field))
-
-    linked.forEach { person ->
-        LeadRelatedPersonLinkedRow(
-            person = person,
-            onRemove = { onSelectionChange(selectedIds.filter { it != person.id }) },
-        )
-        Spacer(modifier = Modifier.height(spacing.field))
-    }
-
-    EntitySearchPicker(
-        label = "Search related people",
-        placeholder = "Name or date of birth",
-        query = relatedSearchQuery,
-        onQueryChange = { relatedSearchQuery = it },
-        results = relatedSearchResults,
-        onSelect = { id -> onSelectionChange(selectedIds + id) },
-        noResultsText = "No matches. Add a new related person below.",
-    )
-
-    Spacer(modifier = Modifier.height(spacing.section))
-    Text(
-        text = "Or add new related person",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        GlideOutlinedField(
-            value = newName,
-            onValueChange = {
-                newName = it
-                addError = null
-            },
-            label = "Name",
-        )
-        Spacer(modifier = Modifier.height(spacing.field))
-        DateOfBirthField(
-            value = newDateOfBirth,
-            onValueChange = { newDateOfBirth = it },
-        )
-        Spacer(modifier = Modifier.height(spacing.field))
-        GlideOutlinedButton(
-            onClick = {
-                val trimmed = newName.trim()
-                if (trimmed.isEmpty()) {
-                    addError = "Name is required to add a related person."
-                    return@GlideOutlinedButton
-                }
-                val person = RelatedPerson(name = trimmed, dateOfBirth = newDateOfBirth.trim())
-                RelatedPersonStore.create(person)
-                onSelectionChange(selectedIds + person.id)
-                newName = ""
-                newDateOfBirth = ""
-                addError = null
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Add related person")
+    LeadPanelSection(
+        title = "Related people",
+        description = "Others included on this lead besides the main contact.",
+        spacing = spacing,
+    ) {
+        if (linked.isNotEmpty()) {
+            GlideFieldLabel("On this lead")
+            Spacer(modifier = Modifier.height(spacing.field))
+            linked.forEach { person ->
+                LeadRelatedPersonLinkedRow(
+                    person = person,
+                    onRemove = { onSelectionChange(selectedIds.filter { it != person.id }) },
+                )
+                Spacer(modifier = Modifier.height(spacing.field))
+            }
+            Spacer(modifier = Modifier.height(spacing.section))
         }
-        addError?.let { error ->
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = error,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.labelSmall,
+
+        LeadActionSubsection(
+            title = "Link existing related person",
+            description = "Search people already added on other leads or customer packs.",
+            spacing = spacing,
+        ) {
+            EntitySearchPicker(
+                label = "Search saved related people",
+                placeholder = "Type name or date of birth…",
+                query = relatedSearchQuery,
+                onQueryChange = { relatedSearchQuery = it },
+                results = relatedSearchResults,
+                onSelect = { id -> onSelectionChange(selectedIds + id) },
+                noResultsText = "No saved people match. Create a new related person below instead.",
             )
         }
-    }
 
-    Spacer(modifier = Modifier.height(4.dp))
-    Text(
-        text = "Edit details in the Related panel once they are on a customer pack.",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+        Spacer(modifier = Modifier.height(spacing.section))
+
+        LeadActionSubsection(
+            title = "Create new related person",
+            description = "Add someone new to the system and attach them to this lead.",
+            spacing = spacing,
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                GlideOutlinedField(
+                    value = newName,
+                    onValueChange = {
+                        newName = it
+                        addError = null
+                    },
+                    label = "New person name",
+                )
+                Spacer(modifier = Modifier.height(spacing.field))
+                DateOfBirthField(
+                    value = newDateOfBirth,
+                    onValueChange = { newDateOfBirth = it },
+                )
+                Spacer(modifier = Modifier.height(spacing.field))
+                GlideOutlinedButton(
+                    onClick = {
+                        val trimmed = newName.trim()
+                        if (trimmed.isEmpty()) {
+                            addError = "Enter a name before adding."
+                            return@GlideOutlinedButton
+                        }
+                        val person = RelatedPerson(name = trimmed, dateOfBirth = newDateOfBirth.trim())
+                        RelatedPersonStore.create(person)
+                        onSelectionChange(selectedIds + person.id)
+                        newName = ""
+                        newDateOfBirth = ""
+                        addError = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Add new person to this lead")
+                }
+                addError?.let { error ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(spacing.field))
+        Text(
+            text = "Edit names and details in the Related panel once they are on a customer pack.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 private fun RelatedPerson.toSearchItem() = SearchResultItem(

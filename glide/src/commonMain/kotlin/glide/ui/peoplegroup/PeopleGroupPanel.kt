@@ -726,7 +726,7 @@ private fun PeopleGroupForm(
             spacing = spacing,
         )
     }
-    Spacer(modifier = Modifier.height(spacing.section))
+    Spacer(modifier = Modifier.height(spacing.section * 2))
 
     if (isCustomerGroup) {
         RelatedPersonLinkSection(

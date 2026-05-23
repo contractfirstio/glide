@@ -31,11 +31,14 @@ import glide.ui.theme.GlideTextButton
 fun ReadOnlyMainContactSection(
     contactId: String?,
     modifier: Modifier = Modifier,
+    showLabel: Boolean = true,
 ) {
     val contact = contactId?.let { ContactStore.findById(it) }
     Column(modifier = modifier) {
-        GlideFieldLabel("Main contact")
-        Spacer(modifier = Modifier.height(2.dp))
+        if (showLabel) {
+            GlideFieldLabel("Main contact")
+            Spacer(modifier = Modifier.height(2.dp))
+        }
         if (contact == null) {
             Text(
                 text = "No main contact linked.",
