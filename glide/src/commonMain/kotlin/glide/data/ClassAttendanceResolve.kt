@@ -3,9 +3,11 @@ package glide.data
 import glide.model.ClassAttendee
 import glide.model.PeopleGroup
 import glide.model.ScheduledClass
+import java.time.LocalDate
 
-fun attendeesForClass(scheduledClass: ScheduledClass): List<ClassAttendee> =
+fun attendeesForClass(scheduledClass: ScheduledClass, sessionDate: LocalDate): List<ClassAttendee> =
     scheduledClass.customerGroupIds
+        .filter { groupId -> isPeopleGroupOnClassSession(groupId, scheduledClass, sessionDate) }
         .mapNotNull { groupId -> PeopleGroupStore.findById(groupId) }
         .flatMap { group -> group.attendeesForClassRoster() }
 

@@ -25,6 +25,7 @@ object ScheduledClassStore {
     fun delete(id: String) {
         _classes.removeAll { it.id == id }
         ClassAttendanceStore.clearForClass(id)
+        PackClassScheduleStore.clearForClass(id)
     }
 
     fun findById(id: String): ScheduledClass? = _classes.find { it.id == id }
@@ -58,6 +59,7 @@ object ScheduledClassStore {
             val item = _classes[index]
             if (item.hasCustomerGroup(groupId)) {
                 _classes[index] = item.copy(customerGroupIds = item.customerGroupIds - groupId)
+                PackClassScheduleStore.remove(groupId, item.id)
             }
         }
     }

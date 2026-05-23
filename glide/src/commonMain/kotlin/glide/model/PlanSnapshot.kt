@@ -18,6 +18,15 @@ data class PlanSnapshot(
     fun perSessionCreditPerPersonMinor(): Long =
         if (lessonCount <= 0) priceAmountMinor else priceAmountMinor / lessonCount
 
+    /**
+     * Max class sessions for this pack on a single class, or null if unlimited (rolling).
+     */
+    fun classSessionLimit(): Int? = when {
+        rolling -> null
+        kind == PlanKind.SINGLE_LESSON_PACK -> 1
+        else -> lessonCount.coerceAtLeast(1)
+    }
+
     companion object {
         fun from(plan: Plan): PlanSnapshot = PlanSnapshot(
             planId = plan.id,

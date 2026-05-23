@@ -374,7 +374,7 @@ private fun TermCalendarClassBlock(
     onOpenAttendance: (scheduledClassId: String, sessionDate: LocalDate) -> Unit,
 ) {
     val locationName = scheduledClass.locationId?.let { LocationStore.findById(it)?.name }
-    val rosterLines = rosterLinesForClass(scheduledClass)
+    val rosterLines = rosterLinesForClass(scheduledClass, sessionDate)
     val blockTextColor = Color(0xFF0A1018)
 
     Box(

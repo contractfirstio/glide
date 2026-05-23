@@ -35,6 +35,7 @@ import glide.data.ClassAttendanceStore
 import glide.data.LocationStore
 import glide.data.ScheduledClassStore
 import glide.data.attendeesForClass
+import glide.model.parseIsoLocalDate
 import glide.model.AttendanceStatus
 import glide.model.formatMoney
 import glide.model.ClassAttendee
@@ -67,8 +68,10 @@ fun AttendancePanel(
     modifier: Modifier = Modifier,
 ) {
     val scheduledClass = ScheduledClassStore.findById(session.scheduledClassId)
-    val attendees = remember(scheduledClass, session) {
-        scheduledClass?.let { attendeesForClass(it) } ?: emptyList()
+    val sessionDate = remember(session.sessionDate) { parseIsoLocalDate(session.sessionDate) }
+    val attendees = remember(scheduledClass, sessionDate) {
+        if (scheduledClass == null || sessionDate == null) emptyList()
+        else attendeesForClass(scheduledClass, sessionDate)
     }
     val attendeeKeys = remember(attendees) { attendees.map { it.key } }
 

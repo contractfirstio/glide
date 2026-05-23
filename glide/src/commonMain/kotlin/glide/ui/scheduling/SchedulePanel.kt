@@ -45,9 +45,12 @@ import glide.data.LocationStore
 import glide.data.enrolledHeadcount
 import glide.data.headcountForCustomerGroups
 import glide.data.AddCustomerGroupResult
+import glide.data.PackClassScheduleStore
+import glide.data.assignPackClassSchedule
 import glide.data.isCustomerGroupAvailableForClass
 import glide.data.tryAddCustomerGroup
 import glide.data.validateCustomerGroupsForClass
+import glide.data.toScheduleMessage
 import glide.data.PeopleGroupStore
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
@@ -389,6 +392,9 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                             createdAtMillis = existing.createdAtMillis,
                                         )
                                         ScheduledClassStore.update(updated)
+                                        updated.customerGroupIds.forEach { groupId ->
+                                            assignPackClassSchedule(groupId, updated)
+                                        }
                                         loadIntoForm(updated)
                                     }
                                 }
@@ -538,6 +544,7 @@ private fun ClassCustomerGroupsSection(
     var searchQuery by remember { mutableStateOf("") }
     var enrollmentMessage by remember { mutableStateOf<String?>(null) }
 
+    val scheduledClass = classId?.let { ScheduledClassStore.findById(it) }
     val assignedIds = customerGroupIds
     val location = locationId?.let { LocationStore.findById(it) }
     val headcount = headcountForCustomerGroups(customerGroupIds)
@@ -582,11 +589,17 @@ private fun ClassCustomerGroupsSection(
                     groupId = groupId,
                     locationId = locationId,
                     classId = classId,
+                    scheduledClass = scheduledClass,
                 )
                 if (result == AddCustomerGroupResult.Success) {
                     onCustomerGroupIdsChange(customerGroupIds + groupId)
+                    val scheduleMessage = scheduledClass?.let { cls ->
+                        assignPackClassSchedule(groupId, cls).toScheduleMessage()
+                    }
+                    enrollmentMessage = scheduleMessage ?: result.toUserMessage()
+                } else {
+                    enrollmentMessage = result.toUserMessage()
                 }
-                enrollmentMessage = result.toUserMessage()
             },
             noResultsText = "No available customer groups (each group can only be on one class).",
         )
@@ -597,7 +610,9 @@ private fun ClassCustomerGroupsSection(
                 style = MaterialTheme.typography.labelSmall,
                 color = if (
                     message.contains("exceeded", ignoreCase = true) ||
-                    message.contains("already", ignoreCase = true)
+                    message.contains("already", ignoreCase = true) ||
+                    message.contains("no matching dates", ignoreCase = true) ||
+                    message.contains("no class dates", ignoreCase = true)
                 ) {
                     MaterialTheme.colorScheme.error
                 } else {
@@ -636,6 +651,11 @@ private fun ClassCustomerGroupsSection(
                                 if (!group.mainContactAttendsClass) {
                                     append(" · main contact not attending")
                                 }
+                                classId?.let { id ->
+                                    PackClassScheduleStore.scheduledSessionCount(groupId, id)?.let { count ->
+                                        append(" · $count session${if (count == 1) "" else "s"} scheduled")
+                                    }
+                                }
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -645,6 +665,9 @@ private fun ClassCustomerGroupsSection(
                     }
                     GlideTextButton(
                         onClick = {
+                            if (classId != null) {
+                                PackClassScheduleStore.remove(groupId, classId)
+                            }
                             onCustomerGroupIdsChange(customerGroupIds.filter { it != groupId })
                             enrollmentMessage = "Customer group removed from class."
                         },

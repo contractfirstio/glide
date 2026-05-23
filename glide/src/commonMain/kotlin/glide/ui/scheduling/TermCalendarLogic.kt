@@ -1,6 +1,7 @@
 package glide.ui.scheduling
 
 import glide.data.PeopleGroupStore
+import glide.data.isPeopleGroupOnClassSession
 import glide.data.rosterNameLabels
 import glide.model.AcademicTerm
 import glide.model.ScheduledClass
@@ -75,9 +76,10 @@ fun classesOnDate(
         .filter { it.spansTerm(termId) && it.occursOn(date) }
         .sortedWith(compareBy({ it.startTime }, { it.endTime }, { it.name }))
 
-/** One line per customer group on the class: main contact and related names, comma-separated. */
-fun rosterLinesForClass(scheduledClass: ScheduledClass): List<String> =
+/** One line per customer group scheduled on this session: main contact and related names. */
+fun rosterLinesForClass(scheduledClass: ScheduledClass, sessionDate: LocalDate): List<String> =
     scheduledClass.customerGroupIds
+        .filter { groupId -> isPeopleGroupOnClassSession(groupId, scheduledClass, sessionDate) }
         .mapNotNull { groupId -> PeopleGroupStore.findById(groupId) }
         .map { group -> group.rosterNameLabels().joinToString(", ") }
         .filter { it.isNotBlank() }

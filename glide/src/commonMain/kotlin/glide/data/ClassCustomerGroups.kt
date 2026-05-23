@@ -9,6 +9,7 @@ sealed class AddCustomerGroupResult {
     data object GroupNotFound : AddCustomerGroupResult()
     data object NotACustomerGroup : AddCustomerGroupResult()
     data class AlreadyOnAnotherClass(val className: String) : AddCustomerGroupResult()
+    data class NoClassSessionsAvailable(val packSessions: Int) : AddCustomerGroupResult()
     data class CapacityExceeded(
         val currentHeadcount: Int,
         val groupHeadcount: Int,
@@ -42,6 +43,7 @@ fun tryAddCustomerGroup(
     groupId: String,
     locationId: String?,
     classId: String? = null,
+    scheduledClass: ScheduledClass? = null,
 ): AddCustomerGroupResult {
     if (groupId in currentGroupIds) return AddCustomerGroupResult.AlreadyAssigned
     val group = PeopleGroupStore.findById(groupId) ?: return AddCustomerGroupResult.GroupNotFound
@@ -49,6 +51,13 @@ fun tryAddCustomerGroup(
 
     ScheduledClassStore.findClassContainingCustomerGroup(groupId, excludeClassId = classId)?.let { other ->
         return AddCustomerGroupResult.AlreadyOnAnotherClass(other.name)
+    }
+
+    sessionLimitForPeopleGroup(groupId)?.let { limit ->
+        val cls = scheduledClass ?: classId?.let { ScheduledClassStore.findById(it) }
+        if (cls != null && computeClassSessionDates(cls, limit).isEmpty()) {
+            return AddCustomerGroupResult.NoClassSessionsAvailable(limit)
+        }
     }
 
     val maxCapacity = locationId?.let { LocationStore.findById(it)?.maxCapacity }
@@ -73,6 +82,8 @@ fun AddCustomerGroupResult.toUserMessage(): String = when (this) {
     AddCustomerGroupResult.NotACustomerGroup -> "Only customer groups can be assigned to classes."
     is AddCustomerGroupResult.AlreadyOnAnotherClass ->
         "This group is already assigned to \"$className\". A customer group can only be on one class."
+    is AddCustomerGroupResult.NoClassSessionsAvailable ->
+        "This pack has $packSessions classes but there are no matching dates on this class in its terms."
     is AddCustomerGroupResult.CapacityExceeded ->
         "Room capacity exceeded ($currentHeadcount + $groupHeadcount > $maxCapacity)."
 }
