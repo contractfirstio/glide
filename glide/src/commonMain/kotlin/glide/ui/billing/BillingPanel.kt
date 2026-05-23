@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import glide.data.BillStore
 import glide.data.BillingCreditStore
+import glide.data.creditAppliedMinor
 import glide.data.BillingService
 import glide.data.PackEnrollmentStore
 import glide.data.PaymentStore
@@ -338,6 +339,14 @@ private fun BillRow(
                 text = formatMoney(bill.amountMinor, bill.currencyCode),
                 style = MaterialTheme.typography.bodyMedium,
                 color = glideListItemTitleColor(selected),
+            )
+        }
+        val creditApplied = bill.creditAppliedMinor()
+        if (creditApplied > 0) {
+            Text(
+                text = "Includes ${formatMoney(creditApplied, bill.currencyCode)} credit",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Row(

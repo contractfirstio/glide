@@ -15,6 +15,12 @@ object BillingCreditStore {
     fun unappliedTotalMinor(enrollmentId: String): Long =
         unappliedForEnrollment(enrollmentId).sumOf { it.amountMinor }
 
+    fun appliedToBill(billId: String): List<BillingCredit> =
+        _credits.filter { it.appliedToBillId == billId }.sortedBy { it.createdAtMillis }
+
+    fun appliedTotalMinorForBill(billId: String): Long =
+        appliedToBill(billId).sumOf { it.amountMinor }
+
     fun hasCreditForAbsentSession(
         scheduledClassId: String,
         sessionDate: String,
@@ -30,6 +36,7 @@ object BillingCreditStore {
             return
         }
         _credits.add(credit)
+        BillStore.applyPendingCreditsToOpenBills(credit.enrollmentId)
     }
 
     /**

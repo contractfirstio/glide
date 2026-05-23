@@ -1,6 +1,10 @@
 package glide.billing
 
+import glide.data.BillStore
+import glide.data.BillingCreditStore
 import glide.data.PeopleGroupStore
+import glide.data.grossAmountMinorResolved
+import glide.data.packLineDescription
 import glide.data.resolveMainContact
 import glide.model.Bill
 import glide.model.BillStatus
@@ -12,6 +16,13 @@ import java.util.Locale
 
 const val INVOICE_FROM_NAME = "Glide Dance Studio"
 
+data class InvoiceCreditLine(
+    val description: String,
+    val amountMinor: Long,
+) {
+    fun formattedAmount(currencyCode: String): String = "-${formatMoney(amountMinor, currencyCode)}"
+}
+
 data class InvoiceContent(
     val invoiceNumber: String,
     val issuedAtMillis: Long,
@@ -19,12 +30,16 @@ data class InvoiceContent(
     val billToName: String,
     val billToEmail: String,
     val billToPhone: String,
-    val lineDescription: String,
-    val amountMinor: Long,
+    val packLineDescription: String,
+    val grossAmountMinor: Long,
+    val creditLines: List<InvoiceCreditLine>,
+    val totalAmountMinor: Long,
     val currencyCode: String,
     val status: BillStatus,
 ) {
-    val formattedAmount: String get() = formatMoney(amountMinor, currencyCode)
+    val formattedGross: String get() = formatMoney(grossAmountMinor, currencyCode)
+
+    val formattedTotal: String get() = formatMoney(totalAmountMinor, currencyCode)
 
     val issuedDateLabel: String get() = invoiceDateFormat.format(Date(issuedAtMillis))
 
@@ -35,18 +50,28 @@ data class InvoiceContent(
 private val invoiceDateFormat = SimpleDateFormat("d MMM yyyy", Locale.UK)
 
 fun Bill.toInvoiceContent(): InvoiceContent? {
-    val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
+    val bill = BillStore.reconcileBillCredits(id) ?: this
+    val group = PeopleGroupStore.findById(bill.peopleGroupId) ?: return null
     val main = group.resolveMainContact()
+    val gross = bill.grossAmountMinorResolved()
+    val creditLines = BillingCreditStore.appliedToBill(bill.id).map { credit ->
+        InvoiceCreditLine(
+            description = credit.description,
+            amountMinor = credit.amountMinor,
+        )
+    }
     return InvoiceContent(
-        invoiceNumber = id.replace("-", "").take(8).uppercase(Locale.UK),
-        issuedAtMillis = displayDateMillis(),
-        dueAtMillis = dueAtMillis,
+        invoiceNumber = bill.id.replace("-", "").take(8).uppercase(Locale.UK),
+        issuedAtMillis = bill.displayDateMillis(),
+        dueAtMillis = bill.dueAtMillis,
         billToName = main.name.ifBlank { "Customer" },
         billToEmail = main.email,
         billToPhone = main.phone,
-        lineDescription = description,
-        amountMinor = amountMinor,
-        currencyCode = currencyCode,
-        status = status,
+        packLineDescription = bill.packLineDescription(),
+        grossAmountMinor = gross,
+        creditLines = creditLines,
+        totalAmountMinor = bill.amountMinor,
+        currencyCode = bill.currencyCode,
+        status = bill.status,
     )
 }

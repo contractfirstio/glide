@@ -59,11 +59,26 @@ object InvoicePdfWriter {
                 stream.stroke()
                 y -= LINE_HEIGHT
 
-                val rowY = y
-                drawText(stream, fontRegular, 10f, MARGIN, rowY, content.lineDescription)
-                drawText(stream, fontRegular, 10f, amountX, rowY, content.formattedAmount)
+                var rowY = y
+                drawText(stream, fontRegular, 10f, MARGIN, rowY, content.packLineDescription)
+                drawText(stream, fontRegular, 10f, amountX, rowY, content.formattedGross)
                 y = rowY - LINE_HEIGHT
-                y -= LINE_HEIGHT * 2
+
+                content.creditLines.forEach { credit ->
+                    rowY = y
+                    drawText(stream, fontRegular, 10f, MARGIN, rowY, credit.description)
+                    drawText(
+                        stream,
+                        fontRegular,
+                        10f,
+                        amountX,
+                        rowY,
+                        credit.formattedAmount(content.currencyCode),
+                    )
+                    y = rowY - LINE_HEIGHT
+                }
+
+                y -= LINE_HEIGHT
 
                 stream.moveTo(MARGIN, y)
                 stream.lineTo(page.mediaBox.width - MARGIN, y)
@@ -71,8 +86,8 @@ object InvoicePdfWriter {
                 y -= LINE_HEIGHT * 1.5f
 
                 val totalY = y
-                drawText(stream, fontBold, 11f, amountX - 40f, totalY, "Total")
-                drawText(stream, fontBold, 11f, amountX, totalY, content.formattedAmount)
+                drawText(stream, fontBold, 11f, amountX - 40f, totalY, "Total due")
+                drawText(stream, fontBold, 11f, amountX, totalY, content.formattedTotal)
 
                 drawText(
                     stream,

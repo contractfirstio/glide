@@ -5,7 +5,6 @@ import glide.billing.InvoiceExporter
 import glide.model.Bill
 import glide.model.BillStatus
 import glide.model.PackEnrollment
-import glide.model.formatMoney
 
 object BillStore {
     private val _bills = mutableStateListOf<Bill>()
@@ -37,27 +36,48 @@ object BillStore {
             enrollmentId = enrollment.id,
             peopleGroupId = enrollment.peopleGroupId,
             description = description,
+            grossAmountMinor = grossMinor,
             amountMinor = grossMinor,
             currencyCode = snapshot.currencyCode,
             status = BillStatus.SCHEDULED,
         )
         _bills.add(bill)
-        var result = bill
-        val creditApplied = BillingCreditStore.consumeForBill(
-            enrollmentId = enrollment.id,
-            billId = bill.id,
-            maxToApplyMinor = grossMinor,
-        )
-        if (creditApplied > 0) {
-            val netMinor = (grossMinor - creditApplied).coerceAtLeast(0)
-            val creditLabel = formatMoney(creditApplied, snapshot.currencyCode)
-            result = bill.copy(
-                amountMinor = netMinor,
-                description = "$description ($creditLabel credit applied)",
+        return reconcileBillCredits(bill.id) ?: bill
+    }
+
+    /** Applies any unallocated credits to an open bill and updates the net amount due. */
+    fun reconcileBillCredits(billId: String): Bill? {
+        val index = _bills.indexOfFirst { it.id == billId }
+        if (index < 0) return null
+        val bill = _bills[index]
+        if (bill.status == BillStatus.PAID || bill.status == BillStatus.VOID) return bill
+
+        val gross = bill.grossAmountMinorResolved()
+        val remainingDue = bill.amountMinor
+        val extraApplied = if (remainingDue > 0) {
+            BillingCreditStore.consumeForBill(
+                enrollmentId = bill.enrollmentId,
+                billId = billId,
+                maxToApplyMinor = remainingDue,
             )
-            _bills[_bills.lastIndex] = result
+        } else {
+            0L
         }
-        return result
+
+        val updated = bill.copy(
+            grossAmountMinor = bill.grossAmountMinor ?: gross,
+            amountMinor = (remainingDue - extraApplied).coerceAtLeast(0),
+        )
+        if (updated != bill) {
+            _bills[index] = updated
+        }
+        return _bills[index]
+    }
+
+    fun applyPendingCreditsToOpenBills(enrollmentId: String) {
+        forEnrollment(enrollmentId)
+            .filter { it.status == BillStatus.SCHEDULED || it.status == BillStatus.ISSUED }
+            .forEach { reconcileBillCredits(it.id) }
     }
 
     fun setIssued(billId: String, issued: Boolean, issuedAtMillis: Long = System.currentTimeMillis()): Boolean {
@@ -76,7 +96,7 @@ object BillStore {
     }
 
     fun generateInvoice(billId: String): Boolean {
-        val bill = findById(billId) ?: return false
+        val bill = reconcileBillCredits(billId) ?: return false
         InvoiceExporter.exportInvoice(bill)
         return true
     }
@@ -99,8 +119,10 @@ object BillStore {
         return true
     }
 
-    fun outstandingMinorForEnrollment(enrollmentId: String): Long =
-        forEnrollment(enrollmentId)
+    fun outstandingMinorForEnrollment(enrollmentId: String): Long {
+        applyPendingCreditsToOpenBills(enrollmentId)
+        return forEnrollment(enrollmentId)
             .filter { it.status == BillStatus.SCHEDULED || it.status == BillStatus.ISSUED }
             .sumOf { it.amountMinor }
+    }
 }

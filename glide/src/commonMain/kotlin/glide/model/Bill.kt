@@ -16,6 +16,9 @@ data class Bill(
     val enrollmentId: String,
     val peopleGroupId: String,
     val description: String,
+    /** Pack total before attendance credits; null on older bills (inferred from credits). */
+    val grossAmountMinor: Long? = null,
+    /** Amount due after credits applied. */
     val amountMinor: Long,
     val currencyCode: String,
     val status: BillStatus = BillStatus.SCHEDULED,
