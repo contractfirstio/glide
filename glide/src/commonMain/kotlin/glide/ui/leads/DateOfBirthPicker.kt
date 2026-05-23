@@ -68,6 +68,9 @@ fun millisToIsoDate(millis: Long): String {
     return IsoDateFormatter.format(localDate)
 }
 
+fun todayIsoDate(): String =
+    millisToIsoDate(LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DateOfBirthField(

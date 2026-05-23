@@ -4,8 +4,10 @@ import androidx.compose.runtime.mutableStateListOf
 import glide.model.PackEnrollment
 import glide.model.PackEnrollmentStatus
 import glide.model.PlanSnapshot
+import glide.model.parseIsoLocalDate
 import glide.model.PeopleGroup
 import glide.model.PeopleGroupType
+import java.time.ZoneId
 
 object PackEnrollmentStore {
     private val _enrollments = mutableStateListOf<PackEnrollment>()
@@ -27,9 +29,16 @@ object PackEnrollmentStore {
     fun createForCustomerGroup(group: PeopleGroup, planSnapshot: PlanSnapshot): PackEnrollment? {
         if (group.type != PeopleGroupType.CUSTOMER) return null
         if (forPeopleGroup(group.id) != null) return forPeopleGroup(group.id)
+        val startMillis = parseIsoLocalDate(group.planStartDate)
+            ?.atStartOfDay(ZoneId.systemDefault())
+            ?.toInstant()
+            ?.toEpochMilli()
+            ?: System.currentTimeMillis()
         val enrollment = PackEnrollment(
             peopleGroupId = group.id,
             planSnapshot = planSnapshot,
+            startedAtMillis = startMillis,
+            packPeriodStartedAtMillis = startMillis,
         )
         create(enrollment)
         return enrollment

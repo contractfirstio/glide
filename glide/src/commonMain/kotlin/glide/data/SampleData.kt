@@ -145,7 +145,7 @@ object SampleData {
             type = PeopleGroupType.CUSTOMER,
             mainContactId = emma.id,
             relatedPersonIds = listOf(mia.id, noah.id, alex.id),
-            status = PeopleGroupStatus.Won,
+            status = PeopleGroupStatus.Contacted,
             planId = rollingPack.id,
             createdAtMillis = now - 10 * day,
         )
@@ -161,7 +161,7 @@ object SampleData {
             relatedPersonIds = listOf(ivy.id, sam.id, alex.id),
             planId = rollingPack.id,
             mainContactAttendsClass = false,
-            status = PeopleGroupStatus.Won,
+            status = PeopleGroupStatus.Contacted,
             createdAtMillis = now - 8 * day,
         )
         registerCustomerBilling(jamesGroup, rollingPack) { enrollment ->
@@ -182,7 +182,7 @@ object SampleData {
             mainContactId = sarah.id,
             relatedPersonIds = listOf(leo.id, zoe.id),
             planId = rollingPack.id,
-            status = PeopleGroupStatus.Won,
+            status = PeopleGroupStatus.Contacted,
             notes = "Family pack",
             createdAtMillis = now - 6 * day,
         )
@@ -227,8 +227,9 @@ object SampleData {
                 email = "mike.obrien@example.com",
                 phone = "07700 900 404",
                 relatedPersonIds = listOf(ella.id),
-                status = PeopleGroupStatus.Proposal,
+                status = PeopleGroupStatus.WaitingReply,
                 planId = rollingPack.id,
+                planStartDate = sampleToday.toString(),
                 notes = "Interested in evening classes",
                 createdAtMillis = now - 2 * day,
             ),
@@ -240,6 +241,7 @@ object SampleData {
                 contactName = "Priya Nair",
                 status = PeopleGroupStatus.Contacted,
                 planId = singleLesson.id,
+                planStartDate = sampleToday.toString(),
                 createdAtMillis = now - day,
             ),
         )

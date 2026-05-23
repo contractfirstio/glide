@@ -64,7 +64,9 @@ import glide.data.resolveRelatedPeople
 import glide.model.PeopleGroup
 import glide.model.PeopleGroupStatus
 import glide.model.PeopleGroupType
+import glide.model.parseIsoLocalDate
 import glide.model.summaryLine
+import glide.ui.leads.todayIsoDate
 import glide.ui.shared.formatPersonLabel
 import glide.ui.layout.GlideLayout
 import glide.ui.theme.GlideButton
@@ -76,6 +78,7 @@ import glide.ui.theme.GlideOutlinedField
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.IsoDateField
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.theme.GlideTextButton
 import java.text.SimpleDateFormat
@@ -159,6 +162,7 @@ private data class PeopleGroupFormState(
     val relatedPersonIds: List<String> = emptyList(),
     val status: PeopleGroupStatus = PeopleGroupStatus.New,
     val planId: String? = null,
+    val planStartDate: String = "",
     val mainContactAttendsClass: Boolean = true,
     val notes: String = "",
 ) {
@@ -186,6 +190,7 @@ private data class PeopleGroupFormState(
             relatedPersonIds = relatedPersonIds,
             status = status,
             planId = planId,
+            planStartDate = planStartDate.trim(),
             mainContactAttendsClass = mainContactAttendsClass,
             notes = notes.trim(),
             createdAtMillis = createdAtMillis,
@@ -193,13 +198,44 @@ private data class PeopleGroupFormState(
     }
 }
 
+private fun soldDisabledReason(
+    groupId: String?,
+    isDirty: Boolean,
+    hasPlanSelected: Boolean,
+): String? =
+    when {
+        PlanStore.plans.isEmpty() -> "Create a pack in the Plans panel first."
+        isDirty -> "Save changes before marking as sold."
+        else -> {
+            val group = groupId?.let { PeopleGroupStore.findById(it) }
+            val main = group?.resolveMainContact()
+            when {
+                main == null || main.name.isBlank() ->
+                    "Main contact name is required before marking as sold."
+                main.email.isBlank() || main.phone.isBlank() ->
+                    "Email and phone are required before marking as sold."
+                !hasPlanSelected -> "Select a pack above to enable Sold."
+                group?.planStartDate.isNullOrBlank() ||
+                    parseIsoLocalDate(group.planStartDate) == null ->
+                    "Plan start date is required before marking as sold."
+                else -> null
+            }
+        }
+    }
+
+private fun canMarkLeadSold(
+    groupId: String?,
+    isDirty: Boolean,
+    hasPlanSelected: Boolean,
+): Boolean = soldDisabledReason(groupId, isDirty, hasPlanSelected) == null
+
 @Composable
 private fun PeopleGroupPanel(
     ui: PeopleGroupPanelUi,
     modifier: Modifier = Modifier,
 ) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    val form = rememberFormDirtyTracker(PeopleGroupFormState())
+    val form = rememberFormDirtyTracker(PeopleGroupFormState(planStartDate = todayIsoDate()))
     var isCreating by remember(ui.allowCreate) { mutableStateOf(ui.allowCreate) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
@@ -235,14 +271,14 @@ private fun PeopleGroupPanel(
     fun resetFormForCreate() {
         selectedId = null
         isCreating = ui.allowCreate
-        form.load(PeopleGroupFormState())
+        form.load(PeopleGroupFormState(planStartDate = todayIsoDate()))
         formError = null
     }
 
     fun clearLocalSelection() {
         selectedId = null
         isCreating = false
-        form.load(PeopleGroupFormState())
+        form.load(PeopleGroupFormState(planStartDate = todayIsoDate()))
         formError = null
     }
 
@@ -267,6 +303,7 @@ private fun PeopleGroupPanel(
                 relatedPersonIds = group.relatedPersonIds,
                 status = group.status,
                 planId = group.planId,
+                planStartDate = group.planStartDate.ifBlank { todayIsoDate() },
                 mainContactAttendsClass = group.mainContactAttendsClass,
                 notes = group.notes,
             ),
@@ -564,53 +601,22 @@ private fun PeopleGroupPanel(
                             }
                         }
 
-                        if (ui.showConvertToCustomer && !isCreating && selectedId != null) {
-                            Spacer(modifier = Modifier.height(spacing.field))
-                            val canConvert = form.draft.hasPlanSelected() && PlanStore.plans.isNotEmpty()
-                            GlideOutlinedButton(
-                                onClick = {
-                                    if (!form.draft.isValidForLead()) {
-                                        formError = "Main contact name is required."
-                                        return@GlideOutlinedButton
-                                    }
-                                    if (!form.draft.hasPlanSelected()) {
-                                        formError = "Select a pack before making a customer."
-                                        return@GlideOutlinedButton
-                                    }
-                                    val existing = PeopleGroupStore.findById(selectedId!!) ?: return@GlideOutlinedButton
-                                    val updated = form.draft.toPeopleGroup(
-                                        type = existing.type,
-                                        existingId = existing.id,
-                                        createdAtMillis = existing.createdAtMillis,
-                                    )
-                                    PeopleGroupStore.update(updated)
-                                    if (!PeopleGroupStore.convertToCustomer(selectedId!!)) {
-                                        formError = "Select a pack before making a customer."
-                                        return@GlideOutlinedButton
-                                    }
-                                    formError = null
-                                    resetFormForCreate()
-                                },
-                                enabled = canConvert,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text("Make customer")
-                            }
-                            if (!canConvert) {
-                                Spacer(modifier = Modifier.height(spacing.field))
-                                Text(
-                                    text = if (PlanStore.plans.isEmpty()) {
-                                        "Create a pack in the Plans panel first."
-                                    } else {
-                                        "Select a pack above to enable conversion."
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-
                         if (!ui.readOnly) {
+                            if (ui.showConvertToCustomer && !isCreating && selectedId != null) {
+                                soldDisabledReason(
+                                    groupId = selectedId,
+                                    isDirty = form.isDirty,
+                                    hasPlanSelected = form.draft.hasPlanSelected(),
+                                )?.let { reason ->
+                                    Spacer(modifier = Modifier.height(spacing.field))
+                                    Text(
+                                        text = reason,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+
                             Spacer(modifier = Modifier.height(spacing.field))
 
                             Row(
@@ -648,6 +654,48 @@ private fun PeopleGroupPanel(
                                     modifier = Modifier.weight(1f),
                                 ) {
                                     Text(saveLabel)
+                                }
+
+                                if (ui.showConvertToCustomer && !isCreating && selectedId != null) {
+                                    GlideOutlinedButton(
+                                        onClick = {
+                                            if (!form.draft.isValidForLead()) {
+                                                formError = "Main contact name is required."
+                                                return@GlideOutlinedButton
+                                            }
+                                            if (!form.draft.hasPlanSelected()) {
+                                                formError = "Select a pack before marking as sold."
+                                                return@GlideOutlinedButton
+                                            }
+                                            if (form.draft.planStartDate.isBlank() ||
+                                                parseIsoLocalDate(form.draft.planStartDate) == null
+                                            ) {
+                                                formError = "Plan start date is required before marking as sold."
+                                                return@GlideOutlinedButton
+                                            }
+                                            val existing = PeopleGroupStore.findById(selectedId!!)
+                                                ?: return@GlideOutlinedButton
+                                            val updated = form.draft.toPeopleGroup(
+                                                type = existing.type,
+                                                existingId = existing.id,
+                                                createdAtMillis = existing.createdAtMillis,
+                                            )
+                                            PeopleGroupStore.update(updated)
+                                            if (!PeopleGroupStore.convertToCustomer(selectedId!!)) {
+                                                formError = "Select a pack before marking as sold."
+                                                return@GlideOutlinedButton
+                                            }
+                                            formError = null
+                                            resetFormForCreate()
+                                        },
+                                        enabled = canMarkLeadSold(
+                                            groupId = selectedId,
+                                            isDirty = form.isDirty,
+                                            hasPlanSelected = form.draft.hasPlanSelected(),
+                                        ),
+                                    ) {
+                                        Text("Sold")
+                                    }
                                 }
 
                                 if (!isCreating && selectedId != null) {
@@ -738,37 +786,51 @@ private fun PeopleGroupListItem(
             ),
     ) {
         val main = group.resolveMainContact()
-        Text(
-            text = formatPersonLabel(main.name, main.dateOfBirth),
-            style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            color = glideListItemTitleColor(selected),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
         if (emphasizePlan) {
-            Spacer(modifier = Modifier.height(4.dp))
-            PeopleGroupPlanLabel(group = group, prominent = true)
-        }
-        if (main.email.isNotBlank() && !compact) {
             Text(
-                text = main.email,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = main.name.ifBlank { "Unknown contact" },
+                style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = glideListItemTitleColor(selected),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-        group.relatedPeopleSummary(compact)?.let { summary ->
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = summary,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = if (compact) 1 else 2,
+                text = planNameForGroup(group),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-        if (!emphasizePlan) {
+        } else {
+            Text(
+                text = formatPersonLabel(main.name, main.dateOfBirth),
+                style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = glideListItemTitleColor(selected),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (main.email.isNotBlank() && !compact) {
+                Text(
+                    text = main.email,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            group.relatedPeopleSummary(compact)?.let { summary ->
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (compact) 1 else 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             planLabelForGroup(group)?.let { packLabel ->
                 Text(
                     text = packLabel,
@@ -778,75 +840,42 @@ private fun PeopleGroupListItem(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            if (showPipelineStatus) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                if (showPipelineStatus) {
+                    Text(
+                        text = group.status.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                } else {
+                    Text(
+                        text = "Customer",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 Text(
-                    text = group.status.label,
+                    text = dateFormat.format(Date(group.createdAtMillis)),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            } else {
-                Text(
-                    text = "Customer",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                text = dateFormat.format(Date(group.createdAtMillis)),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
+
+private fun planNameForGroup(group: PeopleGroup): String =
+    group.planId
+        ?.let { PlanStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() } }
+        ?: "No plan"
 
 private fun planLabelForGroup(group: PeopleGroup): String? {
     val planId = group.planId ?: return null
     val plan = PlanStore.findById(planId) ?: return null
     return "Pack: ${plan.name}"
-}
-
-@Composable
-private fun PeopleGroupPlanLabel(
-    group: PeopleGroup,
-    prominent: Boolean,
-) {
-    val plan = group.planId?.let { PlanStore.findById(it) }
-    if (plan != null) {
-        Text(
-            text = plan.name,
-            style = if (prominent) {
-                MaterialTheme.typography.bodyMedium
-            } else {
-                MaterialTheme.typography.labelSmall
-            },
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (prominent) {
-            Text(
-                text = plan.summaryLine(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    } else if (prominent) {
-        Text(
-            text = "No pack assigned",
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
 }
 
 private fun PeopleGroup.relatedPeopleSummary(compact: Boolean): String? {
@@ -1163,6 +1192,22 @@ private fun PeopleGroupForm(
             maxLines = 4,
             fieldHeight = notesHeight,
         )
+    }
+
+    if (showPlanPicker) {
+        Spacer(modifier = Modifier.height(spacing.section))
+        FormPanelSection(
+            title = "Plan start",
+            description = "When this pack begins for the customer.",
+            spacing = spacing,
+            role = FormPanelSectionRole.Tertiary,
+        ) {
+            IsoDateField(
+                label = "Start date",
+                value = state.planStartDate,
+                onValueChange = { onStateChange(state.copy(planStartDate = it)) },
+            )
+        }
     }
 }
 

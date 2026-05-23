@@ -2,9 +2,11 @@ package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
 import glide.model.Contact
+import glide.model.parseIsoLocalDate
 import glide.model.PeopleGroup
 import glide.model.PeopleGroupStatus
 import glide.model.PeopleGroupType
+import java.time.LocalDate
 
 object PeopleGroupStore {
     private val _groups = mutableStateListOf<PeopleGroup>()
@@ -96,6 +98,7 @@ object PeopleGroupStore {
         val group = findById(id) ?: return false
         if (group.type == PeopleGroupType.CUSTOMER) return false
         if (group.planId.isNullOrBlank()) return false
+        if (group.planStartDate.isBlank() || parseIsoLocalDate(group.planStartDate) == null) return false
         if (!group.hasResolvableMainContact()) return false
 
         val contactId = group.mainContactId ?: run {
@@ -136,6 +139,7 @@ object PeopleGroupStore {
             relatedPersonIds = source.relatedPersonIds,
             status = PeopleGroupStatus.New,
             planId = source.planId,
+            planStartDate = LocalDate.now().toString(),
             mainContactAttendsClass = source.mainContactAttendsClass,
             notes = source.notes,
         )

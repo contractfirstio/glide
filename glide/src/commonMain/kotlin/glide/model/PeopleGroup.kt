@@ -10,9 +10,7 @@ enum class PeopleGroupType {
 enum class PeopleGroupStatus(val label: String) {
     New("New"),
     Contacted("Contacted"),
-    Proposal("Proposal"),
-    Won("Won"),
-    Lost("Lost"),
+    WaitingReply("Waiting Reply"),
 }
 
 /**
@@ -31,6 +29,8 @@ data class PeopleGroup(
     val relatedPersonIds: List<String> = emptyList(),
     val status: PeopleGroupStatus = PeopleGroupStatus.New,
     val planId: String? = null,
+    /** ISO date (yyyy-MM-dd) when the selected pack starts; required before marking a lead as sold. */
+    val planStartDate: String = "",
     /** When false, the main contact is not counted on classes; related people always attend. */
     val mainContactAttendsClass: Boolean = true,
     val notes: String = "",
