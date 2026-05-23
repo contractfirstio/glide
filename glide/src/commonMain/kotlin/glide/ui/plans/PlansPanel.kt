@@ -60,16 +60,25 @@ private data class PlanFormState(
     val rolling: Boolean = true,
     val notes: String = "",
 ) {
-    fun isValid(): Boolean = name.isNotBlank() && lessonCount.toIntOrNull()?.let { it > 0 } == true
+    fun isValid(): Boolean {
+        if (name.isBlank()) return false
+        return when (kind) {
+            PlanKind.SINGLE_LESSON_PACK -> true
+            PlanKind.MULTI_LESSON_PACK -> lessonCount.toIntOrNull()?.let { it > 0 } == true
+        }
+    }
 
     fun toPlan(existingId: String? = null, createdAtMillis: Long = System.currentTimeMillis()): Plan? {
-        val count = lessonCount.toIntOrNull() ?: return null
+        val count = when (kind) {
+            PlanKind.SINGLE_LESSON_PACK -> 1
+            PlanKind.MULTI_LESSON_PACK -> lessonCount.toIntOrNull() ?: return null
+        }
         return Plan(
             id = existingId ?: UUID.randomUUID().toString(),
             kind = kind,
             name = name.trim(),
             lessonCount = count,
-            rolling = rolling,
+            rolling = kind != PlanKind.SINGLE_LESSON_PACK && rolling,
             notes = notes.trim(),
             createdAtMillis = createdAtMillis,
         )
@@ -233,7 +242,10 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                         GlideButton(
                             onClick = {
                                 if (!formState.isValid()) {
-                                    formError = "Name and a valid class count are required."
+                                    formError = when (formState.kind) {
+                                        PlanKind.SINGLE_LESSON_PACK -> "Plan name is required."
+                                        PlanKind.MULTI_LESSON_PACK -> "Name and a valid class count are required."
+                                    }
                                     return@GlideButton
                                 }
                                 val plan = formState.toPlan()
@@ -410,7 +422,16 @@ private fun PlanForm(
                     DropdownMenuItem(
                         text = { Text(kind.label, style = MaterialTheme.typography.bodySmall) },
                         onClick = {
-                            onStateChange(state.copy(kind = kind))
+                            onStateChange(
+                                when (kind) {
+                                    PlanKind.SINGLE_LESSON_PACK -> state.copy(
+                                        kind = kind,
+                                        lessonCount = "1",
+                                        rolling = false,
+                                    )
+                                    PlanKind.MULTI_LESSON_PACK -> state.copy(kind = kind)
+                                },
+                            )
                             kindExpanded = false
                         },
                     )
@@ -448,6 +469,29 @@ private fun PlanForm(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+        }
+        PlanKind.SINGLE_LESSON_PACK -> {
+            Spacer(modifier = Modifier.height(spacing.field))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        MaterialTheme.shapes.small,
+                    )
+                    .padding(spacing.outer),
+            ) {
+                Text(
+                    text = "Number of classes",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "1 class (fixed for this plan type)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
