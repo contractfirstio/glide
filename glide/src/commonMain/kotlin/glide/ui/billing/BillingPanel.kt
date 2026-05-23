@@ -57,6 +57,10 @@ import glide.model.PaymentMethod
 import glide.model.PeopleGroupType
 import glide.model.formatMoney
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.FormPanelSummaryCard
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideFieldLabel
 import glide.ui.theme.glideListItemTitleColor
@@ -140,143 +144,157 @@ fun BillingPanel(
             return@Column
         }
 
-        EnrollmentSummary(enrollment = enrollment, dateFormat = dateFormat)
-
-        if (billingBlockedByAttendance) {
-            Spacer(modifier = Modifier.height(spacing.field))
-            Text(
-                text = attendanceBlocksBillIssuanceMessage(pendingAttendance.size),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-            GlideTextButton(onClick = { openPendingAttendanceSession(pendingAttendance.first()) }) {
-                Text("Open attendance")
-            }
-        }
-
-        billingActionMessage?.let { message ->
-            Spacer(modifier = Modifier.height(spacing.field))
-            Text(
-                text = message,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-
-        Spacer(modifier = Modifier.height(spacing.section))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+        FormPanelSection(
+            title = "Pack enrollment",
+            description = "Agreed plan, pricing, and billing period for this customer group.",
+            spacing = spacing,
+            role = FormPanelSectionRole.Primary,
         ) {
-            Column {
+            EnrollmentSummary(enrollment = enrollment, dateFormat = dateFormat, showBackground = false)
+
+            if (billingBlockedByAttendance) {
+                Spacer(modifier = Modifier.height(spacing.field))
                 Text(
-                    text = "Outstanding",
-                    style = MaterialTheme.typography.labelLarge,
+                    text = attendanceBlocksBillIssuanceMessage(pendingAttendance.size),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
-                Text(
-                    text = formatMoney(outstanding, enrollment.planSnapshot.currencyCode),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = if (outstanding > 0) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    },
-                )
+                GlideTextButton(onClick = { openPendingAttendanceSession(pendingAttendance.first()) }) {
+                    Text("Open attendance")
+                }
             }
-            GlideOutlinedButton(
-                onClick = {
-                    BillingService.addRenewalBill(peopleGroupId)
-                    selectedBillId = null
-                },
-            ) {
-                Text("Add bill")
+
+            billingActionMessage?.let { message ->
+                Spacer(modifier = Modifier.height(spacing.field))
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         }
 
-        Spacer(modifier = Modifier.height(spacing.section))
-        HorizontalDivider()
-        Spacer(modifier = Modifier.height(spacing.field))
+        FormPanelSectionsDivider(label = "Balance & billing", spacing = spacing)
 
-        Text(
-            text = "Bills",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Medium,
-        )
-        Spacer(modifier = Modifier.height(spacing.field))
+        FormPanelSection(
+            title = "Outstanding balance",
+            description = "Current amount due and quick actions.",
+            spacing = spacing,
+            role = FormPanelSectionRole.Secondary,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(
+                        text = "Outstanding",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Text(
+                        text = formatMoney(outstanding, enrollment.planSnapshot.currencyCode),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (outstanding > 0) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    )
+                }
+                GlideOutlinedButton(
+                    onClick = {
+                        BillingService.addRenewalBill(peopleGroupId)
+                        selectedBillId = null
+                    },
+                ) {
+                    Text("Add bill")
+                }
+            }
+        }
 
-        if (bills.isEmpty()) {
-            Text(
-                text = "No bills yet.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            bills.forEach { bill ->
-                BillRow(
-                    bill = bill,
-                    dateFormat = dateFormat,
-                    selected = bill.id == selectedBillId,
-                    payment = PaymentStore.forBill(bill.id),
-                    billingBlockedByAttendance = billingBlockedByAttendance,
-                    onClick = { selectedBillId = bill.id },
-                    onIssuedChange = { issued ->
-                        if (issued && billingBlockedByAttendance) {
-                            billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                            return@BillRow
-                        }
-                        if (!BillStore.setIssued(bill.id, issued)) {
+        FormPanelSectionsDivider(label = "Bill history", spacing = spacing)
+
+        FormPanelSection(
+            title = "Bills",
+            description = "Scheduled, issued, and paid billing lines for this pack.",
+            spacing = spacing,
+            role = FormPanelSectionRole.Tertiary,
+        ) {
+            if (bills.isEmpty()) {
+                Text(
+                    text = "No bills yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                bills.forEach { bill ->
+                    BillRow(
+                        bill = bill,
+                        dateFormat = dateFormat,
+                        selected = bill.id == selectedBillId,
+                        payment = PaymentStore.forBill(bill.id),
+                        billingBlockedByAttendance = billingBlockedByAttendance,
+                        onClick = { selectedBillId = bill.id },
+                        onIssuedChange = { issued ->
                             if (issued && billingBlockedByAttendance) {
                                 billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                                return@BillRow
                             }
-                            return@BillRow
-                        }
-                        billingActionMessage = null
-                    },
-                    onGenerateInvoice = {
-                        if (billingBlockedByAttendance) {
-                            billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                            return@BillRow
-                        }
-                        if (!BillStore.generateInvoice(bill.id)) {
-                            billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                        } else {
+                            if (!BillStore.setIssued(bill.id, issued)) {
+                                if (issued && billingBlockedByAttendance) {
+                                    billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                                }
+                                return@BillRow
+                            }
                             billingActionMessage = null
-                        }
-                    },
-                )
-                Spacer(modifier = Modifier.height(2.dp))
+                        },
+                        onGenerateInvoice = {
+                            if (billingBlockedByAttendance) {
+                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                                return@BillRow
+                            }
+                            if (!BillStore.generateInvoice(bill.id)) {
+                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                            } else {
+                                billingActionMessage = null
+                            }
+                        },
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                }
             }
-        }
 
-        val selectedBill = selectedBillId?.let { BillStore.findById(it) }
-        if (selectedBill != null) {
-            Spacer(modifier = Modifier.height(spacing.section))
-            BillDetailActions(
-                bill = selectedBill,
-                billingBlockedByAttendance = billingBlockedByAttendance,
-                onRecordPayment = {
-                    paymentError = null
-                    showPaymentDialog = true
-                },
-                onVoid = {
-                    BillStore.voidBill(selectedBill.id)
-                    selectedBillId = null
-                },
-                onGenerateInvoice = {
-                    if (billingBlockedByAttendance) {
-                        billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                        return@BillDetailActions
-                    }
-                    if (!BillStore.generateInvoice(selectedBill.id)) {
-                        billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                    } else {
-                        billingActionMessage = null
-                    }
-                },
-            )
+            val selectedBill = selectedBillId?.let { BillStore.findById(it) }
+            if (selectedBill != null) {
+                Spacer(modifier = Modifier.height(spacing.section))
+                FormPanelSummaryCard(role = FormPanelSectionRole.Tertiary) {
+                    BillDetailActions(
+                        bill = selectedBill,
+                        billingBlockedByAttendance = billingBlockedByAttendance,
+                        onRecordPayment = {
+                            paymentError = null
+                            showPaymentDialog = true
+                        },
+                        onVoid = {
+                            BillStore.voidBill(selectedBill.id)
+                            selectedBillId = null
+                        },
+                        onGenerateInvoice = {
+                            if (billingBlockedByAttendance) {
+                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                                return@BillDetailActions
+                            }
+                            if (!BillStore.generateInvoice(selectedBill.id)) {
+                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                            } else {
+                                billingActionMessage = null
+                            }
+                        },
+                    )
+                }
+            }
         }
 
         paymentError?.let { error ->
@@ -312,17 +330,30 @@ fun BillingPanel(
 private fun EnrollmentSummary(
     enrollment: PackEnrollment,
     dateFormat: SimpleDateFormat,
+    showBackground: Boolean = true,
 ) {
     val snapshot = enrollment.planSnapshot
     val householdSize = PeopleGroupStore.findById(enrollment.peopleGroupId)?.memberCount() ?: 1
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                MaterialTheme.shapes.small,
+            .then(
+                if (showBackground) {
+                    Modifier.background(
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        MaterialTheme.shapes.small,
+                    )
+                } else {
+                    Modifier
+                },
             )
-            .padding(8.dp),
+            .then(
+                if (showBackground) {
+                    Modifier.padding(8.dp)
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         Text(
             text = snapshot.planName,
@@ -488,13 +519,7 @@ private fun BillDetailActions(
 ) {
     val canIssue = !billingBlockedByAttendance || bill.isIssuedToCustomer()
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                MaterialTheme.shapes.small,
-            )
-            .padding(8.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
             text = "Selected bill",

@@ -72,6 +72,10 @@ import glide.model.toModelDayOfWeek
 import glide.ui.shared.IsoDateField
 import glide.ui.leads.parseIsoDateToMillis
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.FormPanelLinkedBox
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.peoplegroup.EntitySearchPicker
 import glide.ui.peoplegroup.SearchResultItem
@@ -330,7 +334,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                         )
 
                         if (!isCreating && selectedId != null) {
-                            Spacer(modifier = Modifier.height(spacing.field))
+                            FormPanelSectionsDivider(label = "Enrollment", spacing = spacing)
                             ClassCustomerGroupsSection(
                                 classId = selectedId,
                                 customerGroupIds = formState.customerGroupIds.toList(),
@@ -578,9 +582,12 @@ private fun ClassCustomerGroupsSection(
             }
     }
 
-    Column {
-        GlideFieldLabel("Customer groups")
-        Spacer(modifier = Modifier.height(2.dp))
+    FormPanelSection(
+        title = "Customer groups",
+        description = "Customer packs enrolled on this class. Each group can only be on one class.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
         ClassCapacityGraphic(
             occupiedCount = headcount,
             maxCapacity = location?.maxCapacity,
@@ -629,101 +636,66 @@ private fun ClassCustomerGroupsSection(
         }
         if (assignedIds.isNotEmpty()) {
             Spacer(modifier = Modifier.height(spacing.section))
-            Text(
-                text = "On this class",
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Spacer(modifier = Modifier.height(spacing.field))
-            assignedIds.forEach { groupId ->
-                val group = PeopleGroupStore.findById(groupId) ?: return@forEach
-                val main = group.resolveMainContact()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = formatPersonLabel(main.name, main.dateOfBirth),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = buildString {
-                                append("${group.classAttendeeCount()} attending · ${group.memberCount()} in group")
-                                if (!group.mainContactAttendsClass) {
-                                    append(" · main contact not attending")
-                                }
-                                classId?.let { id ->
-                                    PackClassScheduleStore.scheduledSessionCount(groupId, id)?.let { count ->
-                                        append(" · $count session${if (count == 1) "" else "s"} scheduled")
-                                    }
-                                }
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    GlideTextButton(
-                        onClick = {
-                            if (classId != null) {
-                                PackClassScheduleStore.remove(groupId, classId)
-                            }
-                            onCustomerGroupIdsChange(customerGroupIds.filter { it != groupId })
-                            enrollmentMessage = "Customer group removed from class."
-                        },
+            FormPanelLinkedBox(role = FormPanelSectionRole.Secondary) {
+                GlideFieldLabel("On this class (${assignedIds.size})")
+                Spacer(modifier = Modifier.height(spacing.field))
+                assignedIds.forEachIndexed { index, groupId ->
+                    val group = PeopleGroupStore.findById(groupId) ?: return@forEachIndexed
+                    val main = group.resolveMainContact()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
+                                MaterialTheme.shapes.small,
+                            )
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Remove", color = MaterialTheme.colorScheme.error)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = formatPersonLabel(main.name, main.dateOfBirth),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = buildString {
+                                    append("${group.classAttendeeCount()} attending · ${group.memberCount()} in group")
+                                    if (!group.mainContactAttendsClass) {
+                                        append(" · main contact not attending")
+                                    }
+                                    classId?.let { id ->
+                                        PackClassScheduleStore.scheduledSessionCount(groupId, id)?.let { count ->
+                                            append(" · $count session${if (count == 1) "" else "s"} scheduled")
+                                        }
+                                    }
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        GlideTextButton(
+                            onClick = {
+                                if (classId != null) {
+                                    PackClassScheduleStore.remove(groupId, classId)
+                                }
+                                onCustomerGroupIdsChange(customerGroupIds.filter { it != groupId })
+                                enrollmentMessage = "Customer group removed from class."
+                            },
+                        ) {
+                            Text("Remove", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    if (index < assignedIds.lastIndex) {
+                        Spacer(modifier = Modifier.height(spacing.field))
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun CollapsibleFormSection(
-    title: String,
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
-    summary: String? = null,
-    content: @Composable () -> Unit,
-) {
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onExpandedChange(!expanded) },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = if (expanded) "▾" else "▸",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-                modifier = Modifier.padding(end = 4.dp),
-            )
-            GlideFieldLabel(title)
-            if (!expanded && summary != null) {
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
-        }
-        if (expanded) {
-            Spacer(modifier = Modifier.height(2.dp))
-            content()
         }
     }
 }
@@ -741,31 +713,30 @@ private fun ClassForm(
     var scheduleKindExpanded by remember { mutableStateOf(false) }
     var dayExpanded by remember { mutableStateOf(false) }
     var locationExpanded by remember { mutableStateOf(false) }
-    var termsExpanded by remember { mutableStateOf(false) }
-    var locationSectionExpanded by remember { mutableStateOf(false) }
     val colorPicker = rememberClassColorPickerState()
     val previewColorArgb = state.calendarColorArgb
         ?: state.classId?.let { defaultCalendarColorArgb(it) }
         ?: state.name.takeIf { it.isNotBlank() }?.let { defaultCalendarColorArgb(it) }
         ?: ClassCalendarPalette.first()
 
-    val termsSummary = when {
-        state.termIds.isEmpty() -> "None selected"
-        state.termIds.size == 1 -> terms.find { it.id in state.termIds }?.name ?: "1 term"
-        else -> "${state.termIds.size} terms"
-    }
     val locationSummary = state.locationId?.let { id ->
         locations.find { it.id == id }?.name
     } ?: "None"
 
-    GlideOutlinedField(
-        value = state.name,
-        onValueChange = { onStateChange(state.copy(name = it)) },
-        label = "Class name",
-        placeholder = "e.g. Tuesday Beginner Ballet",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    Row(
+    FormPanelSection(
+        title = "Class details",
+        description = "Name and calendar color for this class.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        GlideOutlinedField(
+            value = state.name,
+            onValueChange = { onStateChange(state.copy(name = it)) },
+            label = "Class name",
+            placeholder = "e.g. Tuesday Beginner Ballet",
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -799,15 +770,15 @@ private fun ClassForm(
         ) {
             Text("Change")
         }
+        }
+        colorPicker.dialog()
     }
-    colorPicker.dialog()
-    Spacer(modifier = Modifier.height(spacing.field))
 
-    CollapsibleFormSection(
+    FormPanelSection(
         title = "Terms",
-        expanded = termsExpanded,
-        onExpandedChange = { termsExpanded = it },
-        summary = termsSummary,
+        description = "Which academic terms this class runs in.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
     ) {
         if (terms.isEmpty()) {
             Text(
@@ -874,13 +845,11 @@ private fun ClassForm(
         }
     }
 
-    Spacer(modifier = Modifier.height(spacing.field))
-
-    CollapsibleFormSection(
+    FormPanelSection(
         title = "Location",
-        expanded = locationSectionExpanded,
-        onExpandedChange = { locationSectionExpanded = it },
-        summary = locationSummary,
+        description = "Room or venue for this class.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
     ) {
         if (locations.isEmpty()) {
             Text(
@@ -936,12 +905,18 @@ private fun ClassForm(
         }
     }
 
-    Spacer(modifier = Modifier.height(spacing.field))
+    FormPanelSectionsDivider(label = "When it runs", spacing = spacing)
 
-    Column {
-        GlideFieldLabel("Schedule")
-        Spacer(modifier = Modifier.height(2.dp))
-        ExposedDropdownMenuBox(
+    FormPanelSection(
+        title = "Schedule",
+        description = "Weekly or one-off timing for this class.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        Column {
+            GlideFieldLabel("Schedule type")
+            Spacer(modifier = Modifier.height(2.dp))
+            ExposedDropdownMenuBox(
             expanded = scheduleKindExpanded,
             onExpandedChange = { scheduleKindExpanded = it },
         ) {
@@ -994,11 +969,11 @@ private fun ClassForm(
                 }
             }
         }
-    }
+        }
 
-    Spacer(modifier = Modifier.height(spacing.field))
+        Spacer(modifier = Modifier.height(spacing.field))
 
-    when (state.scheduleKind) {
+        when (state.scheduleKind) {
         ClassScheduleKind.RECURRING -> {
             Column {
                 GlideFieldLabel("Day of week")
@@ -1082,36 +1057,37 @@ private fun ClassForm(
                 }
             }
         }
-    }
+        }
 
-    Spacer(modifier = Modifier.height(spacing.field))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(spacing.field),
-    ) {
+        Spacer(modifier = Modifier.height(spacing.field))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(spacing.field),
+        ) {
+            GlideOutlinedField(
+                value = state.startTime,
+                onValueChange = { onStateChange(state.copy(startTime = it)) },
+                label = "Start time",
+                placeholder = "09:00",
+                modifier = Modifier.weight(1f),
+            )
+            GlideOutlinedField(
+                value = state.endTime,
+                onValueChange = { onStateChange(state.copy(endTime = it)) },
+                label = "End time",
+                placeholder = "10:00",
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Spacer(modifier = Modifier.height(spacing.field))
         GlideOutlinedField(
-            value = state.startTime,
-            onValueChange = { onStateChange(state.copy(startTime = it)) },
-            label = "Start time",
-            placeholder = "09:00",
-            modifier = Modifier.weight(1f),
-        )
-        GlideOutlinedField(
-            value = state.endTime,
-            onValueChange = { onStateChange(state.copy(endTime = it)) },
-            label = "End time",
-            placeholder = "10:00",
-            modifier = Modifier.weight(1f),
+            value = state.notes,
+            onValueChange = { onStateChange(state.copy(notes = it)) },
+            label = "Notes",
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            fieldHeight = GlideDimensions.notesMinHeight,
         )
     }
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.notes,
-        onValueChange = { onStateChange(state.copy(notes = it)) },
-        label = "Notes",
-        singleLine = false,
-        minLines = 2,
-        maxLines = 4,
-        fieldHeight = GlideDimensions.notesMinHeight,
-    )
 }

@@ -47,11 +47,14 @@ fun LeadMainContactSection(
 
     LeadPanelSection(
         title = "Main contact",
-        description = "The primary person for this lead.",
+        description = "The primary person for this lead — one per lead.",
         spacing = spacing,
+        role = LeadPanelSectionRole.Primary,
     ) {
         if (mainContactId != null) {
-            ReadOnlyMainContactSection(contactId = mainContactId, showLabel = false)
+            LeadMainContactSummaryCard {
+                ReadOnlyMainContactSection(contactId = mainContactId, showLabel = false)
+            }
             Spacer(modifier = Modifier.height(spacing.field))
             GlideTextButton(
                 onClick = {

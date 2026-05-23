@@ -81,14 +81,19 @@ fun ReadOnlyMainContactSection(
 }
 
 @Composable
-fun ReadOnlyRelatedPeopleSection(relatedPersonIds: List<String>) {
+fun ReadOnlyRelatedPeopleSection(
+    relatedPersonIds: List<String>,
+    showLabel: Boolean = true,
+) {
     val people = relatedPersonIds.mapNotNull { RelatedPersonStore.findById(it) }
-    Text(
-        text = "Related people",
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.Medium,
-    )
-    Spacer(modifier = Modifier.height(4.dp))
+    if (showLabel) {
+        Text(
+            text = "Related people",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+    }
     if (people.isEmpty()) {
         Text(
             text = "None linked.",
@@ -178,13 +183,20 @@ internal fun LeadRelatedPersonLinkedRow(
     onRemove: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
+                MaterialTheme.shapes.small,
+            )
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = formatPersonLabel(person.name, person.dateOfBirth),
             style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f),
         )
         GlideTextButton(onClick = onRemove) {

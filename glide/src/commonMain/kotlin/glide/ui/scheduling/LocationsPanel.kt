@@ -37,6 +37,9 @@ import glide.data.LocationStore
 import glide.data.ScheduledClassStore
 import glide.model.ClassLocation
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideOutlinedButton
@@ -395,27 +398,52 @@ private fun LocationForm(
     onStateChange: (LocationFormState) -> Unit,
     spacing: GlideLayout.Spacing,
 ) {
-    GlideOutlinedField(
-        value = state.name,
-        onValueChange = { onStateChange(state.copy(name = it)) },
-        label = "Location name",
-        placeholder = "e.g. Studio A",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.maxCapacityText,
-        onValueChange = { onStateChange(state.copy(maxCapacityText = it)) },
-        label = "Max capacity",
-        placeholder = "e.g. 20",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.notes,
-        onValueChange = { onStateChange(state.copy(notes = it)) },
-        label = "Notes",
-        singleLine = false,
-        minLines = 2,
-        maxLines = 4,
-        fieldHeight = GlideDimensions.notesMinHeight,
-    )
+    FormPanelSection(
+        title = "Location",
+        description = "Room or venue name used on classes.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        GlideOutlinedField(
+            value = state.name,
+            onValueChange = { onStateChange(state.copy(name = it)) },
+            label = "Location name",
+            placeholder = "e.g. Studio A",
+        )
+    }
+
+    FormPanelSectionsDivider(label = "Capacity", spacing = spacing)
+
+    FormPanelSection(
+        title = "Room capacity",
+        description = "Maximum students for classes at this location.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
+        GlideOutlinedField(
+            value = state.maxCapacityText,
+            onValueChange = { onStateChange(state.copy(maxCapacityText = it)) },
+            label = "Max capacity",
+            placeholder = "e.g. 20",
+        )
+    }
+
+    FormPanelSectionsDivider(label = "Notes", spacing = spacing)
+
+    FormPanelSection(
+        title = "Notes",
+        description = "Internal notes about this location.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        GlideOutlinedField(
+            value = state.notes,
+            onValueChange = { onStateChange(state.copy(notes = it)) },
+            label = "Notes",
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            fieldHeight = GlideDimensions.notesMinHeight,
+        )
+    }
 }

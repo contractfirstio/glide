@@ -38,6 +38,9 @@ import glide.data.TermStore
 import glide.model.AcademicTerm
 import glide.model.findOverlappingTerm
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.leads.parseIsoDateToMillis
 import glide.ui.shared.IsoDateField
@@ -413,32 +416,57 @@ private fun TermForm(
     onStateChange: (TermFormState) -> Unit,
     spacing: GlideLayout.Spacing,
 ) {
-    GlideOutlinedField(
-        value = state.name,
-        onValueChange = { onStateChange(state.copy(name = it)) },
-        label = "Term name",
-        placeholder = "e.g. Spring 2026",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    IsoDateField(
-        label = "Start date",
-        value = state.startDate,
-        onValueChange = { onStateChange(state.copy(startDate = it)) },
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    IsoDateField(
-        label = "End date",
-        value = state.endDate,
-        onValueChange = { onStateChange(state.copy(endDate = it)) },
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.notes,
-        onValueChange = { onStateChange(state.copy(notes = it)) },
-        label = "Notes",
-        singleLine = false,
-        minLines = 2,
-        maxLines = 4,
-        fieldHeight = GlideDimensions.notesMinHeight,
-    )
+    FormPanelSection(
+        title = "Term identity",
+        description = "Name shown on the calendar and class forms.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        GlideOutlinedField(
+            value = state.name,
+            onValueChange = { onStateChange(state.copy(name = it)) },
+            label = "Term name",
+            placeholder = "e.g. Spring 2026",
+        )
+    }
+
+    FormPanelSectionsDivider(label = "Date range", spacing = spacing)
+
+    FormPanelSection(
+        title = "Dates",
+        description = "When this term starts and ends.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
+        IsoDateField(
+            label = "Start date",
+            value = state.startDate,
+            onValueChange = { onStateChange(state.copy(startDate = it)) },
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        IsoDateField(
+            label = "End date",
+            value = state.endDate,
+            onValueChange = { onStateChange(state.copy(endDate = it)) },
+        )
+    }
+
+    FormPanelSectionsDivider(label = "Notes", spacing = spacing)
+
+    FormPanelSection(
+        title = "Notes",
+        description = "Internal notes about this term.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        GlideOutlinedField(
+            value = state.notes,
+            onValueChange = { onStateChange(state.copy(notes = it)) },
+            label = "Notes",
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            fieldHeight = GlideDimensions.notesMinHeight,
+        )
+    }
 }

@@ -58,6 +58,9 @@ import glide.model.parseMajorAmount
 import glide.model.summaryLine
 import glide.model.DEFAULT_CURRENCY_CODE
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideFieldLabel
@@ -510,107 +513,111 @@ private fun PlanForm(
 ) {
     var kindExpanded by remember { mutableStateOf(false) }
 
-    GlideOutlinedField(
-        value = state.name,
-        onValueChange = { onStateChange(state.copy(name = it)) },
-        label = "Plan name",
-        placeholder = "e.g. 10 Class Rolling Pack",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
+    FormPanelSection(
+        title = "Plan identity",
+        description = "Name and type of pack you offer to customers.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        GlideOutlinedField(
+            value = state.name,
+            onValueChange = { onStateChange(state.copy(name = it)) },
+            label = "Plan name",
+            placeholder = "e.g. 10 Class Rolling Pack",
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
 
-    Column {
-        GlideFieldLabel("Plan type")
-        Spacer(modifier = Modifier.height(2.dp))
-        ExposedDropdownMenuBox(
-            expanded = kindExpanded,
-            onExpandedChange = { kindExpanded = it },
-        ) {
-            OutlinedTextField(
-                value = state.kind.label,
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = kindExpanded) },
-                shape = MaterialTheme.shapes.small,
-                textStyle = MaterialTheme.typography.bodySmall.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
-                    .menuAnchor(),
-            )
-            ExposedDropdownMenu(
+        Column {
+            GlideFieldLabel("Plan type")
+            Spacer(modifier = Modifier.height(2.dp))
+            ExposedDropdownMenuBox(
                 expanded = kindExpanded,
-                onDismissRequest = { kindExpanded = false },
+                onExpandedChange = { kindExpanded = it },
             ) {
-                PlanKind.entries.forEach { kind ->
-                    DropdownMenuItem(
-                        text = { Text(kind.label, style = MaterialTheme.typography.bodySmall) },
-                        onClick = {
-                            onStateChange(
-                                when (kind) {
-                                    PlanKind.SINGLE_LESSON_PACK -> state.copy(
-                                        kind = kind,
-                                        lessonCount = "1",
-                                        rolling = false,
-                                    )
-                                    PlanKind.MULTI_LESSON_PACK -> state.copy(kind = kind)
-                                },
-                            )
-                            kindExpanded = false
-                        },
-                    )
+                OutlinedTextField(
+                    value = state.kind.label,
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = kindExpanded) },
+                    shape = MaterialTheme.shapes.small,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
+                        .menuAnchor(),
+                )
+                ExposedDropdownMenu(
+                    expanded = kindExpanded,
+                    onDismissRequest = { kindExpanded = false },
+                ) {
+                    PlanKind.entries.forEach { kind ->
+                        DropdownMenuItem(
+                            text = { Text(kind.label, style = MaterialTheme.typography.bodySmall) },
+                            onClick = {
+                                onStateChange(
+                                    when (kind) {
+                                        PlanKind.SINGLE_LESSON_PACK -> state.copy(
+                                            kind = kind,
+                                            lessonCount = "1",
+                                            rolling = false,
+                                        )
+                                        PlanKind.MULTI_LESSON_PACK -> state.copy(kind = kind)
+                                    },
+                                )
+                                kindExpanded = false
+                            },
+                        )
+                    }
                 }
             }
         }
     }
 
-    when (state.kind) {
-        PlanKind.MULTI_LESSON_PACK -> {
-            Spacer(modifier = Modifier.height(spacing.field))
-            GlideOutlinedField(
-                value = state.lessonCount,
-                onValueChange = { onStateChange(state.copy(lessonCount = it.filter { c -> c.isDigit() })) },
-                label = "Number of classes",
-                placeholder = "10",
-            )
-            Spacer(modifier = Modifier.height(spacing.field))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Checkbox(
-                    checked = state.rolling,
-                    onCheckedChange = { onStateChange(state.copy(rolling = it)) },
+    FormPanelSectionsDivider(label = "Pack configuration", spacing = spacing)
+
+    FormPanelSection(
+        title = "Classes in pack",
+        description = "How many lessons are included and whether they roll over.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
+        when (state.kind) {
+            PlanKind.MULTI_LESSON_PACK -> {
+                GlideOutlinedField(
+                    value = state.lessonCount,
+                    onValueChange = { onStateChange(state.copy(lessonCount = it.filter { c -> c.isDigit() })) },
+                    label = "Number of classes",
+                    placeholder = "10",
                 )
-                Column(modifier = Modifier.padding(start = 4.dp)) {
-                    Text(
-                        text = "Rolling plan",
-                        style = MaterialTheme.typography.labelLarge,
+                Spacer(modifier = Modifier.height(spacing.field))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Checkbox(
+                        checked = state.rolling,
+                        onCheckedChange = { onStateChange(state.copy(rolling = it)) },
                     )
-                    Text(
-                        text = "Classes roll over within the pack (e.g. 10-class rolling pack).",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Column(modifier = Modifier.padding(start = 4.dp)) {
+                        Text(
+                            text = "Rolling plan",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Text(
+                            text = "Classes roll over within the pack (e.g. 10-class rolling pack).",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
-        }
-        PlanKind.SINGLE_LESSON_PACK -> {
-            Spacer(modifier = Modifier.height(spacing.field))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        MaterialTheme.shapes.small,
-                    )
-                    .padding(spacing.outer),
-            ) {
+            PlanKind.SINGLE_LESSON_PACK -> {
                 Text(
                     text = "Number of classes",
                     style = MaterialTheme.typography.labelLarge,
@@ -625,21 +632,29 @@ private fun PlanForm(
         }
     }
 
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.priceMajor,
-        onValueChange = { onStateChange(state.copy(priceMajor = it)) },
-        label = "Price per person",
-        placeholder = "e.g. 12.00",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.notes,
-        onValueChange = { onStateChange(state.copy(notes = it)) },
-        label = "Notes",
-        singleLine = false,
-        minLines = 2,
-        maxLines = 4,
-        fieldHeight = GlideDimensions.notesMinHeight,
-    )
+    FormPanelSectionsDivider(label = "Pricing & notes", spacing = spacing)
+
+    FormPanelSection(
+        title = "Pricing",
+        description = "Amount charged per person on this plan.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        GlideOutlinedField(
+            value = state.priceMajor,
+            onValueChange = { onStateChange(state.copy(priceMajor = it)) },
+            label = "Price per person",
+            placeholder = "e.g. 12.00",
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        GlideOutlinedField(
+            value = state.notes,
+            onValueChange = { onStateChange(state.copy(notes = it)) },
+            label = "Notes",
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            fieldHeight = GlideDimensions.notesMinHeight,
+        )
+    }
 }

@@ -51,18 +51,23 @@ fun LeadRelatedPeopleSection(
 
     LeadPanelSection(
         title = "Related people",
-        description = "Others included on this lead besides the main contact.",
+        description = "Family or others on this lead — separate from the main contact.",
         spacing = spacing,
+        role = LeadPanelSectionRole.Secondary,
     ) {
         if (linked.isNotEmpty()) {
-            GlideFieldLabel("On this lead")
-            Spacer(modifier = Modifier.height(spacing.field))
-            linked.forEach { person ->
-                LeadRelatedPersonLinkedRow(
-                    person = person,
-                    onRemove = { onSelectionChange(selectedIds.filter { it != person.id }) },
-                )
+            LeadRelatedPeopleLinkedBox {
+                GlideFieldLabel("On this lead (${linked.size})")
                 Spacer(modifier = Modifier.height(spacing.field))
+                linked.forEachIndexed { index, person ->
+                    LeadRelatedPersonLinkedRow(
+                        person = person,
+                        onRemove = { onSelectionChange(selectedIds.filter { it != person.id }) },
+                    )
+                    if (index < linked.lastIndex) {
+                        Spacer(modifier = Modifier.height(spacing.field))
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(spacing.section))
         }

@@ -44,6 +44,9 @@ import glide.data.RelatedPersonStore
 import glide.data.resolveMainContact
 import glide.model.RelatedPerson
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
 import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
 import glide.ui.theme.GlideButton
@@ -458,24 +461,40 @@ private fun RelatedPersonForm(
     onStateChange: (RelatedPersonFormState) -> Unit,
     spacing: GlideLayout.Spacing,
 ) {
-    GlideOutlinedField(
-        value = state.name,
-        onValueChange = { onStateChange(state.copy(name = it)) },
-        label = "Name",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    DateOfBirthField(
-        value = state.dateOfBirth,
-        onValueChange = { onStateChange(state.copy(dateOfBirth = it)) },
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.notes,
-        onValueChange = { onStateChange(state.copy(notes = it)) },
-        label = "Notes",
-        singleLine = false,
-        minLines = 2,
-        maxLines = 4,
-        fieldHeight = GlideDimensions.notesMinHeight,
-    )
+    FormPanelSection(
+        title = "Identity",
+        description = "Name and date of birth for this related person.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        GlideOutlinedField(
+            value = state.name,
+            onValueChange = { onStateChange(state.copy(name = it)) },
+            label = "Name",
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        DateOfBirthField(
+            value = state.dateOfBirth,
+            onValueChange = { onStateChange(state.copy(dateOfBirth = it)) },
+        )
+    }
+
+    FormPanelSectionsDivider(label = "Notes", spacing = spacing)
+
+    FormPanelSection(
+        title = "Notes",
+        description = "Internal notes about this person.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
+        GlideOutlinedField(
+            value = state.notes,
+            onValueChange = { onStateChange(state.copy(notes = it)) },
+            label = "Notes",
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            fieldHeight = GlideDimensions.notesMinHeight,
+        )
+    }
 }

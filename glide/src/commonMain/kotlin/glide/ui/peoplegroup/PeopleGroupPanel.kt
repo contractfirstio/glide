@@ -73,6 +73,9 @@ import glide.ui.theme.GlideFieldLabel
 import glide.ui.theme.glideListItemTitleColor
 import glide.ui.theme.GlideOutlinedButton
 import glide.ui.theme.GlideOutlinedField
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
 import glide.ui.theme.GlideTextButton
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -858,79 +861,112 @@ private fun CustomerGroupDetailView(
 ) {
     val enrollment = PackEnrollmentStore.forPeopleGroup(group.id)
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
-    ReadOnlyPackSection(planId = group.planId, prominent = true)
-    Spacer(modifier = Modifier.height(spacing.section))
-    ReadOnlyMainContactSection(contactId = group.mainContactId)
-    Spacer(modifier = Modifier.height(spacing.field))
-    Text(
-        text = if (group.mainContactAttendsClass) {
-            "Main contact attends class"
-        } else {
-            "Main contact does not attend class"
-        },
-        style = MaterialTheme.typography.bodySmall,
-        fontWeight = FontWeight.Medium,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
-    Text(
-        text = "Related people always attend. Set on the lead before conversion.",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 2.dp),
-    )
-    Spacer(modifier = Modifier.height(spacing.section))
-    ReadOnlyRelatedPeopleSection(relatedPersonIds = group.relatedPersonIds)
-    Text(
-        text = "${group.classAttendeeCount()} attending on classes · ${group.memberCount()} in household",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = spacing.field),
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    if (group.notes.isNotBlank()) {
-        GlideFieldLabel("Notes")
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = group.notes,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+
+    FormPanelSection(
+        title = "Pack",
+        description = "The plan assigned to this customer group.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        ReadOnlyPackSection(planId = group.planId, prominent = false)
     }
-    enrollment?.let {
+
+    FormPanelSectionsDivider(label = "People on this pack", spacing = spacing)
+
+    FormPanelSection(
+        title = "Main contact",
+        description = "The primary person for billing and household identity.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        ReadOnlyMainContactSection(contactId = group.mainContactId, showLabel = false)
         Spacer(modifier = Modifier.height(spacing.field))
         Text(
-            text = if (outstanding > 0) {
-                "Outstanding: ${formatMoney(outstanding, it.planSnapshot.currencyCode)}"
+            text = if (group.mainContactAttendsClass) {
+                "Main contact attends class"
             } else {
-                "No outstanding bills"
+                "Main contact does not attend class"
             },
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = "Related people always attend. Set on the lead before conversion.",
             style = MaterialTheme.typography.labelSmall,
-            color = if (outstanding > 0) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
         )
     }
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideButton(
-        onClick = onOpenBilling,
-        modifier = Modifier.fillMaxWidth(),
+
+    FormPanelSection(
+        title = "Related people",
+        description = "Others on this pack besides the main contact.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
     ) {
-        Text("Billing")
+        ReadOnlyRelatedPeopleSection(relatedPersonIds = group.relatedPersonIds, showLabel = false)
+        Text(
+            text = "${group.classAttendeeCount()} attending on classes · ${group.memberCount()} in household",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = spacing.field),
+        )
     }
-    Spacer(modifier = Modifier.height(spacing.field))
-    Text(
-        text = "This customer group is locked. Clone to a lead to create another pack with the same people.",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedButton(
-        onClick = onCloneToLead,
-        modifier = Modifier.fillMaxWidth(),
+
+    FormPanelSectionsDivider(label = "Billing & actions", spacing = spacing)
+
+    FormPanelSection(
+        title = "Details & billing",
+        description = "Notes, outstanding balance, and next steps.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
     ) {
-        Text("Clone to new lead")
+        if (group.notes.isNotBlank()) {
+            GlideFieldLabel("Notes")
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = group.notes,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(spacing.field))
+        }
+        enrollment?.let {
+            Text(
+                text = if (outstanding > 0) {
+                    "Outstanding: ${formatMoney(outstanding, it.planSnapshot.currencyCode)}"
+                } else {
+                    "No outstanding bills"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = if (outstanding > 0) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Spacer(modifier = Modifier.height(spacing.field))
+        }
+        GlideButton(
+            onClick = onOpenBilling,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Billing")
+        }
+        Spacer(modifier = Modifier.height(spacing.field))
+        Text(
+            text = "This customer group is locked. Clone to a lead to create another pack with the same people.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        GlideOutlinedButton(
+            onClick = onCloneToLead,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Clone to new lead")
+        }
     }
 }
 
@@ -1005,7 +1041,11 @@ private fun PeopleGroupForm(
             spacing = spacing,
         )
     }
-    Spacer(modifier = Modifier.height(spacing.section * 2))
+    if (!isCustomerGroup) {
+        LeadPeopleSectionsDivider(spacing = spacing)
+    } else {
+        Spacer(modifier = Modifier.height(spacing.section * 2))
+    }
 
     if (isCustomerGroup) {
         RelatedPersonLinkSection(
@@ -1021,15 +1061,30 @@ private fun PeopleGroupForm(
         )
     }
 
-    if (showPlanPicker) {
-        Spacer(modifier = Modifier.height(spacing.field))
-        PlanPackDropdown(
-            selectedPlanId = state.planId,
-            onPlanSelected = { onStateChange(state.copy(planId = it)) },
-        )
+    if (!isCustomerGroup && (showPlanPicker || showPipelineStatus)) {
+        FormPanelSectionsDivider(label = "Lead setup", spacing = spacing)
     }
 
-    if (!isCustomerGroup) {
+    if (showPlanPicker) {
+        FormPanelSection(
+            title = "Pack",
+            description = "Select the plan before converting this lead to a customer.",
+            spacing = spacing,
+            role = FormPanelSectionRole.Tertiary,
+        ) {
+            PlanPackDropdown(
+                selectedPlanId = state.planId,
+                onPlanSelected = { onStateChange(state.copy(planId = it)) },
+            )
+            if (!isCustomerGroup) {
+                Spacer(modifier = Modifier.height(spacing.field))
+                LeadMainContactAttendsField(
+                    attends = state.mainContactAttendsClass,
+                    onAttendsChange = { onStateChange(state.copy(mainContactAttendsClass = it)) },
+                )
+            }
+        }
+    } else if (!isCustomerGroup) {
         Spacer(modifier = Modifier.height(spacing.field))
         LeadMainContactAttendsField(
             attends = state.mainContactAttendsClass,
@@ -1038,60 +1093,73 @@ private fun PeopleGroupForm(
     }
 
     if (showPipelineStatus) {
-        Spacer(modifier = Modifier.height(spacing.field))
-        Column {
-            GlideFieldLabel("Status")
-            Spacer(modifier = Modifier.height(2.dp))
-            ExposedDropdownMenuBox(
-                expanded = statusExpanded,
-                onExpandedChange = { statusExpanded = it },
-            ) {
-                OutlinedTextField(
-                    value = state.status.label,
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusExpanded) },
-                    shape = MaterialTheme.shapes.small,
-                    textStyle = MaterialTheme.typography.bodySmall.copy(
-                        color = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
-                        .menuAnchor(),
-                )
-                ExposedDropdownMenu(
+        FormPanelSection(
+            title = "Pipeline",
+            description = "Track where this lead is in your sales process.",
+            spacing = spacing,
+            role = FormPanelSectionRole.Tertiary,
+        ) {
+            Column {
+                GlideFieldLabel("Status")
+                Spacer(modifier = Modifier.height(2.dp))
+                ExposedDropdownMenuBox(
                     expanded = statusExpanded,
-                    onDismissRequest = { statusExpanded = false },
+                    onExpandedChange = { statusExpanded = it },
                 ) {
-                    PeopleGroupStatus.entries.forEach { status ->
-                        DropdownMenuItem(
-                            text = { Text(status.label, style = MaterialTheme.typography.bodySmall) },
-                            onClick = {
-                                onStateChange(state.copy(status = status))
-                                statusExpanded = false
-                            },
-                        )
+                    OutlinedTextField(
+                        value = state.status.label,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusExpanded) },
+                        shape = MaterialTheme.shapes.small,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
+                            .menuAnchor(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded = statusExpanded,
+                        onDismissRequest = { statusExpanded = false },
+                    ) {
+                        PeopleGroupStatus.entries.forEach { status ->
+                            DropdownMenuItem(
+                                text = { Text(status.label, style = MaterialTheme.typography.bodySmall) },
+                                onClick = {
+                                    onStateChange(state.copy(status = status))
+                                    statusExpanded = false
+                                },
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.notes,
-        onValueChange = { onStateChange(state.copy(notes = it)) },
-        label = "Notes",
-        singleLine = false,
-        minLines = 2,
-        maxLines = 4,
-        fieldHeight = notesHeight,
-    )
+    Spacer(modifier = Modifier.height(spacing.section))
+    FormPanelSection(
+        title = "Notes",
+        description = "Internal notes about this lead.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        GlideOutlinedField(
+            value = state.notes,
+            onValueChange = { onStateChange(state.copy(notes = it)) },
+            label = "Notes",
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            fieldHeight = notesHeight,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
