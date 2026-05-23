@@ -1,0 +1,8 @@
+[versions]
+kotlin = "2.0.21"
+compose = "1.8.1"
+
+[plugins]
+jetbrainsCompose = { id = "org.jetbrains.compose", version.ref = "compose" }
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

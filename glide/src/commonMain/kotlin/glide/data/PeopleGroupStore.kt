@@ -1,0 +1,114 @@
+package glide.data
+
+import androidx.compose.runtime.mutableStateListOf
+import glide.model.Contact
+import glide.model.PeopleGroup
+import glide.model.PeopleGroupStatus
+import glide.model.PeopleGroupType
+
+object PeopleGroupStore {
+    private val _groups = mutableStateListOf<PeopleGroup>()
+
+    val all: List<PeopleGroup> get() = _groups
+    val leads: List<PeopleGroup> get() = _groups.filter { it.type == PeopleGroupType.LEAD }
+    val customers: List<PeopleGroup> get() = _groups.filter { it.type == PeopleGroupType.CUSTOMER }
+
+    fun create(group: PeopleGroup) {
+        require(group.type == PeopleGroupType.LEAD) {
+            "People groups must be created as leads first."
+        }
+        if (group.mainContactId != null) {
+            require(ContactStore.findById(group.mainContactId) != null) {
+                "Linked contact not found."
+            }
+        }
+        require(group.hasResolvableMainContact()) {
+            "Link a contact or enter a main contact name."
+        }
+        _groups.add(group)
+    }
+
+    fun update(group: PeopleGroup): Boolean {
+        val index = _groups.indexOfFirst { it.id == group.id }
+        if (index < 0) return false
+        val existing = _groups[index]
+        if (existing.type == PeopleGroupType.CUSTOMER) return false
+        _groups[index] = group.copy(
+            contactName = if (group.mainContactId != null) "" else group.contactName,
+            dateOfBirth = if (group.mainContactId != null) "" else group.dateOfBirth,
+            email = if (group.mainContactId != null) "" else group.email,
+            phone = if (group.mainContactId != null) "" else group.phone,
+        )
+        return true
+    }
+
+    fun delete(id: String): Boolean {
+        val group = findById(id) ?: return false
+        if (group.type == PeopleGroupType.CUSTOMER) return false
+        _groups.removeAll { it.id == id }
+        return true
+    }
+
+    fun findById(id: String): PeopleGroup? = _groups.find { it.id == id }
+
+    fun removeRelatedPersonFromAllGroups(personId: String) {
+        _groups.forEachIndexed { index, group ->
+            if (group.type == PeopleGroupType.CUSTOMER) return@forEachIndexed
+            if (personId in group.relatedPersonIds) {
+                _groups[index] = group.copy(
+                    relatedPersonIds = group.relatedPersonIds.filter { it != personId },
+                )
+            }
+        }
+    }
+
+    /** Converts a lead: creates a [Contact], links it, and flips type to CUSTOMER. */
+    fun convertToCustomer(id: String): Boolean {
+        val group = findById(id) ?: return false
+        if (group.type == PeopleGroupType.CUSTOMER) return false
+        if (group.planId.isNullOrBlank()) return false
+        if (!group.hasResolvableMainContact()) return false
+
+        val contactId = group.mainContactId ?: run {
+            val resolved = group.resolveMainContact()
+            val contact = Contact(
+                name = resolved.name.trim(),
+                dateOfBirth = resolved.dateOfBirth.trim(),
+                email = resolved.email.trim(),
+                phone = resolved.phone.trim(),
+            )
+            ContactStore.createFromLeadConversion(contact)
+            contact.id
+        }
+
+        update(
+            group.copy(
+                type = PeopleGroupType.CUSTOMER,
+                mainContactId = contactId,
+                contactName = "",
+                dateOfBirth = "",
+                email = "",
+                phone = "",
+            ),
+        ) || return false
+        return true
+    }
+
+    /** Copies a locked customer group into a new editable lead (same contact, related people, and pack). */
+    fun cloneToLead(customerGroupId: String): PeopleGroup? {
+        val source = findById(customerGroupId) ?: return null
+        if (source.type != PeopleGroupType.CUSTOMER) return null
+        if (source.mainContactId == null) return null
+
+        val lead = PeopleGroup(
+            type = PeopleGroupType.LEAD,
+            mainContactId = source.mainContactId,
+            relatedPersonIds = source.relatedPersonIds,
+            status = PeopleGroupStatus.New,
+            planId = source.planId,
+            notes = source.notes,
+        )
+        create(lead)
+        return lead
+    }
+}
