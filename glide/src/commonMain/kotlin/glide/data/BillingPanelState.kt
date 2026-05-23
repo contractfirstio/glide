@@ -25,7 +25,7 @@ object BillingPanelState {
         RelatedPanelState.clearRelatedPersonFilter()
         PlansPanelState.clearPlanFilter()
         peopleGroupId = groupId
-        visible = true
+        visible = AppViewState.mode == AppViewMode.CUSTOMER_MANAGEMENT
     }
 
     /** Call when customer selection is cleared in the Customers panel. */

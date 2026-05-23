@@ -1,17 +1,33 @@
 package glide.ui.layout
 
+import glide.data.AppViewMode
+import glide.data.AppViewState
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 
 object GlideLayout {
+    val AppChromeHeight = 44.dp
     /** Side-by-side list + form below this width stacks vertically. */
     val CompactWidthBreakpoint = 680.dp
 
-    const val PanelCount = 5
-    const val PanelGridColumns = 3
-    const val PanelGridRows = 2
+    const val CustomerManagementPanelCount = 5
+    const val SchedulingPanelCount = 3
+    const val CustomerManagementGridColumns = 3
+    const val CustomerManagementGridRows = 2
+    const val SchedulingGridColumns = 3
+    const val SchedulingGridRows = 1
     const val StartupWindowScale = 3
+
+    fun gridColumns(mode: AppViewMode = AppViewState.mode): Int = when (mode) {
+        AppViewMode.CUSTOMER_MANAGEMENT -> CustomerManagementGridColumns
+        AppViewMode.SCHEDULING -> SchedulingGridColumns
+    }
+
+    fun gridRows(mode: AppViewMode = AppViewState.mode): Int = when (mode) {
+        AppViewMode.CUSTOMER_MANAGEMENT -> CustomerManagementGridRows
+        AppViewMode.SCHEDULING -> SchedulingGridRows
+    }
 
     val PanelMargin = 12.dp * StartupWindowScale
     val PanelGap = 16.dp * StartupWindowScale
@@ -24,18 +40,19 @@ object GlideLayout {
     private val BasePanelWidth = 340.dp
     private val BasePanelHeight = 420.dp
 
-    private val BaseWindowWidth =
+    private val BaseCustomerManagementWindowWidth =
         12.dp * 2 +
-            BasePanelWidth * PanelGridColumns +
-            16.dp * (PanelGridColumns - 1)
+            BasePanelWidth * CustomerManagementGridColumns +
+            16.dp * (CustomerManagementGridColumns - 1)
 
-    private val BaseWindowHeight =
+    private val BaseCustomerManagementWindowHeight =
         12.dp * 2 +
-            BasePanelHeight * PanelGridRows +
-            16.dp * (PanelGridRows - 1)
+            BasePanelHeight * CustomerManagementGridRows +
+            16.dp * (CustomerManagementGridRows - 1) +
+            AppChromeHeight
 
-    val DefaultWindowWidth = BaseWindowWidth * StartupWindowScale
-    val DefaultWindowHeight = BaseWindowHeight * StartupWindowScale
+    val DefaultWindowWidth = BaseCustomerManagementWindowWidth * StartupWindowScale
+    val DefaultWindowHeight = BaseCustomerManagementWindowHeight * StartupWindowScale
     val DefaultWindowSize = DpSize(DefaultWindowWidth, DefaultWindowHeight)
 
     /** Panel width/height in px so each grid cell fills the window evenly. */
@@ -44,20 +61,23 @@ object GlideLayout {
         windowHeightPx: Float,
         marginPx: Float,
         gapPx: Float,
+        mode: AppViewMode = AppViewState.mode,
     ): Pair<Float, Float> {
-        val width = (windowWidthPx - marginPx * 2 - gapPx * (PanelGridColumns - 1)) / PanelGridColumns
-        val height = (windowHeightPx - marginPx * 2 - gapPx * (PanelGridRows - 1)) / PanelGridRows
+        val columns = gridColumns(mode)
+        val rows = gridRows(mode)
+        val width = (windowWidthPx - marginPx * 2 - gapPx * (columns - 1)) / columns
+        val height = (windowHeightPx - marginPx * 2 - gapPx * (rows - 1)) / rows
         return width to height
     }
 
     /**
-     * Grid slots for five panels:
+     * Customer Management grid:
      * ```
      * [ Leads ] [ Plans  ] [ Related ]
-     * [ People] [        ] [ Customers ]
+     * [ People] [ Billing] [ Customers ]
      * ```
      */
-    fun panelGridCell(slot: Int): Pair<Int, Int> = when (slot) {
+    fun customerManagementPanelGridCell(slot: Int): Pair<Int, Int> = when (slot) {
         PanelSlots.LEADS -> 0 to 0
         PanelSlots.PLANS -> 0 to 1
         PanelSlots.RELATED -> 0 to 2
@@ -65,6 +85,24 @@ object GlideLayout {
         PanelSlots.BILLING -> 1 to 1
         PanelSlots.CUSTOMERS -> 1 to 2
         else -> 0 to 0
+    }
+
+    /**
+     * Scheduling grid:
+     * ```
+     * [ Schedule ] [ Terms ] [ Customer groups ]
+     * ```
+     */
+    fun schedulingPanelGridCell(slot: Int): Pair<Int, Int> = when (slot) {
+        SchedulingPanelSlots.SCHEDULE -> 0 to 0
+        SchedulingPanelSlots.TERMS -> 0 to 1
+        SchedulingPanelSlots.CUSTOMER_GROUPS -> 0 to 2
+        else -> 0 to 0
+    }
+
+    fun panelGridCell(slot: Int, mode: AppViewMode = AppViewState.mode): Pair<Int, Int> = when (mode) {
+        AppViewMode.CUSTOMER_MANAGEMENT -> customerManagementPanelGridCell(slot)
+        AppViewMode.SCHEDULING -> schedulingPanelGridCell(slot)
     }
 
     fun computePanelOriginPx(
@@ -75,10 +113,13 @@ object GlideLayout {
         windowHeightPx: Float,
         marginPx: Float,
         gapPx: Float,
+        mode: AppViewMode = AppViewState.mode,
     ): Pair<Float, Float> {
-        val (row, col) = panelGridCell(slot)
-        val contentWidth = PanelGridColumns * panelWidthPx + (PanelGridColumns - 1) * gapPx
-        val contentHeight = PanelGridRows * panelHeightPx + (PanelGridRows - 1) * gapPx
+        val columns = gridColumns(mode)
+        val rows = gridRows(mode)
+        val (row, col) = panelGridCell(slot, mode)
+        val contentWidth = columns * panelWidthPx + (columns - 1) * gapPx
+        val contentHeight = rows * panelHeightPx + (rows - 1) * gapPx
         val startX = marginPx + ((windowWidthPx - marginPx * 2) - contentWidth) / 2f
         val startY = marginPx + ((windowHeightPx - marginPx * 2) - contentHeight) / 2f
         val x = startX + col * (panelWidthPx + gapPx)

@@ -1,10 +1,13 @@
 package glide.ui.components
 
 import androidx.compose.runtime.mutableStateListOf
+import glide.data.AppViewMode
+import glide.data.AppViewState
 import glide.ui.layout.PanelSlots
+import glide.ui.layout.SchedulingPanelSlots
 
 object PanelZOrder {
-    private val _order = mutableStateListOf(
+    private val customerManagementOrder = mutableStateListOf(
         PanelSlots.LEADS,
         PanelSlots.PLANS,
         PanelSlots.RELATED,
@@ -12,26 +15,42 @@ object PanelZOrder {
         PanelSlots.CUSTOMERS,
     )
 
-    val order: List<Int> get() = _order
+    private val schedulingOrder = mutableStateListOf(
+        SchedulingPanelSlots.SCHEDULE,
+        SchedulingPanelSlots.TERMS,
+        SchedulingPanelSlots.CUSTOMER_GROUPS,
+    )
 
-    val focusedSlot: Int? get() = _order.lastOrNull()
+    val order: List<Int>
+        get() = when (AppViewState.mode) {
+            AppViewMode.CUSTOMER_MANAGEMENT -> customerManagementOrder
+            AppViewMode.SCHEDULING -> schedulingOrder
+        }
 
-    fun isFocused(slot: Int): Boolean = _order.lastOrNull() == slot
+    val focusedSlot: Int? get() = order.lastOrNull()
+
+    fun isFocused(slot: Int): Boolean = order.lastOrNull() == slot
 
     fun bringToFront(slot: Int) {
-        if (_order.lastOrNull() == slot) return
-        _order.remove(slot)
-        _order.add(slot)
+        val list = when (AppViewState.mode) {
+            AppViewMode.CUSTOMER_MANAGEMENT -> customerManagementOrder
+            AppViewMode.SCHEDULING -> schedulingOrder
+        }
+        if (list.lastOrNull() == slot) return
+        list.remove(slot)
+        list.add(slot)
     }
 
     fun registerBilling() {
-        if (PanelSlots.BILLING !in _order) {
-            _order.add(PanelSlots.BILLING)
+        if (PanelSlots.BILLING !in customerManagementOrder) {
+            customerManagementOrder.add(PanelSlots.BILLING)
         }
-        bringToFront(PanelSlots.BILLING)
+        if (AppViewState.mode == AppViewMode.CUSTOMER_MANAGEMENT) {
+            bringToFront(PanelSlots.BILLING)
+        }
     }
 
     fun unregisterBilling() {
-        _order.remove(PanelSlots.BILLING)
+        customerManagementOrder.remove(PanelSlots.BILLING)
     }
 }

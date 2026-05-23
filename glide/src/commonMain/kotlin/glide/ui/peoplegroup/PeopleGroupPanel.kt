@@ -41,6 +41,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import glide.data.AppViewMode
+import glide.data.AppViewState
 import glide.data.BillStore
 import glide.data.BillingPanelState
 import glide.data.ContactStore
@@ -486,7 +488,13 @@ private fun PeopleGroupPanel(
                                     CustomerGroupDetailView(
                                         group = group,
                                         spacing = spacing,
-                                        onOpenBilling = { BillingPanelState.reopenForCurrentGroup() },
+                                        onOpenBilling = {
+                                            if (AppViewState.mode == AppViewMode.SCHEDULING) {
+                                                AppViewState.switchTo(AppViewMode.CUSTOMER_MANAGEMENT)
+                                            } else {
+                                                BillingPanelState.reopenForCurrentGroup()
+                                            }
+                                        },
                                         onCloneToLead = {
                                             cloneMessage = null
                                             val lead = PeopleGroupStore.cloneToLead(group.id)

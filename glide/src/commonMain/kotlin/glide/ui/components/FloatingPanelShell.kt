@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import glide.data.AppViewState
 import glide.ui.layout.GlideLayout
 import glide.ui.theme.GlideAccents
 import glide.ui.theme.GlideTextButton
@@ -69,12 +70,14 @@ fun FloatingPanelShell(
     val maxPanelHeightPx = windowHeightPx - marginPx * 2
     val showDragHint = with(density) { windowWidthPx.toDp() } >= 900.dp
 
-    val defaultLayout = remember(windowWidthPx, windowHeightPx, slot, marginPx, gapPx) {
+    val viewMode = AppViewState.mode
+    val defaultLayout = remember(windowWidthPx, windowHeightPx, slot, marginPx, gapPx, viewMode) {
         val (gridWidthPx, gridHeightPx) = GlideLayout.computeGridPanelSizePx(
             windowWidthPx = windowWidthPx.toFloat(),
             windowHeightPx = windowHeightPx.toFloat(),
             marginPx = marginPx,
             gapPx = gapPx,
+            mode = viewMode,
         )
         val widthPx = gridWidthPx.coerceIn(minWidthPx, maxPanelWidthPx)
         val heightPx = gridHeightPx.coerceIn(minHeightPx, maxPanelHeightPx)
@@ -86,6 +89,7 @@ fun FloatingPanelShell(
             windowHeightPx = windowHeightPx.toFloat(),
             marginPx = marginPx,
             gapPx = gapPx,
+            mode = viewMode,
         )
         GridPanelLayout(widthPx, heightPx, xPx, yPx)
     }

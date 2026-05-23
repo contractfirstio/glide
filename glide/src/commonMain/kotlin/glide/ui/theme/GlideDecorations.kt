@@ -8,7 +8,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import glide.data.AppViewMode
+import glide.data.AppViewState
 import glide.ui.layout.PanelSlots
+import glide.ui.layout.SchedulingPanelSlots
 
 object GlideAccents {
     val Leads = Color(0xFF8CB4DC)
@@ -17,15 +20,26 @@ object GlideAccents {
     val People = Color(0xFF8EC4D4)
     val Customers = Color(0xFFA8C0D0)
     val Billing = Color(0xFFB8C8A0)
+    val Schedule = Color(0xFF9BC4B8)
+    val Terms = Color(0xFFB0A8D4)
+    val SchedulingCustomerGroups = Color(0xFFA8C0D0)
 
-    fun forPanel(slot: Int): Color = when (slot) {
-        PanelSlots.LEADS -> Leads
-        PanelSlots.PLANS -> Plans
-        PanelSlots.RELATED -> Related
-        PanelSlots.PEOPLE -> People
-        PanelSlots.CUSTOMERS -> Customers
-        PanelSlots.BILLING -> Billing
-        else -> Color(0xFF8CB4DC)
+    fun forPanel(slot: Int): Color = when (AppViewState.mode) {
+        AppViewMode.CUSTOMER_MANAGEMENT -> when (slot) {
+            PanelSlots.LEADS -> Leads
+            PanelSlots.PLANS -> Plans
+            PanelSlots.RELATED -> Related
+            PanelSlots.PEOPLE -> People
+            PanelSlots.CUSTOMERS -> Customers
+            PanelSlots.BILLING -> Billing
+            else -> Leads
+        }
+        AppViewMode.SCHEDULING -> when (slot) {
+            SchedulingPanelSlots.SCHEDULE -> Schedule
+            SchedulingPanelSlots.TERMS -> Terms
+            SchedulingPanelSlots.CUSTOMER_GROUPS -> SchedulingCustomerGroups
+            else -> Schedule
+        }
     }
 }
 
