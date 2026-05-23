@@ -10,8 +10,10 @@ import glide.model.dateRange
 import glide.model.occursOn
 import glide.model.parseIsoLocalDate
 import glide.model.spansTerm
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import kotlin.math.roundToInt
 
 fun findCurrentTerm(terms: List<AcademicTerm>, today: LocalDate = LocalDate.now()): AcademicTerm? =
     terms.firstOrNull { it.containsDate(today) }
@@ -51,6 +53,43 @@ fun defaultTermSelectionId(terms: List<AcademicTerm>, today: LocalDate = LocalDa
 
 fun indexOfMonthContaining(months: List<YearMonth>, date: LocalDate): Int =
     months.indexOf(YearMonth.from(date))
+
+/** Zero-based week row within a Monday-start month grid (see [buildMonthGrid]). */
+fun weekRowIndexInMonth(date: LocalDate): Int {
+    val firstOfMonth = date.withDayOfMonth(1)
+    val startOffset = mondayBasedWeekStartOffset(firstOfMonth)
+    return (startOffset + date.dayOfMonth - 1) / 7
+}
+
+fun weekCountInMonth(yearMonth: YearMonth): Int {
+    val firstOfMonth = yearMonth.atDay(1)
+    val startOffset = mondayBasedWeekStartOffset(firstOfMonth)
+    return (startOffset + yearMonth.lengthOfMonth() + 6) / 7
+}
+
+/** Scroll offset so [date]'s week row sits near the middle of the list viewport. */
+fun scrollOffsetToShowDateInMonthItem(
+    monthItemHeightPx: Int,
+    date: LocalDate,
+    viewportHeightPx: Int,
+): Int {
+    if (monthItemHeightPx <= 0 || viewportHeightPx <= 0) return 0
+    val yearMonth = YearMonth.from(date)
+    val weekIndex = weekRowIndexInMonth(date)
+    val weekCount = weekCountInMonth(yearMonth).coerceAtLeast(1)
+    val headerPx = (monthItemHeightPx * 0.14f).roundToInt()
+    val gridHeightPx = (monthItemHeightPx - headerPx).coerceAtLeast(0)
+    val weekHeightPx = gridHeightPx / weekCount
+    val weekTopPx = headerPx + weekIndex * weekHeightPx
+    val centeredOffset = weekTopPx - (viewportHeightPx - weekHeightPx) / 2
+    val maxOffset = (monthItemHeightPx - viewportHeightPx).coerceAtLeast(0)
+    return centeredOffset.coerceIn(0, maxOffset)
+}
+
+private fun mondayBasedWeekStartOffset(firstOfMonth: LocalDate): Int {
+    val raw = firstOfMonth.dayOfWeek.value - DayOfWeek.MONDAY.value
+    return (raw + 7) % 7
+}
 
 fun monthsInTerm(term: AcademicTerm): List<YearMonth> {
     val range = term.dateRange() ?: return emptyList()

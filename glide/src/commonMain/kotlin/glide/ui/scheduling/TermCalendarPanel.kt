@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -67,6 +68,34 @@ import java.util.Locale
 private val MonthTitleFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault())
 private val WeekdayLabels = listOf("M", "T", "W", "T", "F", "S", "S")
 
+private suspend fun LazyListState.scrollToShowDate(months: List<YearMonth>, date: LocalDate) {
+    val monthIndex = indexOfMonthContaining(months, date)
+    if (monthIndex < 0) return
+
+    snapshotFlow { layoutInfo }
+        .first { info ->
+            info.totalItemsCount > monthIndex && info.viewportSize.height > 0
+        }
+
+    scrollToItem(monthIndex)
+
+    snapshotFlow { layoutInfo }
+        .first { info ->
+            info.visibleItemsInfo.any { it.index == monthIndex && it.size > 0 }
+        }
+
+    val info = layoutInfo
+    val monthItem = info.visibleItemsInfo.first { it.index == monthIndex }
+    val scrollOffset = scrollOffsetToShowDateInMonthItem(
+        monthItemHeightPx = monthItem.size,
+        date = date,
+        viewportHeightPx = info.viewportSize.height,
+    )
+    if (scrollOffset > 0) {
+        scrollToItem(monthIndex, scrollOffset)
+    }
+}
+
 @Composable
 fun TermCalendarPanel(modifier: Modifier = Modifier) {
     val termsChronological = TermStore.sortedChronologically()
@@ -76,7 +105,6 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
     val attendanceVisible = AttendancePanelState.visible
     val activeAttendanceSession = if (attendanceVisible) AttendancePanelState.sessionKey else null
     val listState = rememberLazyListState()
-    var hasScrolledToToday by remember { mutableStateOf(false) }
     var attendanceRefreshTick by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
@@ -144,27 +172,12 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
         LaunchedEffect(attendanceVisible, activeAttendanceSession, selectedTerm.id, months) {
             if (!attendanceVisible) return@LaunchedEffect
             val date = activeAttendanceSession?.sessionDate?.let { parseIsoLocalDate(it) } ?: return@LaunchedEffect
-            val monthIndex = indexOfMonthContaining(months, date)
-            if (monthIndex < 0) return@LaunchedEffect
-            snapshotFlow { listState.layoutInfo.totalItemsCount }
-                .first { it > monthIndex }
-            listState.animateScrollToItem(monthIndex)
+            listState.scrollToShowDate(months, date)
         }
 
-        LaunchedEffect(viewMode) {
-            if (viewMode != AppViewMode.SCHEDULING) {
-                hasScrolledToToday = false
-            }
-        }
-
-        LaunchedEffect(viewMode, selectedTerm.id, months) {
-            if (viewMode != AppViewMode.SCHEDULING || hasScrolledToToday || months.isEmpty()) return@LaunchedEffect
-            val monthIndex = indexOfMonthContaining(months, today)
-            if (monthIndex < 0) return@LaunchedEffect
-            snapshotFlow { listState.layoutInfo.totalItemsCount }
-                .first { it > monthIndex }
-            listState.animateScrollToItem(monthIndex)
-            hasScrolledToToday = true
+        LaunchedEffect(viewMode, selectedTerm.id, months, attendanceVisible) {
+            if (viewMode != AppViewMode.SCHEDULING || months.isEmpty() || attendanceVisible) return@LaunchedEffect
+            listState.scrollToShowDate(months, today)
         }
 
         TermCalendarHeader(
