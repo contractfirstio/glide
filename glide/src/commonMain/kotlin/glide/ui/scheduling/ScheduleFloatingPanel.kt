@@ -17,10 +17,6 @@ fun ScheduleFloatingPanel(
         windowWidthPx = windowWidthPx,
         windowHeightPx = windowHeightPx,
     ) {
-        SchedulingPlaceholderPanel(
-            title = "Class schedule",
-            description = "Week and day views, session roster, and multi-group bookings will appear here.",
-            modifier = Modifier.fillMaxSize(),
-        )
+        SchedulePanel(modifier = Modifier.fillMaxSize())
     }
 }

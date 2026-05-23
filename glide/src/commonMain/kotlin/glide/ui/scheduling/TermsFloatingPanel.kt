@@ -17,10 +17,6 @@ fun TermsFloatingPanel(
         windowWidthPx = windowWidthPx,
         windowHeightPx = windowHeightPx,
     ) {
-        SchedulingPlaceholderPanel(
-            title = "Terms and breaks",
-            description = "Academic terms, school breaks, and per-term class runs will be configured here.",
-            modifier = Modifier.fillMaxSize(),
-        )
+        TermsPanel(modifier = Modifier.fillMaxSize())
     }
 }

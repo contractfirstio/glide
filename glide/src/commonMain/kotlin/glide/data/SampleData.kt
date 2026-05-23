@@ -1,6 +1,8 @@
 package glide.data
 
+import glide.model.AcademicTerm
 import glide.model.Contact
+import glide.model.DayOfWeek
 import glide.model.PaymentMethod
 import glide.model.PeopleGroup
 import glide.model.PeopleGroupStatus
@@ -9,6 +11,7 @@ import glide.model.Plan
 import glide.model.PlanKind
 import glide.model.PlanSnapshot
 import glide.model.RelatedPerson
+import glide.model.ScheduledClass
 import glide.model.majorToMinor
 
 /**
@@ -210,6 +213,55 @@ object SampleData {
                 status = PeopleGroupStatus.Contacted,
                 planId = singleLesson.id,
                 createdAtMillis = now - day,
+            ),
+        )
+
+        seedScheduling(now, day)
+    }
+
+    private fun seedScheduling(now: Long, day: Long) {
+        if (TermStore.terms.isNotEmpty()) return
+
+        val springTerm = AcademicTerm(
+            id = "sample-term-spring-2026",
+            name = "Spring 2026",
+            startDate = "2026-01-05",
+            endDate = "2026-04-03",
+            notes = "Includes half-term break in February.",
+            createdAtMillis = now - 5 * day,
+        )
+        TermStore.create(springTerm)
+
+        val summerTerm = AcademicTerm(
+            id = "sample-term-summer-2026",
+            name = "Summer 2026",
+            startDate = "2026-04-20",
+            endDate = "2026-07-17",
+            createdAtMillis = now - 5 * day,
+        )
+        TermStore.create(summerTerm)
+
+        ScheduledClassStore.create(
+            ScheduledClass(
+                id = "sample-class-tuesday-ballet",
+                name = "Tuesday Beginner Ballet",
+                termIds = listOf(springTerm.id, summerTerm.id),
+                dayOfWeek = DayOfWeek.TUESDAY,
+                startTime = "16:00",
+                endTime = "17:00",
+                notes = "Ages 5–7 · runs across Spring and Summer",
+                createdAtMillis = now - 4 * day,
+            ),
+        )
+        ScheduledClassStore.create(
+            ScheduledClass(
+                id = "sample-class-saturday-drama",
+                name = "Saturday Drama Club",
+                termIds = listOf(springTerm.id),
+                dayOfWeek = DayOfWeek.SATURDAY,
+                startTime = "10:30",
+                endTime = "12:00",
+                createdAtMillis = now - 4 * day,
             ),
         )
     }
