@@ -13,6 +13,16 @@ object PeopleGroupStore {
     val leads: List<PeopleGroup> get() = _groups.filter { it.type == PeopleGroupType.LEAD }
     val customers: List<PeopleGroup> get() = _groups.filter { it.type == PeopleGroupType.CUSTOMER }
 
+    /**
+     * Customer groups for the Customers panel — all groups, or only those whose main contact is
+     * [contactId] when a contact is selected in the Contacts panel.
+     */
+    fun forCustomersPanel(contactId: String?): List<PeopleGroup> =
+        when (contactId) {
+            null -> customers
+            else -> customers.filter { it.mainContactId == contactId }
+        }
+
     /** Sample / dev data only — inserts an already-converted customer group. */
     internal fun seedCustomer(group: PeopleGroup) {
         require(group.type == PeopleGroupType.CUSTOMER) {

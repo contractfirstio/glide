@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import glide.data.BillStore
 import glide.data.BillingPanelState
 import glide.data.ContactStore
+import glide.data.ContactsPanelState
 import glide.data.PackEnrollmentStore
 import glide.data.PeopleGroupNavigation
 import glide.data.PeopleGroupStore
@@ -188,10 +189,16 @@ private fun PeopleGroupPanel(
     var formError by remember { mutableStateOf<String?>(null) }
     var cloneMessage by remember { mutableStateOf<String?>(null) }
 
+    val contactFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
+        ContactsPanelState.selectedContactId
+    } else {
+        null
+    }
     val groups = when (ui.type) {
         PeopleGroupType.LEAD -> PeopleGroupStore.leads
-        PeopleGroupType.CUSTOMER -> PeopleGroupStore.customers
+        PeopleGroupType.CUSTOMER -> PeopleGroupStore.forCustomersPanel(contactFilterId)
     }
+    val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     fun resetFormForCreate() {
@@ -250,6 +257,15 @@ private fun PeopleGroupPanel(
         }
     }
 
+    LaunchedEffect(contactFilterId, groups, selectedId) {
+        if (ui.type == PeopleGroupType.CUSTOMER &&
+            selectedId != null &&
+            groups.none { it.id == selectedId }
+        ) {
+            clearSelection()
+        }
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val compact = maxWidth < GlideLayout.CompactWidthBreakpoint
         val spacing = if (compact) GlideLayout.compact else GlideLayout.comfortable
@@ -268,7 +284,12 @@ private fun PeopleGroupPanel(
         ) {
             if (!compact) {
                 Text(
-                    text = ui.subtitle,
+                    text = if (ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null) {
+                        val label = contactFilterLabel ?: "this contact"
+                        "Showing customer groups for $label. Use Clear filter to reset."
+                    } else {
+                        ui.subtitle
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -287,6 +308,11 @@ private fun PeopleGroupPanel(
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null) {
+                                GlideTextButton(onClick = { ContactsPanelState.clearContactFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
                             if (ui.showClearSelection && selectedId != null) {
                                 GlideTextButton(onClick = { clearSelection() }) {
                                     Text("Clear")
@@ -319,7 +345,11 @@ private fun PeopleGroupPanel(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = ui.emptyListMessage,
+                                text = if (ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null) {
+                                    "No customer groups for this contact."
+                                } else {
+                                    ui.emptyListMessage
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

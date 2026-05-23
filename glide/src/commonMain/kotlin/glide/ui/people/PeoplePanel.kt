@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,8 +33,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import glide.data.BillingPanelState
 import glide.data.ContactStore
+import glide.data.ContactsPanelState
 import glide.data.PeopleGroupStore
+import glide.data.resolveMainContact
 import glide.model.Contact
 import glide.ui.layout.GlideLayout
 import glide.ui.leads.DateOfBirthField
@@ -74,16 +78,30 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
-    val contacts = ContactStore.all
+    val customerGroupId = BillingPanelState.peopleGroupId
+    val contactFilterId = ContactsPanelState.selectedContactId
+    val contacts = ContactStore.forContactsPanel(customerGroupId)
+    val customerGroupLabel = customerGroupId?.let { id ->
+        PeopleGroupStore.findById(id)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+    }
+    val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
 
     fun clearSelection() {
         selectedId = null
         formState = ContactFormState()
         formError = null
+        ContactsPanelState.clearContactFilter()
+    }
+
+    LaunchedEffect(contacts, selectedId) {
+        if (selectedId != null && contacts.none { it.id == selectedId }) {
+            clearSelection()
+        }
     }
 
     fun loadIntoForm(contact: Contact) {
         selectedId = contact.id
+        ContactsPanelState.onContactSelected(contact.id)
         formState = ContactFormState(
             name = contact.name,
             dateOfBirth = contact.dateOfBirth,
@@ -107,7 +125,18 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
         ) {
             if (!compact) {
                 Text(
-                    text = "Edit contacts created from leads. New contacts are added when you make a customer on a lead.",
+                    text = when {
+                        customerGroupId != null -> {
+                            val label = customerGroupLabel ?: "this customer group"
+                            "Showing main contact for $label. Use Show all to reset."
+                        }
+                        contactFilterId != null -> {
+                            val label = contactFilterLabel ?: "this contact"
+                            "Filtering customer groups for $label. Use Clear filter to reset."
+                        }
+                        else ->
+                            "Edit contacts created from leads. New contacts are added when you make a customer on a lead."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -116,10 +145,28 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
 
             val listSection: @Composable (Modifier) -> Unit = { listModifier ->
                 Column(modifier = listModifier) {
-                    Text(
-                        text = "${contacts.size} contact${if (contacts.size == 1) "" else "s"}",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "${contacts.size} contact${if (contacts.size == 1) "" else "s"}",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (contactFilterId != null) {
+                                GlideTextButton(onClick = { ContactsPanelState.clearContactFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            if (customerGroupId != null) {
+                                GlideTextButton(onClick = { BillingPanelState.onCustomerGroupCleared() }) {
+                                    Text("Show all")
+                                }
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (contacts.isEmpty()) {
@@ -140,7 +187,11 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "No contacts yet. Contacts are created when leads become customers.",
+                                text = if (customerGroupId == null) {
+                                    "No contacts yet. Contacts are created when leads become customers."
+                                } else {
+                                    "No main contact for this customer group."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
