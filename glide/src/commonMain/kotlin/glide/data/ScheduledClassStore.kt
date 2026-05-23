@@ -3,6 +3,7 @@ package glide.data
 import androidx.compose.runtime.mutableStateListOf
 import glide.model.ScheduledClass
 import glide.model.spansTerm
+import glide.model.usesLocation
 
 object ScheduledClassStore {
     private val _classes = mutableStateListOf<ScheduledClass>()
@@ -34,6 +35,15 @@ object ScheduledClassStore {
         }
     }
 
+    fun clearLocationReference(locationId: String) {
+        for (index in _classes.indices) {
+            val item = _classes[index]
+            if (item.usesLocation(locationId)) {
+                _classes[index] = item.copy(locationId = null)
+            }
+        }
+    }
+
     fun forSchedulePanel(termFilterId: String? = null): List<ScheduledClass> {
         val filtered = if (termFilterId != null) {
             _classes.filter { it.spansTerm(termFilterId) }
@@ -48,4 +58,6 @@ object ScheduledClassStore {
     }
 
     fun countForTerm(termId: String): Int = _classes.count { it.spansTerm(termId) }
+
+    fun countForLocation(locationId: String): Int = _classes.count { it.usesLocation(locationId) }
 }

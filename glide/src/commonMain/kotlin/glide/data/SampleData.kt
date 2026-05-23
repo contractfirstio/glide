@@ -1,6 +1,7 @@
 package glide.data
 
 import glide.model.AcademicTerm
+import glide.model.ClassLocation
 import glide.model.Contact
 import glide.model.DayOfWeek
 import glide.model.PaymentMethod
@@ -241,15 +242,33 @@ object SampleData {
         )
         TermStore.create(summerTerm)
 
+        val studioA = ClassLocation(
+            id = "sample-location-studio-a",
+            name = "Studio A",
+            maxCapacity = 12,
+            notes = "Ground floor · mirrors and barre",
+            createdAtMillis = now - 5 * day,
+        )
+        LocationStore.create(studioA)
+
+        val mainHall = ClassLocation(
+            id = "sample-location-main-hall",
+            name = "Main Hall",
+            maxCapacity = 24,
+            createdAtMillis = now - 5 * day,
+        )
+        LocationStore.create(mainHall)
+
         ScheduledClassStore.create(
             ScheduledClass(
                 id = "sample-class-tuesday-ballet",
                 name = "Tuesday Beginner Ballet",
                 termIds = listOf(springTerm.id, summerTerm.id),
+                locationId = studioA.id,
                 dayOfWeek = DayOfWeek.TUESDAY,
                 startTime = "16:00",
                 endTime = "17:00",
-                notes = "Ages 5–7 · runs across Spring and Summer",
+                notes = "Runs across Spring and Summer",
                 createdAtMillis = now - 4 * day,
             ),
         )
@@ -258,6 +277,7 @@ object SampleData {
                 id = "sample-class-saturday-drama",
                 name = "Saturday Drama Club",
                 termIds = listOf(springTerm.id),
+                locationId = mainHall.id,
                 dayOfWeek = DayOfWeek.SATURDAY,
                 startTime = "10:30",
                 endTime = "12:00",

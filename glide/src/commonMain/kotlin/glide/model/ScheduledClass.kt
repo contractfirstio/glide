@@ -16,6 +16,7 @@ data class ScheduledClass(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val termIds: List<String> = emptyList(),
+    val locationId: String? = null,
     val dayOfWeek: DayOfWeek,
     /** 24-hour time, e.g. 09:00 */
     val startTime: String,
@@ -23,6 +24,8 @@ data class ScheduledClass(
     val notes: String = "",
     val createdAtMillis: Long = System.currentTimeMillis(),
 )
+
+fun ScheduledClass.usesLocation(locationId: String): Boolean = this.locationId == locationId
 
 fun ScheduledClass.scheduleLine(): String =
     "${dayOfWeek.label} · $startTime–$endTime"

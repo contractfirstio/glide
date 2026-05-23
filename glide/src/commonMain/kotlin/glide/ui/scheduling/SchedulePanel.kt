@@ -41,8 +41,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import glide.data.LocationStore
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
+import glide.model.ClassLocation
 import glide.model.DayOfWeek
 import glide.model.ScheduledClass
 import glide.model.compareTime24h
@@ -62,6 +64,7 @@ import java.util.UUID
 private data class ClassFormState(
     val name: String = "",
     val termIds: Set<String> = emptySet(),
+    val locationId: String? = null,
     val dayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
     val startTime: String = "09:00",
     val endTime: String = "10:00",
@@ -80,6 +83,7 @@ private data class ClassFormState(
         id = existingId ?: UUID.randomUUID().toString(),
         name = name.trim(),
         termIds = termIds.toList(),
+        locationId = locationId,
         dayOfWeek = dayOfWeek,
         startTime = startTime,
         endTime = endTime,
@@ -97,6 +101,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
     var formError by remember { mutableStateOf<String?>(null) }
 
     val terms = TermStore.sortedForPanel()
+    val locations = LocationStore.sortedForPanel()
     val classes = ScheduledClassStore.forSchedulePanel()
 
     fun clearSelection() {
@@ -119,6 +124,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
         formState = ClassFormState(
             name = scheduledClass.name,
             termIds = scheduledClass.termIds.toSet(),
+            locationId = scheduledClass.locationId,
             dayOfWeek = scheduledClass.dayOfWeek,
             startTime = scheduledClass.startTime,
             endTime = scheduledClass.endTime,
@@ -130,6 +136,13 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
     LaunchedEffect(classes, selectedId) {
         if (selectedId != null && classes.none { it.id == selectedId }) {
             clearSelection()
+        }
+    }
+
+    LaunchedEffect(locations, formState.locationId) {
+        val locationId = formState.locationId ?: return@LaunchedEffect
+        if (locations.none { it.id == locationId }) {
+            formState = formState.copy(locationId = null)
         }
     }
 
@@ -150,10 +163,15 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
         ) {
             if (!compact) {
                 Text(
-                    text = if (terms.isEmpty()) {
-                        "Create terms in the Terms panel, then add recurring classes here."
-                    } else {
-                        "Define recurring classes and link them to one or more terms."
+                    text = when {
+                        terms.isEmpty() && locations.isEmpty() ->
+                            "Create terms and locations in their panels, then add recurring classes here."
+                        terms.isEmpty() ->
+                            "Create terms in the Terms panel, then add recurring classes here."
+                        locations.isEmpty() ->
+                            "Define recurring classes. Add locations in the Locations panel to assign rooms."
+                        else ->
+                            "Define recurring classes and link them to terms and locations."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -243,6 +261,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             state = formState,
                             onStateChange = { formState = it },
                             terms = terms,
+                            locations = locations,
                             spacing = spacing,
                         )
 
@@ -355,6 +374,10 @@ private fun ClassListItem(
         MaterialTheme.colorScheme.surface
     }
     val termNames = scheduledClass.termIds.mapNotNull { TermStore.findById(it)?.name }
+    val location = scheduledClass.locationId?.let { LocationStore.findById(it) }
+    val locationLine = location?.let { loc ->
+        listOfNotNull(loc.name, loc.maxCapacity?.let { "Max $it" }).joinToString(" · ")
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -380,6 +403,15 @@ private fun ClassListItem(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        if (!locationLine.isNullOrBlank()) {
+            Text(
+                text = locationLine,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (termNames.isNotEmpty()) {
             Text(
                 text = termNames.joinToString(", "),
@@ -398,9 +430,11 @@ private fun ClassForm(
     state: ClassFormState,
     onStateChange: (ClassFormState) -> Unit,
     terms: List<glide.model.AcademicTerm>,
+    locations: List<ClassLocation>,
     spacing: GlideLayout.Spacing,
 ) {
     var dayExpanded by remember { mutableStateOf(false) }
+    var locationExpanded by remember { mutableStateOf(false) }
 
     GlideOutlinedField(
         value = state.name,
@@ -468,6 +502,68 @@ private fun ClassForm(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(spacing.field))
+
+    Column {
+        GlideFieldLabel("Location")
+        Spacer(modifier = Modifier.height(2.dp))
+        if (locations.isEmpty()) {
+            Text(
+                text = "Create locations in the Locations panel, then assign a room to this class.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            val selectedLocationLabel = state.locationId?.let { id ->
+                locations.find { it.id == id }?.name
+            } ?: "None"
+            ExposedDropdownMenuBox(
+                expanded = locationExpanded,
+                onExpandedChange = { locationExpanded = it },
+            ) {
+                OutlinedTextField(
+                    value = selectedLocationLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = locationExpanded) },
+                    shape = MaterialTheme.shapes.small,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
+                        .menuAnchor(),
+                )
+                ExposedDropdownMenu(
+                    expanded = locationExpanded,
+                    onDismissRequest = { locationExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("None", style = MaterialTheme.typography.bodySmall) },
+                        onClick = {
+                            onStateChange(state.copy(locationId = null))
+                            locationExpanded = false
+                        },
+                    )
+                    locations.forEach { location ->
+                        DropdownMenuItem(
+                            text = { Text(location.name, style = MaterialTheme.typography.bodySmall) },
+                            onClick = {
+                                onStateChange(state.copy(locationId = location.id))
+                                locationExpanded = false
+                            },
+                        )
                     }
                 }
             }

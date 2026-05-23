@@ -19,6 +19,7 @@ object PanelZOrder {
         SchedulingPanelSlots.SCHEDULE,
         SchedulingPanelSlots.TERMS,
         SchedulingPanelSlots.CUSTOMER_GROUPS,
+        SchedulingPanelSlots.LOCATIONS,
     )
 
     val order: List<Int>
