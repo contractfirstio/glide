@@ -55,14 +55,15 @@ import glide.data.validatePackSchedulesForClass
 import glide.data.validateRollingPackEnrollmentsForClass
 import glide.data.peopleGroupHasRollingPack
 import glide.data.canAcceptRollingPackEnrollments
+import glide.data.PackEnrollmentStore
 import glide.data.PeopleGroupStore
+import glide.data.PlanStore
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
-import glide.data.classAttendeeCount
-import glide.data.memberCount
 import glide.data.resolveMainContact
 import glide.data.toUserMessage
 import glide.model.ClassLocation
+import glide.model.PeopleGroup
 import glide.model.ClassScheduleKind
 import glide.model.DayOfWeek
 import glide.model.ScheduledClass
@@ -73,6 +74,7 @@ import glide.model.scheduleKind
 import glide.model.scheduleLine
 import glide.model.toModelDayOfWeek
 import glide.ui.shared.IsoDateField
+import glide.ui.leads.millisToIsoDate
 import glide.ui.leads.parseIsoDateToMillis
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.FormPanelLinkedBox
@@ -598,7 +600,7 @@ private fun ClassCustomerGroupsSection(
                 SearchResultItem(
                     id = group.id,
                     primaryLabel = formatPersonLabel(main.name, main.dateOfBirth),
-                    secondaryLabel = "${group.classAttendeeCount()} attending",
+                    secondaryLabel = soldPackSearchSecondaryLabel(group),
                 )
             }
     }
@@ -615,7 +617,7 @@ private fun ClassCustomerGroupsSection(
         )
         Spacer(modifier = Modifier.height(spacing.section))
         EntitySearchPicker(
-            label = "Add customer group",
+            label = "Sold Packs",
             placeholder = "Search by name or email…",
             query = searchQuery,
             onQueryChange = { searchQuery = it },
@@ -637,7 +639,7 @@ private fun ClassCustomerGroupsSection(
                     enrollmentMessage = result.toUserMessage()
                 }
             },
-            noResultsText = "No available customer groups (each group can only be on one class).",
+            noResultsText = "No available sold packs (each pack can only be on one class).",
         )
         enrollmentMessage?.let { message ->
             Spacer(modifier = Modifier.height(spacing.field))
@@ -659,7 +661,7 @@ private fun ClassCustomerGroupsSection(
         if (assignedIds.isNotEmpty()) {
             Spacer(modifier = Modifier.height(spacing.section))
             FormPanelLinkedBox(role = FormPanelSectionRole.Secondary) {
-                GlideFieldLabel("On this class (${assignedIds.size})")
+                GlideFieldLabel("In this class (${assignedIds.size})")
                 Spacer(modifier = Modifier.height(spacing.field))
                 assignedIds.forEachIndexed { index, groupId ->
                     val group = PeopleGroupStore.findById(groupId) ?: return@forEachIndexed
@@ -684,17 +686,7 @@ private fun ClassCustomerGroupsSection(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = buildString {
-                                    append("${group.classAttendeeCount()} attending · ${group.memberCount()} in group")
-                                    if (!group.mainContactAttendsClass) {
-                                        append(" · main contact not attending")
-                                    }
-                                    classId?.let { id ->
-                                        PackClassScheduleStore.scheduledSessionCount(groupId, id)?.let { count ->
-                                            append(" · $count session${if (count == 1) "" else "s"} scheduled")
-                                        }
-                                    }
-                                },
+                                text = soldPackSearchSecondaryLabel(group),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 2,
@@ -719,6 +711,23 @@ private fun ClassCustomerGroupsSection(
                 }
             }
         }
+    }
+}
+
+private fun soldPackSearchSecondaryLabel(group: PeopleGroup): String {
+    val packName = PackEnrollmentStore.forPeopleGroup(group.id)?.planSnapshot?.planName
+        ?: group.planId?.let { PlanStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() } }
+        ?: "No pack"
+    val startDate = group.planStartDate.takeIf { it.isNotBlank() }
+        ?.let { formatIsoDateForDisplay(it) }
+        ?.takeIf { it.isNotBlank() }
+        ?: PackEnrollmentStore.forPeopleGroup(group.id)?.packPeriodStartedAtMillis
+            ?.let { formatIsoDateForDisplay(millisToIsoDate(it)) }
+            ?.takeIf { it.isNotBlank() }
+    return if (startDate != null) {
+        "$packName · Starts $startDate"
+    } else {
+        packName
     }
 }
 
