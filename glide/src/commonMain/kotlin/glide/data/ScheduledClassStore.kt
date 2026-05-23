@@ -29,6 +29,12 @@ object ScheduledClassStore {
 
     fun findById(id: String): ScheduledClass? = _classes.find { it.id == id }
 
+    fun findClassContainingCustomerGroup(
+        groupId: String,
+        excludeClassId: String? = null,
+    ): ScheduledClass? =
+        _classes.firstOrNull { groupId in it.customerGroupIds && it.id != excludeClassId }
+
     fun clearTermReference(termId: String) {
         for (index in _classes.indices) {
             val item = _classes[index]

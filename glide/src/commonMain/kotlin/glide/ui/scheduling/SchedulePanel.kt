@@ -45,7 +45,9 @@ import glide.data.LocationStore
 import glide.data.enrolledHeadcount
 import glide.data.headcountForCustomerGroups
 import glide.data.AddCustomerGroupResult
+import glide.data.isCustomerGroupAvailableForClass
 import glide.data.tryAddCustomerGroup
+import glide.data.validateCustomerGroupsForClass
 import glide.data.PeopleGroupStore
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
@@ -326,6 +328,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                         if (!isCreating && selectedId != null) {
                             Spacer(modifier = Modifier.height(spacing.field))
                             ClassCustomerGroupsSection(
+                                classId = selectedId,
                                 customerGroupIds = formState.customerGroupIds.toList(),
                                 locationId = formState.locationId,
                                 onCustomerGroupIdsChange = { ids ->
@@ -374,6 +377,13 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                 } else {
                                     val existing = selectedId?.let { ScheduledClassStore.findById(it) }
                                     if (existing != null) {
+                                        validateCustomerGroupsForClass(
+                                            stateToSave.customerGroupIds.toList(),
+                                            classId = existing.id,
+                                        )?.let { message ->
+                                            formError = message
+                                            return@GlideButton
+                                        }
                                         val updated = stateToSave.toScheduledClass(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
@@ -519,6 +529,7 @@ private fun ClassListItem(
 
 @Composable
 private fun ClassCustomerGroupsSection(
+    classId: String?,
     customerGroupIds: List<String>,
     locationId: String?,
     onCustomerGroupIdsChange: (List<String>) -> Unit,
@@ -531,9 +542,10 @@ private fun ClassCustomerGroupsSection(
     val location = locationId?.let { LocationStore.findById(it) }
     val headcount = headcountForCustomerGroups(customerGroupIds)
 
-    val searchResults = remember(searchQuery, assignedIds) {
+    val searchResults = remember(searchQuery, assignedIds, classId) {
         PeopleGroupStore.customers
             .filter { it.id !in assignedIds }
+            .filter { group -> isCustomerGroupAvailableForClass(group.id, classId) }
             .filter { group ->
                 val main = group.resolveMainContact()
                 searchQuery.isBlank() ||
@@ -569,20 +581,24 @@ private fun ClassCustomerGroupsSection(
                     currentGroupIds = customerGroupIds,
                     groupId = groupId,
                     locationId = locationId,
+                    classId = classId,
                 )
                 if (result == AddCustomerGroupResult.Success) {
                     onCustomerGroupIdsChange(customerGroupIds + groupId)
                 }
                 enrollmentMessage = result.toUserMessage()
             },
-            noResultsText = "No matching customer groups.",
+            noResultsText = "No available customer groups (each group can only be on one class).",
         )
         enrollmentMessage?.let { message ->
             Spacer(modifier = Modifier.height(spacing.field))
             Text(
                 text = message,
                 style = MaterialTheme.typography.labelSmall,
-                color = if (message.contains("exceeded") || message.contains("already")) {
+                color = if (
+                    message.contains("exceeded", ignoreCase = true) ||
+                    message.contains("already", ignoreCase = true)
+                ) {
                     MaterialTheme.colorScheme.error
                 } else {
                     MaterialTheme.colorScheme.primary
