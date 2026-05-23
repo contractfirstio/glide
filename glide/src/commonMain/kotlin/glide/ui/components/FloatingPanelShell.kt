@@ -55,6 +55,7 @@ fun FloatingPanelShell(
     windowWidthPx: Int,
     windowHeightPx: Int,
     modifier: Modifier = Modifier,
+    initiallyCollapsed: Boolean = false,
     onClose: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
@@ -99,7 +100,7 @@ fun FloatingPanelShell(
     var panelWidthPx by remember(slot) { mutableFloatStateOf(defaultLayout.widthPx) }
     var panelHeightPx by remember(slot) { mutableFloatStateOf(defaultLayout.heightPx) }
     var expandedHeightPx by remember(slot) { mutableFloatStateOf(defaultLayout.heightPx) }
-    var isCollapsed by remember(slot) { mutableStateOf(false) }
+    var isCollapsed by remember(slot) { mutableStateOf(initiallyCollapsed) }
     var userAdjustedLayout by remember(slot) { mutableStateOf(false) }
 
     LaunchedEffect(defaultLayout, userAdjustedLayout) {

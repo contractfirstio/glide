@@ -16,6 +16,7 @@ fun LocationsFloatingPanel(
         slot = SchedulingPanelSlots.LOCATIONS,
         windowWidthPx = windowWidthPx,
         windowHeightPx = windowHeightPx,
+        initiallyCollapsed = true,
     ) {
         LocationsPanel(modifier = Modifier.fillMaxSize())
     }

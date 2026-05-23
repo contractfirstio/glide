@@ -564,6 +564,47 @@ private fun ClassCustomerGroupsSection(
     }
 }
 
+@Composable
+private fun CollapsibleFormSection(
+    title: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    summary: String? = null,
+    content: @Composable () -> Unit,
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onExpandedChange(!expanded) },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (expanded) "▾" else "▸",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                modifier = Modifier.padding(end = 4.dp),
+            )
+            GlideFieldLabel(title)
+            if (!expanded && summary != null) {
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+        }
+        if (expanded) {
+            Spacer(modifier = Modifier.height(2.dp))
+            content()
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ClassForm(
@@ -575,6 +616,17 @@ private fun ClassForm(
 ) {
     var dayExpanded by remember { mutableStateOf(false) }
     var locationExpanded by remember { mutableStateOf(false) }
+    var termsExpanded by remember { mutableStateOf(false) }
+    var locationSectionExpanded by remember { mutableStateOf(false) }
+
+    val termsSummary = when {
+        state.termIds.isEmpty() -> "None selected"
+        state.termIds.size == 1 -> terms.find { it.id in state.termIds }?.name ?: "1 term"
+        else -> "${state.termIds.size} terms"
+    }
+    val locationSummary = state.locationId?.let { id ->
+        locations.find { it.id == id }?.name
+    } ?: "None"
 
     GlideOutlinedField(
         value = state.name,
@@ -584,9 +636,12 @@ private fun ClassForm(
     )
     Spacer(modifier = Modifier.height(spacing.field))
 
-    Column {
-        GlideFieldLabel("Terms")
-        Spacer(modifier = Modifier.height(2.dp))
+    CollapsibleFormSection(
+        title = "Terms",
+        expanded = termsExpanded,
+        onExpandedChange = { termsExpanded = it },
+        summary = termsSummary,
+    ) {
         if (terms.isEmpty()) {
             Text(
                 text = "Create terms in the Terms panel, then select which terms this class runs in.",
@@ -650,9 +705,12 @@ private fun ClassForm(
 
     Spacer(modifier = Modifier.height(spacing.field))
 
-    Column {
-        GlideFieldLabel("Location")
-        Spacer(modifier = Modifier.height(2.dp))
+    CollapsibleFormSection(
+        title = "Location",
+        expanded = locationSectionExpanded,
+        onExpandedChange = { locationSectionExpanded = it },
+        summary = locationSummary,
+    ) {
         if (locations.isEmpty()) {
             Text(
                 text = "Create locations in the Locations panel, then assign a room to this class.",
@@ -660,15 +718,12 @@ private fun ClassForm(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            val selectedLocationLabel = state.locationId?.let { id ->
-                locations.find { it.id == id }?.name
-            } ?: "None"
             ExposedDropdownMenuBox(
                 expanded = locationExpanded,
                 onExpandedChange = { locationExpanded = it },
             ) {
                 OutlinedTextField(
-                    value = selectedLocationLabel,
+                    value = locationSummary,
                     onValueChange = {},
                     readOnly = true,
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = locationExpanded) },
