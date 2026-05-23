@@ -20,12 +20,13 @@ object PackClassScheduleStore {
 
     fun set(peopleGroupId: String, scheduledClassId: String, sessionDates: List<String>) {
         remove(peopleGroupId, scheduledClassId)
-        if (sessionDates.isEmpty()) return
+        val futureDates = filterFutureSessionDates(sessionDates).distinct().sorted()
+        if (futureDates.isEmpty()) return
         _schedules.add(
             PackClassSchedule(
                 peopleGroupId = peopleGroupId,
                 scheduledClassId = scheduledClassId,
-                sessionDates = sessionDates.distinct().sorted(),
+                sessionDates = futureDates,
             ),
         )
     }
@@ -47,15 +48,17 @@ object PackClassScheduleStore {
         scheduledClassId: String,
         sessionDate: LocalDate,
     ): Boolean {
+        if (!sessionDate.isOnOrAfterPackScheduleStart()) return false
         val dates = sessionDatesFor(peopleGroupId, scheduledClassId) ?: return true
         return sessionDate.toString() in dates
     }
 
     fun scheduledSessionCount(peopleGroupId: String, scheduledClassId: String): Int? =
-        sessionDatesFor(peopleGroupId, scheduledClassId)?.size
+        sessionDatesFor(peopleGroupId, scheduledClassId)?.let { filterFutureSessionDates(it).size }
 
     fun formatSessionDatesLabel(peopleGroupId: String, scheduledClassId: String): String? {
-        val dates = sessionDatesFor(peopleGroupId, scheduledClassId) ?: return null
+        val dates = sessionDatesFor(peopleGroupId, scheduledClassId)?.let { filterFutureSessionDates(it) }
+            ?: return null
         if (dates.isEmpty()) return null
         return dates.joinToString(", ") { iso ->
             parseIsoLocalDate(iso)?.let { formatScheduleDateShort(it) } ?: iso

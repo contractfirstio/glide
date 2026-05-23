@@ -1,11 +1,13 @@
 package glide.data
 
+import glide.model.AcademicTerm
 import glide.model.PlanKind
 import glide.model.PlanSnapshot
 import glide.model.ScheduledClass
-import glide.model.containsDate
 import glide.model.dateRange
+import glide.model.isSingleDay
 import glide.model.occursOn
+import glide.model.parseIsoLocalDate
 import java.time.LocalDate
 
 data class PackScheduleCheck(
@@ -20,18 +22,30 @@ fun requiredClassSessionsForPack(snapshot: PlanSnapshot): Int = when (snapshot.k
     else -> snapshot.lessonCount.coerceAtLeast(1)
 }
 
+/** Earliest date a pack may be scheduled on a class (today and later). */
+fun packScheduleStartDate(today: LocalDate = LocalDate.now()): LocalDate = today
+
+fun LocalDate.isOnOrAfterPackScheduleStart(startFrom: LocalDate = packScheduleStartDate()): Boolean =
+    !isBefore(startFrom)
+
+fun filterFutureSessionDates(
+    sessionDates: List<String>,
+    startFrom: LocalDate = packScheduleStartDate(),
+): List<String> =
+    sessionDates.filter { iso -> parseIsoLocalDate(iso)?.isOnOrAfterPackScheduleStart(startFrom) == true }
+
 /** All future class occurrence dates across the class's linked terms (from today). */
 fun computeAllClassSessionDates(
     scheduledClass: ScheduledClass,
-    startFrom: LocalDate = LocalDate.now(),
+    startFrom: LocalDate = packScheduleStartDate(),
 ): List<String> {
     val terms = scheduledClass.termIds.mapNotNull { TermStore.findById(it) }.sortedBy { it.startDate }
     val dates = mutableListOf<LocalDate>()
     for (term in terms) {
         val range = term.dateRange() ?: continue
-        var date = range.start
+        var date = if (range.start.isBefore(startFrom)) startFrom else range.start
         while (!date.isAfter(range.endInclusive)) {
-            if (!date.isBefore(startFrom) && scheduledClass.occursOn(date)) {
+            if (scheduledClass.occursOn(date)) {
                 dates.add(date)
             }
             date = date.plusDays(1)
@@ -51,10 +65,13 @@ fun packScheduleCheckForClass(peopleGroupId: String, scheduledClass: ScheduledCl
 fun computeClassSessionDates(
     scheduledClass: ScheduledClass,
     maxSessions: Int,
-    startFrom: LocalDate = LocalDate.now(),
+    startFrom: LocalDate = packScheduleStartDate(),
 ): List<String> {
     if (maxSessions <= 0) return emptyList()
-    return computeAllClassSessionDates(scheduledClass, startFrom).take(maxSessions)
+    return filterFutureSessionDates(
+        computeAllClassSessionDates(scheduledClass, startFrom).take(maxSessions),
+        startFrom,
+    )
 }
 
 fun sessionLimitForPeopleGroup(peopleGroupId: String): Int? =
@@ -129,12 +146,48 @@ fun validatePackSchedulesForClass(
     return null
 }
 
+fun scheduledClassHasRollingCustomerGroup(scheduledClass: ScheduledClass): Boolean =
+    scheduledClass.customerGroupIds.any { groupId ->
+        PackEnrollmentStore.forPeopleGroup(groupId)?.planSnapshot?.rolling == true
+    }
+
+/** Whether [newTerm] should be linked to [scheduledClass] when it is created (extends calendar forward). */
+fun shouldAutoLinkNewTermToClass(scheduledClass: ScheduledClass, newTerm: AcademicTerm): Boolean {
+    if (newTerm.id in scheduledClass.termIds) return false
+    if (scheduledClass.isSingleDay()) return false
+    if (!scheduledClassHasRollingCustomerGroup(scheduledClass)) return false
+
+    val newRange = newTerm.dateRange() ?: return false
+    if (newRange.endInclusive.isBefore(packScheduleStartDate())) return false
+
+    if (scheduledClass.termIds.isEmpty()) return true
+
+    val linkedTerms = scheduledClass.termIds.mapNotNull { TermStore.findById(it) }
+    if (linkedTerms.isEmpty()) return true
+
+    val latestEnd = linkedTerms.mapNotNull { it.dateRange()?.endInclusive }.maxOrNull() ?: return true
+    return !newRange.start.isBefore(latestEnd)
+}
+
+/** Adds [newTerm] to recurring classes with rolling groups and refreshes their pack schedules. */
+fun extendClassesWithRollingGroupsForNewTerm(newTerm: AcademicTerm) {
+    ScheduledClassStore.classes.toList().forEach { scheduledClass ->
+        if (!shouldAutoLinkNewTermToClass(scheduledClass, newTerm)) return@forEach
+        val updated = scheduledClass.copy(termIds = scheduledClass.termIds + newTerm.id)
+        ScheduledClassStore.update(updated)
+        updated.customerGroupIds
+            .filter { groupId -> PackEnrollmentStore.forPeopleGroup(groupId)?.planSnapshot?.rolling == true }
+            .forEach { groupId -> assignPackClassSchedule(groupId, updated) }
+    }
+}
+
 fun isPeopleGroupOnClassSession(
     peopleGroupId: String,
     scheduledClass: ScheduledClass,
     sessionDate: LocalDate,
 ): Boolean {
     if (peopleGroupId !in scheduledClass.customerGroupIds) return false
+    if (!sessionDate.isOnOrAfterPackScheduleStart()) return false
     if (sessionLimitForPeopleGroup(peopleGroupId) != null) {
         val check = packScheduleCheckForClass(peopleGroupId, scheduledClass)
         if (check != null && !check.canFullySchedule) return false

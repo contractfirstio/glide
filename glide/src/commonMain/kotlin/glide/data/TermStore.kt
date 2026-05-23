@@ -14,6 +14,7 @@ object TermStore {
     fun create(term: AcademicTerm): Boolean {
         if (overlappingTerm(term, excludeTermId = null) != null) return false
         _terms.add(term)
+        extendClassesWithRollingGroupsForNewTerm(term)
         return true
     }
 
