@@ -276,6 +276,17 @@ private fun PeopleGroupPanel(
         }
     }
 
+    val pendingCustomerGroupId = PeopleGroupNavigation.pendingCustomerGroupId
+    LaunchedEffect(pendingCustomerGroupId, ui.type) {
+        if (ui.type == PeopleGroupType.CUSTOMER && pendingCustomerGroupId != null) {
+            PeopleGroupStore.findById(pendingCustomerGroupId)?.let { group ->
+                loadIntoForm(group)
+                BillingPanelState.onCustomerGroupSelected(group.id)
+            }
+            PeopleGroupNavigation.clearPendingCustomerGroup()
+        }
+    }
+
     LaunchedEffect(BillingPanelState.peopleGroupId) {
         if (ui.type != PeopleGroupType.CUSTOMER) return@LaunchedEffect
         when (BillingPanelState.peopleGroupId) {

@@ -23,6 +23,8 @@ import glide.data.AppViewState
 import glide.data.RollingPackBillingService
 import glide.ui.components.AppChrome
 import glide.ui.components.FloatingPanelsHost
+import glide.ui.billing.PendingBillIssuanceAlertBanner
+import glide.ui.billing.rememberPendingBillsToIssue
 import glide.ui.scheduling.PendingAttendanceAlertBanner
 import glide.ui.scheduling.rememberPendingAttendanceSessions
 import glide.ui.theme.GlideCanvasBackground
@@ -34,6 +36,7 @@ fun App() {
         val focusRequester = remember { FocusRequester() }
         val viewMode = AppViewState.mode
         val pendingAttendance = rememberPendingAttendanceSessions()
+        val pendingBillsToIssue = rememberPendingBillsToIssue()
         LaunchedEffect(Unit) {
             focusRequester.requestFocus()
             RollingPackBillingService.syncAllActiveRollingPackBilling()
@@ -67,6 +70,7 @@ fun App() {
                 if (viewMode != AppViewMode.SCHEDULING) {
                     PendingAttendanceAlertBanner(pending = pendingAttendance)
                 }
+                PendingBillIssuanceAlertBanner(pending = pendingBillsToIssue)
                 FloatingPanelsHost(modifier = Modifier.weight(1f))
             }
         }

@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 /** Cross-panel navigation — e.g. open a lead after cloning from a customer group. */
 object PeopleGroupNavigation {
     var pendingLeadId by mutableStateOf<String?>(null)
+    var pendingCustomerGroupId by mutableStateOf<String?>(null)
 
     fun openLead(leadId: String) {
         pendingLeadId = leadId
@@ -14,5 +15,13 @@ object PeopleGroupNavigation {
 
     fun clearPendingLead() {
         pendingLeadId = null
+    }
+
+    fun openCustomer(groupId: String) {
+        pendingCustomerGroupId = groupId
+    }
+
+    fun clearPendingCustomerGroup() {
+        pendingCustomerGroupId = null
     }
 }
