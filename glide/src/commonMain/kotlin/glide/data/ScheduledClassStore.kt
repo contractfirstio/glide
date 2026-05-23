@@ -22,6 +22,7 @@ object ScheduledClassStore {
 
     fun delete(id: String) {
         _classes.removeAll { it.id == id }
+        ClassGroupAssignmentStore.clearForClass(id)
     }
 
     fun findById(id: String): ScheduledClass? = _classes.find { it.id == id }

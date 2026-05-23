@@ -41,9 +41,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import glide.data.ClassGroupAssignmentStore
 import glide.data.LocationStore
+import glide.data.PeopleGroupStore
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
+import glide.data.memberCount
+import glide.data.resolveMainContact
+import glide.data.toUserMessage
 import glide.model.ClassLocation
 import glide.model.DayOfWeek
 import glide.model.ScheduledClass
@@ -52,6 +57,10 @@ import glide.model.isValidTime24h
 import glide.model.scheduleLine
 import glide.ui.layout.GlideLayout
 import glide.ui.leads.formatIsoDateForDisplay
+import glide.ui.peoplegroup.EntitySearchPicker
+import glide.ui.peoplegroup.SearchResultItem
+import glide.ui.peoplegroup.matchesEntitySearch
+import glide.ui.shared.formatPersonLabel
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideFieldLabel
@@ -265,6 +274,14 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             spacing = spacing,
                         )
 
+                        if (!isCreating && selectedId != null) {
+                            Spacer(modifier = Modifier.height(spacing.field))
+                            ClassCustomerGroupsSection(
+                                classId = selectedId!!,
+                                spacing = spacing,
+                            )
+                        }
+
                         formError?.let { error ->
                             Spacer(modifier = Modifier.height(spacing.field))
                             Text(
@@ -378,6 +395,8 @@ private fun ClassListItem(
     val locationLine = location?.let { loc ->
         listOfNotNull(loc.name, loc.maxCapacity?.let { "Max $it" }).joinToString(" · ")
     }
+    val groupCount = ClassGroupAssignmentStore.groupsForClass(scheduledClass.id).size
+    val enrolledCount = ClassGroupAssignmentStore.headcountForClass(scheduledClass.id)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -420,6 +439,127 @@ private fun ClassListItem(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+        if (groupCount > 0) {
+            val capacitySuffix = location?.maxCapacity?.let { max ->
+                " · $enrolledCount/$max"
+            } ?: if (enrolledCount > 0) " · $enrolledCount enrolled" else ""
+            Text(
+                text = "$groupCount group${if (groupCount == 1) "" else "s"}$capacitySuffix",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ClassCustomerGroupsSection(
+    classId: String,
+    spacing: GlideLayout.Spacing,
+) {
+    var searchQuery by remember(classId) { mutableStateOf("") }
+    var enrollmentMessage by remember(classId) { mutableStateOf<String?>(null) }
+
+    val assignedIds = ClassGroupAssignmentStore.groupsForClass(classId)
+    val scheduledClass = ScheduledClassStore.findById(classId)
+    val location = scheduledClass?.locationId?.let { LocationStore.findById(it) }
+    val headcount = ClassGroupAssignmentStore.headcountForClass(classId)
+    val assignmentRevision = ClassGroupAssignmentStore.assignments.size
+
+    val searchResults = remember(searchQuery, assignedIds, assignmentRevision) {
+        PeopleGroupStore.customers
+            .filter { it.id !in assignedIds }
+            .filter { group ->
+                val main = group.resolveMainContact()
+                searchQuery.isBlank() ||
+                    main.name.matchesEntitySearch(searchQuery) ||
+                    main.email.matchesEntitySearch(searchQuery)
+            }
+            .map { group ->
+                val main = group.resolveMainContact()
+                SearchResultItem(
+                    id = group.id,
+                    primaryLabel = formatPersonLabel(main.name, main.dateOfBirth),
+                    secondaryLabel = "${group.memberCount()} people",
+                )
+            }
+    }
+
+    Column {
+        GlideFieldLabel("Customer groups")
+        Spacer(modifier = Modifier.height(2.dp))
+        ClassCapacityGraphic(
+            occupiedCount = headcount,
+            maxCapacity = location?.maxCapacity,
+        )
+        Spacer(modifier = Modifier.height(spacing.section))
+        EntitySearchPicker(
+            label = "Add customer group",
+            placeholder = "Search by name or email…",
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            results = searchResults,
+            onSelect = { groupId ->
+                val result = ClassGroupAssignmentStore.assign(classId, groupId)
+                enrollmentMessage = result.toUserMessage()
+            },
+            noResultsText = "No matching customer groups.",
+        )
+        enrollmentMessage?.let { message ->
+            Spacer(modifier = Modifier.height(spacing.field))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (message.contains("exceeded") || message.contains("already")) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
+            )
+        }
+        if (assignedIds.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(spacing.section))
+            Text(
+                text = "On this class",
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Spacer(modifier = Modifier.height(spacing.field))
+            assignedIds.forEach { groupId ->
+                val group = PeopleGroupStore.findById(groupId) ?: return@forEach
+                val main = group.resolveMainContact()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = formatPersonLabel(main.name, main.dateOfBirth),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "${group.memberCount()} people",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    GlideTextButton(
+                        onClick = {
+                            ClassGroupAssignmentStore.unassign(classId, groupId)
+                            enrollmentMessage = "Customer group removed from class."
+                        },
+                    ) {
+                        Text("Remove", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
         }
     }
 }

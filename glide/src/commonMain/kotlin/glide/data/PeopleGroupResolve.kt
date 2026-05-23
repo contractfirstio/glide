@@ -31,6 +31,12 @@ fun PeopleGroup.resolveRelatedPeople(): List<RelatedPerson> =
 fun PeopleGroup.hasResolvableMainContact(): Boolean =
     mainContactId != null || contactName.isNotBlank()
 
+/** People enrolled in a group: main contact plus related people. */
+fun PeopleGroup.memberCount(): Int {
+    val main = if (hasResolvableMainContact()) 1 else 0
+    return main + relatedPersonIds.size
+}
+
 private fun Contact.toResolved() = ResolvedMainContact(
     name = name,
     dateOfBirth = dateOfBirth,
