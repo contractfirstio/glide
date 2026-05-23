@@ -17,6 +17,7 @@ object RollingPackBillingService {
     }
 
     fun ensureRenewalBillIfPackEnding(enrollment: PackEnrollment): Boolean {
+        if (enrollment.status != PackEnrollmentStatus.ACTIVE) return false
         if (!enrollment.planSnapshot.rolling) return false
         val packSize = enrollment.planSnapshot.lessonCount.coerceAtLeast(1)
         val elapsed = countScheduledPackSessionsInPeriod(
@@ -31,6 +32,12 @@ object RollingPackBillingService {
     }
 
     fun syncRollingPackBilling(peopleGroupId: String) {
+        val enrollment = PackEnrollmentStore.forPeopleGroup(peopleGroupId) ?: return
+        if (enrollment.status == PackEnrollmentStatus.CANCELLING) {
+            RollingPackCancellationService.tryCompleteCancellingEnrollment(enrollment.id)
+            return
+        }
+        if (enrollment.status != PackEnrollmentStatus.ACTIVE) return
         ensureRenewalBillIfPackEnding(peopleGroupId)
     }
 

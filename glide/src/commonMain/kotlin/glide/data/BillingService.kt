@@ -1,5 +1,6 @@
 package glide.data
 
+import glide.model.PackEnrollmentStatus
 import glide.model.PlanSnapshot
 import glide.model.PeopleGroupType
 
@@ -22,6 +23,7 @@ object BillingService {
 
     fun addRenewalBill(peopleGroupId: String): Boolean {
         val enrollment = PackEnrollmentStore.forPeopleGroup(peopleGroupId) ?: return false
+        if (enrollment.status != PackEnrollmentStatus.ACTIVE) return false
         BillStore.createRenewalBill(enrollment)
         return true
     }

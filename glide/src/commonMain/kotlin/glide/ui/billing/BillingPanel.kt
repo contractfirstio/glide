@@ -42,7 +42,9 @@ import glide.data.openPendingAttendanceSession
 import glide.ui.scheduling.rememberPendingAttendanceSessions
 import glide.data.PackEnrollmentStore
 import glide.data.RollingPackBillingService
+import glide.data.RollingPackCancellationService
 import glide.data.countScheduledPackSessionsInPeriod
+import glide.model.PackEnrollmentStatus
 import glide.data.PaymentStore
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
@@ -88,7 +90,8 @@ fun BillingPanel(
     modifier: Modifier = Modifier,
 ) {
     val group = PeopleGroupStore.findById(peopleGroupId)
-    val enrollment = PackEnrollmentStore.forPeopleGroup(peopleGroupId)
+    val enrollment = PackEnrollmentStore.displayForPeopleGroup(peopleGroupId)
+    val ongoingEnrollment = PackEnrollmentStore.forPeopleGroup(peopleGroupId)
     val bills = enrollment?.let { e ->
         BillStore.forEnrollment(e.id)
     } ?: emptyList()
@@ -98,6 +101,7 @@ fun BillingPanel(
     var showPaymentDialog by remember(peopleGroupId) { mutableStateOf(false) }
     var paymentError by remember(peopleGroupId) { mutableStateOf<String?>(null) }
     var billingActionMessage by remember(peopleGroupId) { mutableStateOf<String?>(null) }
+    var showCancelPackDialog by remember(peopleGroupId) { mutableStateOf(false) }
 
     val pendingAttendance = rememberPendingAttendanceSessions()
     val billingBlockedByAttendance = pendingAttendance.isNotEmpty()
@@ -105,8 +109,8 @@ fun BillingPanel(
     val spacing = GlideLayout.comfortable
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
 
-    LaunchedEffect(enrollment?.id) {
-        enrollment?.let { RollingPackBillingService.syncRollingPackBilling(it.peopleGroupId) }
+    LaunchedEffect(ongoingEnrollment?.id, ongoingEnrollment?.status) {
+        ongoingEnrollment?.let { RollingPackBillingService.syncRollingPackBilling(it.peopleGroupId) }
     }
 
     Column(
@@ -151,6 +155,20 @@ fun BillingPanel(
             role = FormPanelSectionRole.Primary,
         ) {
             EnrollmentSummary(enrollment = enrollment, dateFormat = dateFormat, showBackground = false)
+
+            if (
+                ongoingEnrollment != null &&
+                enrollment.planSnapshot.rolling &&
+                enrollment.status == PackEnrollmentStatus.ACTIVE
+            ) {
+                Spacer(modifier = Modifier.height(spacing.field))
+                GlideOutlinedButton(
+                    onClick = { showCancelPackDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Cancel pack", color = MaterialTheme.colorScheme.error)
+                }
+            }
 
             if (billingBlockedByAttendance) {
                 Spacer(modifier = Modifier.height(spacing.field))
@@ -205,9 +223,18 @@ fun BillingPanel(
                 }
                 GlideOutlinedButton(
                     onClick = {
-                        BillingService.addRenewalBill(peopleGroupId)
+                        if (!BillingService.addRenewalBill(peopleGroupId)) {
+                            billingActionMessage = when (ongoingEnrollment?.status) {
+                                PackEnrollmentStatus.CANCELLING ->
+                                    "Renewal is stopped while this pack finishes."
+                                else -> "Could not add a renewal bill."
+                            }
+                        } else {
+                            billingActionMessage = null
+                        }
                         selectedBillId = null
                     },
+                    enabled = ongoingEnrollment?.status == PackEnrollmentStatus.ACTIVE,
                 ) {
                     Text("Add bill")
                 }
@@ -324,6 +351,21 @@ fun BillingPanel(
             )
         }
     }
+
+    if (showCancelPackDialog && enrollment != null) {
+        CancelRollingPackDialog(
+            enrollment = enrollment,
+            onDismiss = { showCancelPackDialog = false },
+            onConfirm = {
+                if (RollingPackCancellationService.cancelRenewal(enrollment.id)) {
+                    billingActionMessage = null
+                    showCancelPackDialog = false
+                } else {
+                    billingActionMessage = "Could not cancel pack renewal."
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -401,10 +443,21 @@ private fun EnrollmentSummary(
                 periodStartedAtMillis = enrollment.packPeriodStartedAtMillis,
             )
             val remaining = (packSize - scheduled).coerceAtLeast(0)
+            val billingLine = when (enrollment.status) {
+                PackEnrollmentStatus.CANCELLING ->
+                    "Finishing current pack: $scheduled of $packSize scheduled classes · renewal stopped"
+                PackEnrollmentStatus.CANCELLED ->
+                    "Pack completed: $scheduled of $packSize scheduled classes in last period"
+                else ->
+                    "Pack billing: $scheduled of $packSize scheduled classes · $remaining until renewal"
+            }
             Text(
-                text = "Pack billing: $scheduled of $packSize scheduled classes · $remaining until renewal",
+                text = billingLine,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = when (enrollment.status) {
+                    PackEnrollmentStatus.CANCELLING -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
         }
     }
@@ -588,6 +641,57 @@ private fun BillDetailActions(
             }
         }
     }
+}
+
+@Composable
+private fun CancelRollingPackDialog(
+    enrollment: PackEnrollment,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val snapshot = enrollment.planSnapshot
+    val packSize = snapshot.lessonCount.coerceAtLeast(1)
+    val scheduled = countScheduledPackSessionsInPeriod(
+        peopleGroupId = enrollment.peopleGroupId,
+        periodStartedAtMillis = enrollment.packPeriodStartedAtMillis,
+    )
+    val remaining = (packSize - scheduled).coerceAtLeast(0)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Cancel pack") },
+        text = {
+            Column {
+                Text(
+                    text = "${snapshot.planName} will not renew.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = buildString {
+                        append("This customer will finish their current pack ")
+                        append("($scheduled of $packSize classes scheduled")
+                        if (remaining > 0) {
+                            append(", $remaining more to schedule in this period")
+                        }
+                        append("). Any scheduled renewal bill will be voided.")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            GlideTextButton(onClick = onConfirm) {
+                Text("Cancel pack", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            GlideTextButton(onClick = onDismiss) {
+                Text("Keep pack")
+            }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -124,6 +124,16 @@ object BillStore {
     fun hasScheduledRenewalBill(enrollmentId: String): Boolean =
         forEnrollment(enrollmentId).any { it.status == BillStatus.SCHEDULED && it.isRenewalBill() }
 
+    fun voidScheduledRenewalBills(enrollmentId: String): Int {
+        var voided = 0
+        forEnrollment(enrollmentId)
+            .filter { it.status == BillStatus.SCHEDULED && it.isRenewalBill() }
+            .forEach { bill ->
+                if (voidBill(bill.id)) voided++
+            }
+        return voided
+    }
+
     fun voidBill(billId: String): Boolean {
         val index = _bills.indexOfFirst { it.id == billId }
         if (index < 0) return false
