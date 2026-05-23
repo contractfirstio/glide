@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,8 +41,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import glide.data.BillingPanelState
+import glide.data.ContactStore
+import glide.data.ContactsPanelState
+import glide.data.PeopleGroupStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
+import glide.data.RelatedPanelState
+import glide.data.RelatedPersonStore
+import glide.data.resolveMainContact
 import glide.model.Plan
 import glide.model.PlanKind
 import glide.model.formatMoney
@@ -114,9 +122,24 @@ fun PlansPanel(modifier: Modifier = Modifier) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
-    val plans = PlanStore.plans
-    val planFilterId = PlansPanelState.selectedPlanId
-    val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+    val customerGroupId = BillingPanelState.peopleGroupId
+    val contactFilterId = ContactsPanelState.selectedContactId
+    val relatedFilterId = RelatedPanelState.selectedRelatedPersonId
+    val outboundPlanFilterId = PlansPanelState.selectedPlanId
+    val plans = PlanStore.forPlansPanel(customerGroupId, contactFilterId, relatedFilterId)
+    val outboundPlanFilterLabel = outboundPlanFilterId?.let {
+        PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    }
+    val customerGroupLabel = customerGroupId?.let { id ->
+        PeopleGroupStore.findById(id)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+    }
+    val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+    val relatedFilterLabel = relatedFilterId?.let {
+        RelatedPersonStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    }
+    val hasInboundFilter = customerGroupId != null ||
+        contactFilterId != null ||
+        relatedFilterId != null
 
     fun clearLocalSelection() {
         selectedId = null
@@ -152,6 +175,18 @@ fun PlansPanel(modifier: Modifier = Modifier) {
         formError = null
     }
 
+    LaunchedEffect(customerGroupId, contactFilterId, relatedFilterId) {
+        if (hasInboundFilter && selectedId != null) {
+            clearLocalSelection()
+        }
+    }
+
+    LaunchedEffect(plans, selectedId) {
+        if (selectedId != null && plans.none { it.id == selectedId }) {
+            clearSelection()
+        }
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val compact = maxWidth < GlideLayout.CompactWidthBreakpoint
         val spacing = if (compact) GlideLayout.compact else GlideLayout.comfortable
@@ -169,11 +204,24 @@ fun PlansPanel(modifier: Modifier = Modifier) {
         ) {
             if (!compact) {
                 Text(
-                    text = if (planFilterId != null) {
-                        val label = planFilterLabel ?: "this plan"
-                        "Filtering customer groups, contacts, and related people for $label. Use Clear filter to reset."
-                    } else {
-                        "Define plan types and packs offered to customers."
+                    text = when {
+                        customerGroupId != null -> {
+                            val label = customerGroupLabel ?: "this customer group"
+                            "Showing plans for $label. Use Show all in Customers to reset."
+                        }
+                        contactFilterId != null -> {
+                            val label = contactFilterLabel ?: "this contact"
+                            "Showing plans for $label. Use Clear filter in Contacts to reset."
+                        }
+                        relatedFilterId != null -> {
+                            val label = relatedFilterLabel ?: "this related person"
+                            "Showing plans for $label. Use Clear filter in Related to reset."
+                        }
+                        outboundPlanFilterId != null -> {
+                            val label = outboundPlanFilterLabel ?: "this plan"
+                            "Filtering customer groups, contacts, and related people for $label. Use Clear filter to reset."
+                        }
+                        else -> "Define plan types and packs offered to customers."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -193,7 +241,22 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
-                            if (planFilterId != null) {
+                            if (relatedFilterId != null) {
+                                GlideTextButton(onClick = { RelatedPanelState.clearRelatedPersonFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            if (contactFilterId != null) {
+                                GlideTextButton(onClick = { ContactsPanelState.clearContactFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            if (customerGroupId != null) {
+                                GlideTextButton(onClick = { BillingPanelState.onCustomerGroupCleared() }) {
+                                    Text("Show all")
+                                }
+                            }
+                            if (outboundPlanFilterId != null) {
                                 GlideTextButton(onClick = { PlansPanelState.clearPlanFilter() }) {
                                     Text("Clear filter")
                                 }
@@ -223,7 +286,15 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "No plans yet.",
+                                text = when {
+                                    customerGroupId != null ->
+                                        "No plan on this customer group."
+                                    contactFilterId != null ->
+                                        "No plans linked to this contact."
+                                    relatedFilterId != null ->
+                                        "No plans linked to this related person."
+                                    else -> "No plans yet."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

@@ -108,6 +108,7 @@ private val LeadsPanelUi = PeopleGroupPanelUi(
     noSelectionMessage = "Select a lead to view or edit, or create a new one.",
     deleteConfirmTitle = "Delete lead?",
     deleteConfirmMessage = "This lead will be removed permanently.",
+    showClearSelection = true,
 )
 
 private val CustomersPanelUi = PeopleGroupPanelUi(
@@ -424,7 +425,7 @@ private fun PeopleGroupPanel(
                                     compact = compact,
                                     showPipelineStatus = ui.showPipelineStatus,
                                     onClick = {
-                                        if (ui.type == PeopleGroupType.CUSTOMER && group.id == selectedId) {
+                                        if (group.id == selectedId) {
                                             clearSelection()
                                         } else {
                                             loadIntoForm(group)
