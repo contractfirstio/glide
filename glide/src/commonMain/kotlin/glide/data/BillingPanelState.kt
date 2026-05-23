@@ -21,6 +21,7 @@ object BillingPanelState {
             clear()
             return
         }
+        ContactsPanelState.clearContactFilter()
         peopleGroupId = groupId
         visible = true
     }

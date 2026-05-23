@@ -13,6 +13,7 @@ object ContactsPanelState {
 
     fun onContactSelected(contactId: String) {
         if (ContactStore.findById(contactId) != null) {
+            BillingPanelState.onCustomerGroupCleared()
             selectedContactId = contactId
         }
     }

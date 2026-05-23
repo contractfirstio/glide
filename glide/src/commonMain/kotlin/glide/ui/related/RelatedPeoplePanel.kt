@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.BillingPanelState
+import glide.data.ContactsPanelState
 import glide.data.PeopleGroupStore
 import glide.data.RelatedPersonStore
 import glide.data.resolveMainContact
@@ -77,6 +78,7 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
     var formError by remember { mutableStateOf<String?>(null) }
 
     val customerGroupId = BillingPanelState.peopleGroupId
+    val contactFilterId = ContactsPanelState.selectedContactId
     val people = RelatedPersonStore.forRelatedPanel(customerGroupId)
     val customerGroupLabel = customerGroupId?.let { id ->
         PeopleGroupStore.findById(id)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
@@ -94,7 +96,18 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
         }
     }
 
+    LaunchedEffect(customerGroupId, contactFilterId) {
+        if (customerGroupId == null && contactFilterId != null && selectedId != null) {
+            clearSelection()
+        }
+        if (customerGroupId != null && selectedId != null) {
+            clearSelection()
+        }
+    }
+
     fun loadIntoForm(person: RelatedPerson) {
+        BillingPanelState.onCustomerGroupCleared()
+        ContactsPanelState.clearContactFilter()
         selectedId = person.id
         formState = RelatedPersonFormState(
             name = person.name,

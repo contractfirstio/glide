@@ -249,8 +249,18 @@ private fun PeopleGroupPanel(
     }
 
     LaunchedEffect(BillingPanelState.peopleGroupId) {
+        if (ui.type != PeopleGroupType.CUSTOMER) return@LaunchedEffect
+        when (BillingPanelState.peopleGroupId) {
+            null -> if (selectedId != null) clearLocalSelection()
+            else -> if (selectedId != null && selectedId != BillingPanelState.peopleGroupId) {
+                clearLocalSelection()
+            }
+        }
+    }
+
+    LaunchedEffect(contactFilterId) {
         if (ui.type == PeopleGroupType.CUSTOMER &&
-            BillingPanelState.peopleGroupId == null &&
+            contactFilterId != null &&
             selectedId != null
         ) {
             clearLocalSelection()

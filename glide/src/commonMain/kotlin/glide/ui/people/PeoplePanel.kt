@@ -86,11 +86,21 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
     }
     val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
 
-    fun clearSelection() {
+    fun clearLocalSelection() {
         selectedId = null
         formState = ContactFormState()
         formError = null
+    }
+
+    fun clearSelection() {
+        clearLocalSelection()
         ContactsPanelState.clearContactFilter()
+    }
+
+    LaunchedEffect(customerGroupId) {
+        if (customerGroupId != null && selectedId != null) {
+            clearLocalSelection()
+        }
     }
 
     LaunchedEffect(contacts, selectedId) {
