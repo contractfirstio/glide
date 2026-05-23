@@ -48,7 +48,7 @@ object PackClassScheduleStore {
         scheduledClassId: String,
         sessionDate: LocalDate,
     ): Boolean {
-        if (!sessionDate.isOnOrAfterPackScheduleStart()) return false
+        if (sessionDate.isBefore(peopleGroupPackPeriodStartDate(peopleGroupId))) return false
         val dates = sessionDatesFor(peopleGroupId, scheduledClassId) ?: return true
         return sessionDate.toString() in dates
     }

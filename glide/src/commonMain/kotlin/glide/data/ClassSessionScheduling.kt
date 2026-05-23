@@ -8,7 +8,9 @@ import glide.model.dateRange
 import glide.model.isSingleDay
 import glide.model.occursOn
 import glide.model.parseIsoLocalDate
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 
 data class PackScheduleCheck(
     val requiredSessions: Int,
@@ -24,6 +26,15 @@ fun requiredClassSessionsForPack(snapshot: PlanSnapshot): Int = when (snapshot.k
 
 /** Earliest date a pack may be scheduled on a class (today and later). */
 fun packScheduleStartDate(today: LocalDate = LocalDate.now()): LocalDate = today
+
+/** Earliest session date for this sold pack (plan start / enrollment), including past dates. */
+fun peopleGroupPackPeriodStartDate(peopleGroupId: String, today: LocalDate = LocalDate.now()): LocalDate {
+    PeopleGroupStore.findById(peopleGroupId)?.planStartDate?.let { parseIsoLocalDate(it) }?.let { return it }
+    PackEnrollmentStore.forPeopleGroup(peopleGroupId)?.packPeriodStartedAtMillis
+        ?.let { localDateFromEpochMillis(it) }
+        ?.let { return it }
+    return today
+}
 
 fun LocalDate.isOnOrAfterPackScheduleStart(startFrom: LocalDate = packScheduleStartDate()): Boolean =
     !isBefore(startFrom)
@@ -242,7 +253,7 @@ fun isPeopleGroupOnClassSession(
     sessionDate: LocalDate,
 ): Boolean {
     if (peopleGroupId !in scheduledClass.customerGroupIds) return false
-    if (!sessionDate.isOnOrAfterPackScheduleStart()) return false
+    if (sessionDate.isBefore(peopleGroupPackPeriodStartDate(peopleGroupId))) return false
     if (sessionLimitForPeopleGroup(peopleGroupId) != null) {
         val check = packScheduleCheckForClass(peopleGroupId, scheduledClass)
         if (check != null && !check.canFullySchedule) return false
@@ -250,3 +261,8 @@ fun isPeopleGroupOnClassSession(
     ensurePackClassSchedule(peopleGroupId, scheduledClass)
     return PackClassScheduleStore.isScheduledForSession(peopleGroupId, scheduledClass.id, sessionDate)
 }
+
+private fun localDateFromEpochMillis(millis: Long): LocalDate? =
+    runCatching {
+        Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+    }.getOrNull()

@@ -51,9 +51,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import glide.model.AcademicTerm
+import glide.model.ClassSessionKey
 import glide.model.ScheduledClass
 import glide.model.canTakeAttendance
 import glide.model.compareScheduledClasses
+import glide.model.parseIsoLocalDate
 import glide.model.timeRangeLine
 import glide.ui.layout.GlideLayout
 import glide.ui.leads.formatIsoDateForDisplay
@@ -71,6 +73,8 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
     val allClasses = ScheduledClassStore.classes
     val today = remember { LocalDate.now() }
     val viewMode = AppViewState.mode
+    val attendanceVisible = AttendancePanelState.visible
+    val activeAttendanceSession = if (attendanceVisible) AttendancePanelState.sessionKey else null
     val listState = rememberLazyListState()
     var hasScrolledToToday by remember { mutableStateOf(false) }
     var attendanceRefreshTick by remember { mutableIntStateOf(0) }
@@ -131,6 +135,22 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
         }
         val months = remember(selectedTerm) { monthsInTerm(selectedTerm) }
 
+        LaunchedEffect(attendanceVisible, activeAttendanceSession, termsChronological) {
+            if (!attendanceVisible) return@LaunchedEffect
+            val iso = activeAttendanceSession?.sessionDate ?: return@LaunchedEffect
+            findTermContainingIsoDate(termsChronological, iso)?.id?.let { selectedTermId = it }
+        }
+
+        LaunchedEffect(attendanceVisible, activeAttendanceSession, selectedTerm.id, months) {
+            if (!attendanceVisible) return@LaunchedEffect
+            val date = activeAttendanceSession?.sessionDate?.let { parseIsoLocalDate(it) } ?: return@LaunchedEffect
+            val monthIndex = indexOfMonthContaining(months, date)
+            if (monthIndex < 0) return@LaunchedEffect
+            snapshotFlow { listState.layoutInfo.totalItemsCount }
+                .first { it > monthIndex }
+            listState.animateScrollToItem(monthIndex)
+        }
+
         LaunchedEffect(viewMode) {
             if (viewMode != AppViewMode.SCHEDULING) {
                 hasScrolledToToday = false
@@ -181,6 +201,7 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
                     term = selectedTerm,
                     classes = allClasses,
                     today = today,
+                    activeAttendanceSession = activeAttendanceSession,
                 )
             }
         }
@@ -274,6 +295,7 @@ private fun TermCalendarMonthSection(
     term: AcademicTerm,
     classes: List<ScheduledClass>,
     today: LocalDate,
+    activeAttendanceSession: ClassSessionKey?,
 ) {
     val cells = remember(yearMonth, term.id, classes) {
         buildMonthGrid(yearMonth, term, classes)
@@ -318,6 +340,7 @@ private fun TermCalendarMonthSection(
                         TermCalendarDayCellView(
                             cell = cell,
                             today = today,
+                            activeAttendanceSession = activeAttendanceSession,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -331,26 +354,35 @@ private fun TermCalendarMonthSection(
 private fun TermCalendarDayCellView(
     cell: TermCalendarDayCell,
     today: LocalDate,
+    activeAttendanceSession: ClassSessionKey?,
     modifier: Modifier = Modifier,
 ) {
     val date = cell.date
     val showGrey = date == null || !cell.inTerm
     val isToday = date == today && cell.inTerm
+    val isAttendanceDay = activeAttendanceSession != null && date != null &&
+        activeAttendanceSession.sessionDate == date.toString()
     val backgroundColor = when {
         date == null -> Color.Transparent
         isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+        isAttendanceDay -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.9f)
         showGrey -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
         else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+    }
+    val dayBorderColor = when {
+        isToday -> MaterialTheme.colorScheme.primary
+        isAttendanceDay -> MaterialTheme.colorScheme.tertiary
+        else -> null
     }
 
     Box(
         modifier = modifier
             .aspectRatio(1f)
             .then(
-                if (isToday) {
+                if (dayBorderColor != null) {
                     Modifier.border(
                         width = 1.5.dp,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = dayBorderColor,
                         shape = RoundedCornerShape(2.dp),
                     )
                 } else {
@@ -361,13 +393,15 @@ private fun TermCalendarDayCellView(
             .padding(2.dp),
     ) {
         if (date != null) {
+            val dayNumberEmphasis = isToday || isAttendanceDay
             Text(
                 text = date.dayOfMonth.toString(),
                 style = MaterialTheme.typography.labelSmall,
                 fontSize = 9.sp,
-                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (dayNumberEmphasis) FontWeight.Bold else FontWeight.Normal,
                 color = when {
                     isToday -> MaterialTheme.colorScheme.onPrimaryContainer
+                    isAttendanceDay -> MaterialTheme.colorScheme.onTertiaryContainer
                     showGrey -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                     else -> MaterialTheme.colorScheme.onSurface
                 },
@@ -385,6 +419,10 @@ private fun TermCalendarDayCellView(
                         TermCalendarClassBlock(
                             scheduledClass = scheduledClass,
                             sessionDate = date,
+                            isActiveAttendance = activeAttendanceSession?.let { session ->
+                                session.scheduledClassId == scheduledClass.id &&
+                                    session.sessionDate == date.toString()
+                            } == true,
                             onOpenAttendance = { classId, sessionDate ->
                                 AttendancePanelState.open(classId, sessionDate)
                             },
@@ -400,6 +438,7 @@ private fun TermCalendarDayCellView(
 private fun TermCalendarClassBlock(
     scheduledClass: ScheduledClass,
     sessionDate: LocalDate,
+    isActiveAttendance: Boolean,
     onOpenAttendance: (scheduledClassId: String, sessionDate: LocalDate) -> Unit,
 ) {
     val locationName = scheduledClass.locationId?.let { LocationStore.findById(it)?.name }
@@ -413,6 +452,17 @@ private fun TermCalendarClassBlock(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(1.dp))
+            .then(
+                if (isActiveAttendance) {
+                    Modifier.border(
+                        width = 2.dp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        shape = RoundedCornerShape(1.dp),
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .clickable(
                 enabled = canTakeAttendance,
                 onClick = { onOpenAttendance(scheduledClass.id, sessionDate) },

@@ -29,6 +29,9 @@ object SampleData {
     /** Fixed "today" for stable demo data (summer term 2026). */
     private val sampleToday = LocalDate.of(2026, 5, 23)
 
+    /** Sold-pack start for sample customers — summer term start so past class sessions count. */
+    private const val SAMPLE_PACK_START_DATE = "2026-04-20"
+
     private val deferredBillingActions = mutableListOf<() -> Unit>()
 
     fun loadIfEmpty() {
@@ -147,6 +150,7 @@ object SampleData {
             relatedPersonIds = listOf(mia.id, noah.id, alex.id),
             status = PeopleGroupStatus.Contacted,
             planId = rollingPack.id,
+            planStartDate = SAMPLE_PACK_START_DATE,
             createdAtMillis = now - 10 * day,
         )
         registerCustomerBilling(emmaGroup, rollingPack) { enrollment ->
@@ -162,6 +166,7 @@ object SampleData {
             planId = rollingPack.id,
             mainContactAttendsClass = false,
             status = PeopleGroupStatus.Contacted,
+            planStartDate = SAMPLE_PACK_START_DATE,
             createdAtMillis = now - 8 * day,
         )
         registerCustomerBilling(jamesGroup, rollingPack) { enrollment ->
@@ -182,6 +187,7 @@ object SampleData {
             mainContactId = sarah.id,
             relatedPersonIds = listOf(leo.id, zoe.id),
             planId = rollingPack.id,
+            planStartDate = SAMPLE_PACK_START_DATE,
             status = PeopleGroupStatus.Contacted,
             notes = "Family pack",
             createdAtMillis = now - 6 * day,
@@ -369,6 +375,8 @@ object SampleData {
     }
 
     private fun seedPastAttendance(recordedAtMillis: Long, asOf: LocalDate) {
+        // Only pre-submit older sessions; leave the last two weeks open for attendance testing.
+        val attendanceSeedCutoff = asOf.minusDays(14)
         for (scheduledClass in ScheduledClassStore.classes) {
             if (scheduledClass.customerGroupIds.isEmpty()) continue
             val sessionDates = mutableSetOf<LocalDate>()
@@ -384,6 +392,7 @@ object SampleData {
                 }
             }
             for (date in sessionDates) {
+                if (!date.isBefore(attendanceSeedCutoff)) continue
                 val attendees = attendeesForClass(scheduledClass, date)
                 if (attendees.isEmpty()) continue
                 val session = ClassSessionKey(
