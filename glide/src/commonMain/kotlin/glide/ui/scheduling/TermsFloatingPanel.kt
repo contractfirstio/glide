@@ -16,7 +16,7 @@ fun TermsFloatingPanel(
         slot = SchedulingPanelSlots.TERMS,
         windowWidthPx = windowWidthPx,
         windowHeightPx = windowHeightPx,
-        initiallyCollapsed = true,
+        initiallyCollapsed = false,
     ) {
         TermsPanel(modifier = Modifier.fillMaxSize())
     }

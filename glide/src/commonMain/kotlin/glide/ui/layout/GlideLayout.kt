@@ -88,18 +88,20 @@ object GlideLayout {
     }
 
     /**
-     * Scheduling grid:
+     * Scheduling grid (2×3). Attendance opens as an overlay anchored top-right when a
+     * calendar class is clicked.
      * ```
-     * [ Classes ] [ Term calendar ] [ Customer groups ]
-     * [ Locations ] [ Terms        ] [                ]
+     * [ Classes       ] [ Term calendar ] [ Attendance* ]
+     * [ Locations     ] [ Terms         ] [ Customer groups ]
      * ```
      */
     fun schedulingPanelGridCell(slot: Int): Pair<Int, Int> = when (slot) {
         SchedulingPanelSlots.SCHEDULE -> 0 to 0
         SchedulingPanelSlots.CALENDAR -> 0 to 1
-        SchedulingPanelSlots.CUSTOMER_GROUPS -> 0 to 2
+        SchedulingPanelSlots.ATTENDANCE -> 0 to 2
         SchedulingPanelSlots.LOCATIONS -> 1 to 0
         SchedulingPanelSlots.TERMS -> 1 to 1
+        SchedulingPanelSlots.CUSTOMER_GROUPS -> 1 to 2
         else -> 0 to 0
     }
 

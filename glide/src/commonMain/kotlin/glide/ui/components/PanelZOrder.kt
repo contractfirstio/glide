@@ -16,11 +16,11 @@ object PanelZOrder {
     )
 
     private val schedulingOrder = mutableStateListOf(
+        SchedulingPanelSlots.CUSTOMER_GROUPS,
         SchedulingPanelSlots.TERMS,
         SchedulingPanelSlots.LOCATIONS,
         SchedulingPanelSlots.SCHEDULE,
         SchedulingPanelSlots.CALENDAR,
-        SchedulingPanelSlots.CUSTOMER_GROUPS,
     )
 
     val order: List<Int>
@@ -54,5 +54,18 @@ object PanelZOrder {
 
     fun unregisterBilling() {
         customerManagementOrder.remove(PanelSlots.BILLING)
+    }
+
+    fun registerAttendance() {
+        if (SchedulingPanelSlots.ATTENDANCE !in schedulingOrder) {
+            schedulingOrder.add(SchedulingPanelSlots.ATTENDANCE)
+        }
+        if (AppViewState.mode == AppViewMode.SCHEDULING) {
+            bringToFront(SchedulingPanelSlots.ATTENDANCE)
+        }
+    }
+
+    fun unregisterAttendance() {
+        schedulingOrder.remove(SchedulingPanelSlots.ATTENDANCE)
     }
 }

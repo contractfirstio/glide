@@ -16,8 +16,11 @@ object AppViewState {
     fun switchTo(newMode: AppViewMode) {
         if (mode == newMode) return
         when (newMode) {
-            AppViewMode.SCHEDULING -> BillingPanelState.close()
+            AppViewMode.SCHEDULING -> {
+                BillingPanelState.close()
+            }
             AppViewMode.CUSTOMER_MANAGEMENT -> {
+                AttendancePanelState.clear()
                 if (BillingPanelState.peopleGroupId != null) {
                     BillingPanelState.reopenForCurrentGroup()
                 }

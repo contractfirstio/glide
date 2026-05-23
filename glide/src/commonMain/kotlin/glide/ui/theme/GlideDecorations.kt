@@ -25,6 +25,7 @@ object GlideAccents {
     val SchedulingCustomerGroups = Color(0xFFA8C0D0)
     val Locations = Color(0xFFC4B89C)
     val TermCalendar = Color(0xFFD4A8B8)
+    val Attendance = Color(0xFFB8D4C8)
 
     fun forPanel(slot: Int): Color = when (AppViewState.mode) {
         AppViewMode.CUSTOMER_MANAGEMENT -> when (slot) {
@@ -42,6 +43,7 @@ object GlideAccents {
             SchedulingPanelSlots.CUSTOMER_GROUPS -> SchedulingCustomerGroups
             SchedulingPanelSlots.LOCATIONS -> Locations
             SchedulingPanelSlots.CALENDAR -> TermCalendar
+            SchedulingPanelSlots.ATTENDANCE -> Attendance
             else -> Schedule
         }
     }

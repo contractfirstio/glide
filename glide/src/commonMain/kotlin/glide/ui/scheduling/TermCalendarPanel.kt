@@ -36,9 +36,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import glide.data.AttendancePanelState
 import glide.data.LocationStore
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
+import java.time.LocalDate
 import glide.model.AcademicTerm
 import glide.model.ScheduledClass
 import glide.model.scheduleLine
@@ -350,7 +352,13 @@ private fun TermCalendarDayCellView(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     cell.classes.forEach { scheduledClass ->
-                        TermCalendarClassBlock(scheduledClass = scheduledClass)
+                        TermCalendarClassBlock(
+                            scheduledClass = scheduledClass,
+                            sessionDate = date,
+                            onOpenAttendance = { classId, sessionDate ->
+                                AttendancePanelState.open(classId, sessionDate)
+                            },
+                        )
                     }
                 }
             }
@@ -359,7 +367,11 @@ private fun TermCalendarDayCellView(
 }
 
 @Composable
-private fun TermCalendarClassBlock(scheduledClass: ScheduledClass) {
+private fun TermCalendarClassBlock(
+    scheduledClass: ScheduledClass,
+    sessionDate: LocalDate,
+    onOpenAttendance: (scheduledClassId: String, sessionDate: LocalDate) -> Unit,
+) {
     val locationName = scheduledClass.locationId?.let { LocationStore.findById(it)?.name }
     val rosterLines = rosterLinesForClass(scheduledClass)
     val blockTextColor = Color(0xFF0A1018)
@@ -368,6 +380,9 @@ private fun TermCalendarClassBlock(scheduledClass: ScheduledClass) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(2.dp))
+            .clickable {
+                onOpenAttendance(scheduledClass.id, sessionDate)
+            }
             .background(scheduledClass.resolvedCalendarColor())
             .padding(horizontal = 3.dp, vertical = 3.dp),
     ) {

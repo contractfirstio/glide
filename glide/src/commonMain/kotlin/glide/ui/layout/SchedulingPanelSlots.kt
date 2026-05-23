@@ -6,4 +6,5 @@ object SchedulingPanelSlots {
     const val CUSTOMER_GROUPS = 2
     const val LOCATIONS = 3
     const val CALENDAR = 4
+    const val ATTENDANCE = 5
 }

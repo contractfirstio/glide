@@ -8,8 +8,10 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import glide.data.AppViewMode
 import glide.data.AppViewState
+import glide.data.AttendancePanelState
 import glide.data.BillingPanelState
 import glide.ui.billing.BillingFloatingPanel
+import glide.ui.scheduling.AttendanceFloatingPanel
 import glide.ui.customers.CustomersFloatingPanel
 import glide.ui.leads.LeadsFloatingPanel
 import glide.ui.people.PeopleFloatingPanel
@@ -33,6 +35,9 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
         val billingVisible = BillingPanelState.visible && viewMode == AppViewMode.CUSTOMER_MANAGEMENT
         val billingPeopleGroupId = BillingPanelState.peopleGroupId
 
+        val attendanceVisible = AttendancePanelState.visible && viewMode == AppViewMode.SCHEDULING
+        val attendanceSession = AttendancePanelState.sessionKey
+
         LaunchedEffect(billingVisible) {
             if (billingVisible) {
                 PanelZOrder.registerBilling()
@@ -41,8 +46,19 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
             }
         }
 
+        LaunchedEffect(attendanceVisible) {
+            if (attendanceVisible) {
+                PanelZOrder.registerAttendance()
+            } else {
+                PanelZOrder.unregisterAttendance()
+            }
+        }
+
         PanelZOrder.order.forEach { slot ->
             if (viewMode == AppViewMode.CUSTOMER_MANAGEMENT && slot == PanelSlots.BILLING) {
+                return@forEach
+            }
+            if (viewMode == AppViewMode.SCHEDULING && slot == SchedulingPanelSlots.ATTENDANCE) {
                 return@forEach
             }
             key(viewMode, slot) {
@@ -101,6 +117,16 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
             key(billingPeopleGroupId) {
                 BillingFloatingPanel(
                     peopleGroupId = billingPeopleGroupId,
+                    windowWidthPx = windowWidthPx,
+                    windowHeightPx = windowHeightPx,
+                )
+            }
+        }
+
+        if (attendanceVisible && attendanceSession != null) {
+            key(attendanceSession.scheduledClassId, attendanceSession.sessionDate) {
+                AttendanceFloatingPanel(
+                    session = attendanceSession,
                     windowWidthPx = windowWidthPx,
                     windowHeightPx = windowHeightPx,
                 )
