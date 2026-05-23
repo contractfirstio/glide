@@ -33,7 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import glide.data.BillingPanelState
+import glide.data.PeopleGroupStore
 import glide.data.RelatedPersonStore
+import glide.data.resolveMainContact
 import glide.model.RelatedPerson
 import glide.ui.layout.GlideLayout
 import glide.ui.leads.DateOfBirthField
@@ -73,7 +76,11 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
-    val people = RelatedPersonStore.onCustomerPacks
+    val customerGroupId = BillingPanelState.peopleGroupId
+    val people = RelatedPersonStore.forRelatedPanel(customerGroupId)
+    val customerGroupLabel = customerGroupId?.let { id ->
+        PeopleGroupStore.findById(id)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+    }
 
     fun clearSelection() {
         selectedId = null
@@ -110,7 +117,12 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
         ) {
             if (!compact) {
                 Text(
-                    text = "Edit related people on customer packs. They appear here after a lead becomes a customer.",
+                    text = if (customerGroupId == null) {
+                        "Edit related people on customer packs. They appear here after a lead becomes a customer."
+                    } else {
+                        val label = customerGroupLabel ?: "this customer group"
+                        "Showing related people for $label. Use Show all or Clear in Customers to reset."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -119,10 +131,21 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
 
             val listSection: @Composable (Modifier) -> Unit = { listModifier ->
                 Column(modifier = listModifier) {
-                    Text(
-                        text = "${people.size} related ${if (people.size == 1) "person" else "people"}",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "${people.size} related ${if (people.size == 1) "person" else "people"}",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        if (customerGroupId != null) {
+                            GlideTextButton(onClick = { BillingPanelState.onCustomerGroupCleared() }) {
+                                Text("Show all")
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (people.isEmpty()) {
@@ -143,7 +166,11 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "No one on a customer pack yet. Add related people on a lead, then make the lead a customer.",
+                                text = if (customerGroupId == null) {
+                                    "No one on a customer pack yet. Add related people on a lead, then make the lead a customer."
+                                } else {
+                                    "No related people in this customer group."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

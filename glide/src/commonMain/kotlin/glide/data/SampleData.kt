@@ -78,14 +78,56 @@ object SampleData {
             notes = "Sarah's son",
             createdAtMillis = now - 14 * day,
         )
-        RelatedPersonStore.create(leo)
+        val mia = RelatedPerson(
+            id = "sample-related-mia",
+            name = "Mia Walsh",
+            dateOfBirth = "22/01/2012",
+            notes = "Emma's daughter",
+            createdAtMillis = now - 12 * day,
+        )
+        val noah = RelatedPerson(
+            id = "sample-related-noah",
+            name = "Noah Walsh",
+            dateOfBirth = "14/06/2015",
+            notes = "Emma's son",
+            createdAtMillis = now - 12 * day,
+        )
+        val ivy = RelatedPerson(
+            id = "sample-related-ivy",
+            name = "Ivy Chen",
+            dateOfBirth = "03/09/1990",
+            notes = "James's partner",
+            createdAtMillis = now - 11 * day,
+        )
+        val sam = RelatedPerson(
+            id = "sample-related-sam",
+            name = "Sam Chen",
+            dateOfBirth = "19/04/2018",
+            notes = "James's son",
+            createdAtMillis = now - 11 * day,
+        )
+        val zoe = RelatedPerson(
+            id = "sample-related-zoe",
+            name = "Zoe Thompson",
+            dateOfBirth = "30/07/2016",
+            notes = "Sarah's daughter",
+            createdAtMillis = now - 13 * day,
+        )
+        val alex = RelatedPerson(
+            id = "sample-related-alex",
+            name = "Alex Morgan",
+            dateOfBirth = "11/02/2010",
+            notes = "Friend on Emma and James packs — tests shared membership",
+            createdAtMillis = now - 10 * day,
+        )
+        listOf(leo, mia, noah, ivy, sam, zoe, alex).forEach { RelatedPersonStore.create(it) }
 
         // Customer 1: outstanding issued bill — test Record payment
         val emmaGroup = PeopleGroup(
             id = "sample-customer-emma",
             type = PeopleGroupType.CUSTOMER,
             mainContactId = emma.id,
-            relatedPersonIds = emptyList(),
+            relatedPersonIds = listOf(mia.id, noah.id, alex.id),
             status = PeopleGroupStatus.Won,
             planId = rollingPack.id,
             createdAtMillis = now - 10 * day,
@@ -99,6 +141,7 @@ object SampleData {
             id = "sample-customer-james",
             type = PeopleGroupType.CUSTOMER,
             mainContactId = james.id,
+            relatedPersonIds = listOf(ivy.id, sam.id, alex.id),
             planId = rollingPack.id,
             status = PeopleGroupStatus.Won,
             createdAtMillis = now - 8 * day,
@@ -118,7 +161,7 @@ object SampleData {
             id = "sample-customer-sarah",
             type = PeopleGroupType.CUSTOMER,
             mainContactId = sarah.id,
-            relatedPersonIds = listOf(leo.id),
+            relatedPersonIds = listOf(leo.id, zoe.id),
             planId = rollingPack.id,
             status = PeopleGroupStatus.Won,
             notes = "Family pack",
@@ -136,6 +179,15 @@ object SampleData {
         }
 
         // Leads for non-billing UI smoke tests
+        val ella = RelatedPerson(
+            id = "sample-related-ella",
+            name = "Ella O'Brien",
+            dateOfBirth = "25/03/2013",
+            notes = "On Mike's lead only — not on a customer pack yet",
+            createdAtMillis = now - 2 * day,
+        )
+        RelatedPersonStore.create(ella)
+
         PeopleGroupStore.create(
             PeopleGroup(
                 id = "sample-lead-mike",
@@ -143,6 +195,7 @@ object SampleData {
                 contactName = "Mike O'Brien",
                 email = "mike.obrien@example.com",
                 phone = "07700 900 404",
+                relatedPersonIds = listOf(ella.id),
                 status = PeopleGroupStatus.Proposal,
                 planId = rollingPack.id,
                 notes = "Interested in evening classes",

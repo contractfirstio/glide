@@ -85,6 +85,7 @@ data class PeopleGroupPanelUi(
     val noSelectionMessage: String,
     val deleteConfirmTitle: String,
     val deleteConfirmMessage: String,
+    val showClearSelection: Boolean = false,
 )
 
 private val LeadsPanelUi = PeopleGroupPanelUi(
@@ -121,6 +122,7 @@ private val CustomersPanelUi = PeopleGroupPanelUi(
     noSelectionMessage = "Select a customer group to view.",
     deleteConfirmTitle = "Delete customer group?",
     deleteConfirmMessage = "Customer groups cannot be deleted.",
+    showClearSelection = true,
 )
 
 @Composable
@@ -199,11 +201,15 @@ private fun PeopleGroupPanel(
         formError = null
     }
 
-    fun clearSelection() {
+    fun clearLocalSelection() {
         selectedId = null
         isCreating = false
         formState = PeopleGroupFormState()
         formError = null
+    }
+
+    fun clearSelection() {
+        clearLocalSelection()
         if (ui.type == PeopleGroupType.CUSTOMER) {
             BillingPanelState.onCustomerGroupCleared()
         }
@@ -232,6 +238,15 @@ private fun PeopleGroupPanel(
         if (ui.type == PeopleGroupType.LEAD && pendingLeadId != null) {
             PeopleGroupStore.findById(pendingLeadId)?.let { loadIntoForm(it) }
             PeopleGroupNavigation.clearPendingLead()
+        }
+    }
+
+    LaunchedEffect(BillingPanelState.peopleGroupId) {
+        if (ui.type == PeopleGroupType.CUSTOMER &&
+            BillingPanelState.peopleGroupId == null &&
+            selectedId != null
+        ) {
+            clearLocalSelection()
         }
     }
 
@@ -271,9 +286,16 @@ private fun PeopleGroupPanel(
                             text = ui.listCountLabel(groups.size),
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        if (ui.allowCreate) {
-                            GlideButton(onClick = { resetFormForCreate() }) {
-                                Text(if (compact) "New" else ui.newButtonLabel)
+                        Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (ui.showClearSelection && selectedId != null) {
+                                GlideTextButton(onClick = { clearSelection() }) {
+                                    Text("Clear")
+                                }
+                            }
+                            if (ui.allowCreate) {
+                                GlideButton(onClick = { resetFormForCreate() }) {
+                                    Text(if (compact) "New" else ui.newButtonLabel)
+                                }
                             }
                         }
                     }
@@ -321,9 +343,13 @@ private fun PeopleGroupPanel(
                                     compact = compact,
                                     showPipelineStatus = ui.showPipelineStatus,
                                     onClick = {
-                                        loadIntoForm(group)
-                                        if (ui.type == PeopleGroupType.CUSTOMER) {
-                                            BillingPanelState.onCustomerGroupSelected(group.id)
+                                        if (ui.type == PeopleGroupType.CUSTOMER && group.id == selectedId) {
+                                            clearSelection()
+                                        } else {
+                                            loadIntoForm(group)
+                                            if (ui.type == PeopleGroupType.CUSTOMER) {
+                                                BillingPanelState.onCustomerGroupSelected(group.id)
+                                            }
                                         }
                                     },
                                 )

@@ -1,6 +1,7 @@
 package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
+import glide.model.PeopleGroupType
 import glide.model.RelatedPerson
 
 object RelatedPersonStore {
@@ -11,6 +12,20 @@ object RelatedPersonStore {
     /** Related people linked to at least one customer (converted) people group. */
     val onCustomerPacks: List<RelatedPerson> get() =
         _people.filter { isOnCustomerPack(it.id) }
+
+    /**
+     * Related people for the Related panel — all on customer packs, or only those in
+     * [customerGroupId] when a customer group is selected in the Customers panel.
+     */
+    fun forRelatedPanel(customerGroupId: String?): List<RelatedPerson> =
+        when (customerGroupId) {
+            null -> onCustomerPacks
+            else ->
+                PeopleGroupStore.findById(customerGroupId)
+                    ?.takeIf { it.type == PeopleGroupType.CUSTOMER }
+                    ?.resolveRelatedPeople()
+                    ?: emptyList()
+        }
 
     fun isOnCustomerPack(personId: String): Boolean =
         PeopleGroupStore.customers.any { personId in it.relatedPersonIds }
