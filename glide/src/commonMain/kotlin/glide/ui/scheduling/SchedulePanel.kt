@@ -76,6 +76,7 @@ import glide.ui.shared.FormPanelLinkedBox
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.peoplegroup.EntitySearchPicker
 import glide.ui.peoplegroup.SearchResultItem
@@ -158,7 +159,7 @@ private data class ClassFormState(
 fun SchedulePanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     val terms = TermStore.sortedForPanel()
-    var formState by remember { mutableStateOf(ClassFormState.defaultForCreate(terms)) }
+    val form = rememberFormDirtyTracker(ClassFormState.defaultForCreate(terms))
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
@@ -169,33 +170,35 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
     fun clearSelection() {
         selectedId = null
         isCreating = true
-        formState = ClassFormState.defaultForCreate(terms)
+        form.load(ClassFormState.defaultForCreate(terms))
         formError = null
     }
 
     fun resetFormForCreate() {
         selectedId = null
         isCreating = true
-        formState = ClassFormState.defaultForCreate(terms)
+        form.load(ClassFormState.defaultForCreate(terms))
         formError = null
     }
 
     fun loadIntoForm(scheduledClass: ScheduledClass) {
         selectedId = scheduledClass.id
         isCreating = false
-        formState = ClassFormState(
-            name = scheduledClass.name,
-            termIds = scheduledClass.termIds.toSet(),
-            customerGroupIds = scheduledClass.customerGroupIds.toSet(),
-            locationId = scheduledClass.locationId,
-            scheduleKind = scheduledClass.scheduleKind(),
-            dayOfWeek = scheduledClass.dayOfWeek,
-            singleDate = scheduledClass.singleDate.orEmpty(),
-            startTime = scheduledClass.startTime,
-            endTime = scheduledClass.endTime,
-            notes = scheduledClass.notes,
-            calendarColorArgb = scheduledClass.calendarColorArgb,
-            classId = scheduledClass.id,
+        form.load(
+            ClassFormState(
+                name = scheduledClass.name,
+                termIds = scheduledClass.termIds.toSet(),
+                customerGroupIds = scheduledClass.customerGroupIds.toSet(),
+                locationId = scheduledClass.locationId,
+                scheduleKind = scheduledClass.scheduleKind(),
+                dayOfWeek = scheduledClass.dayOfWeek,
+                singleDate = scheduledClass.singleDate.orEmpty(),
+                startTime = scheduledClass.startTime,
+                endTime = scheduledClass.endTime,
+                notes = scheduledClass.notes,
+                calendarColorArgb = scheduledClass.calendarColorArgb,
+                classId = scheduledClass.id,
+            ),
         )
         formError = null
     }
@@ -206,10 +209,10 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
         }
     }
 
-    LaunchedEffect(locations, formState.locationId) {
-        val locationId = formState.locationId ?: return@LaunchedEffect
+    LaunchedEffect(locations, form.draft.locationId) {
+        val locationId = form.draft.locationId ?: return@LaunchedEffect
         if (locations.none { it.id == locationId }) {
-            formState = formState.copy(locationId = null)
+            form.draft = form.draft.copy(locationId = null)
         }
     }
 
@@ -325,8 +328,8 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             .verticalScroll(rememberScrollState()),
                     ) {
                         ClassForm(
-                            state = formState,
-                            onStateChange = { formState = it },
+                            state = form.draft,
+                            onStateChange = { form.draft = it },
                             terms = terms,
                             locations = locations,
                             spacing = spacing,
@@ -337,10 +340,10 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             FormPanelSectionsDivider(label = "Enrollment", spacing = spacing)
                             ClassCustomerGroupsSection(
                                 classId = selectedId,
-                                customerGroupIds = formState.customerGroupIds.toList(),
-                                locationId = formState.locationId,
+                                customerGroupIds = form.draft.customerGroupIds.toList(),
+                                locationId = form.draft.locationId,
                                 onCustomerGroupIdsChange = { ids ->
-                                    formState = formState.copy(customerGroupIds = ids.toSet())
+                                    form.draft = form.draft.copy(customerGroupIds = ids.toSet())
                                 },
                                 spacing = spacing,
                             )
@@ -364,8 +367,8 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                     ) {
                         GlideButton(
                             onClick = {
-                                if (!formState.isValid()) {
-                                    formError = when (formState.scheduleKind) {
+                                if (!form.draft.isValid()) {
+                                    formError = when (form.draft.scheduleKind) {
                                         ClassScheduleKind.RECURRING ->
                                             "Name, valid start/end times (HH:MM), and end after start are required."
                                         ClassScheduleKind.SINGLE_DAY ->
@@ -374,9 +377,9 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                     return@GlideButton
                                 }
                                 formError = null
-                                val stateToSave = formState.withAutoTermForSingleDay(terms)
-                                if (stateToSave != formState) {
-                                    formState = stateToSave
+                                val stateToSave = form.draft.withAutoTermForSingleDay(terms)
+                                if (stateToSave != form.draft) {
+                                    form.draft = stateToSave
                                 }
                                 if (isCreating) {
                                     val scheduledClass = stateToSave.toScheduledClass()
@@ -412,6 +415,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                     }
                                 }
                             },
+                            enabled = form.isDirty,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(saveLabel)

@@ -47,6 +47,7 @@ import glide.ui.layout.GlideLayout
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
 import glide.ui.theme.GlideButton
@@ -81,7 +82,7 @@ private data class ContactFormState(
 @Composable
 fun PeoplePanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var formState by remember { mutableStateOf(ContactFormState()) }
+    val form = rememberFormDirtyTracker(ContactFormState())
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
@@ -101,7 +102,7 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
 
     fun clearLocalSelection() {
         selectedId = null
-        formState = ContactFormState()
+        form.load(ContactFormState())
         formError = null
     }
 
@@ -125,12 +126,14 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
     fun loadIntoForm(contact: Contact) {
         selectedId = contact.id
         ContactsPanelState.onContactSelected(contact.id)
-        formState = ContactFormState(
-            name = contact.name,
-            dateOfBirth = contact.dateOfBirth,
-            email = contact.email,
-            phone = contact.phone,
-            notes = contact.notes,
+        form.load(
+            ContactFormState(
+                name = contact.name,
+                dateOfBirth = contact.dateOfBirth,
+                email = contact.email,
+                phone = contact.phone,
+                notes = contact.notes,
+            ),
         )
         formError = null
     }
@@ -300,8 +303,8 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                                 .verticalScroll(rememberScrollState()),
                         ) {
                             ContactForm(
-                                state = formState,
-                                onStateChange = { formState = it },
+                                state = form.draft,
+                                onStateChange = { form.draft = it },
                                 spacing = spacing,
                             )
 
@@ -333,14 +336,14 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                         ) {
                             GlideButton(
                                 onClick = {
-                                    if (!formState.isValid()) {
+                                    if (!form.draft.isValid()) {
                                         formError = "Name is required."
                                         return@GlideButton
                                     }
                                     formError = null
                                     val existing = selectedId?.let { ContactStore.findById(it) }
                                     if (existing != null) {
-                                        val updated = formState.toContact(
+                                        val updated = form.draft.toContact(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
@@ -348,6 +351,7 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                                         loadIntoForm(updated)
                                     }
                                 },
+                                enabled = form.isDirty,
                                 modifier = Modifier.weight(1f),
                             ) {
                                 Text(saveLabel)

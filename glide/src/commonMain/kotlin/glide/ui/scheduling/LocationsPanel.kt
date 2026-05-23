@@ -40,6 +40,7 @@ import glide.ui.layout.GlideLayout
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideOutlinedButton
@@ -81,7 +82,7 @@ private data class LocationFormState(
 @Composable
 fun LocationsPanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var formState by remember { mutableStateOf(LocationFormState()) }
+    val form = rememberFormDirtyTracker(LocationFormState())
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
@@ -91,24 +92,26 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
     fun clearSelection() {
         selectedId = null
         isCreating = true
-        formState = LocationFormState()
+        form.load(LocationFormState())
         formError = null
     }
 
     fun resetFormForCreate() {
         selectedId = null
         isCreating = true
-        formState = LocationFormState()
+        form.load(LocationFormState())
         formError = null
     }
 
     fun loadIntoForm(location: ClassLocation) {
         selectedId = location.id
         isCreating = false
-        formState = LocationFormState(
-            name = location.name,
-            maxCapacityText = location.maxCapacity?.toString() ?: "",
-            notes = location.notes,
+        form.load(
+            LocationFormState(
+                name = location.name,
+                maxCapacityText = location.maxCapacity?.toString() ?: "",
+                notes = location.notes,
+            ),
         )
         formError = null
     }
@@ -222,8 +225,8 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                             .verticalScroll(rememberScrollState()),
                     ) {
                         LocationForm(
-                            state = formState,
-                            onStateChange = { formState = it },
+                            state = form.draft,
+                            onStateChange = { form.draft = it },
                             spacing = spacing,
                         )
 
@@ -245,19 +248,19 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                     ) {
                         GlideButton(
                             onClick = {
-                                if (!formState.isValid()) {
+                                if (!form.draft.isValid()) {
                                     formError = "Location name is required. Capacity must be a positive number if set."
                                     return@GlideButton
                                 }
                                 formError = null
                                 if (isCreating) {
-                                    val location = formState.toLocation()
+                                    val location = form.draft.toLocation()
                                     LocationStore.create(location)
                                     loadIntoForm(location)
                                 } else {
                                     val existing = selectedId?.let { LocationStore.findById(it) }
                                     if (existing != null) {
-                                        val updated = formState.toLocation(
+                                        val updated = form.draft.toLocation(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
@@ -266,6 +269,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                                     }
                                 }
                             },
+                            enabled = form.isDirty,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(saveLabel)

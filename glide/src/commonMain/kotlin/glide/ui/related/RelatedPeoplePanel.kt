@@ -47,6 +47,7 @@ import glide.ui.layout.GlideLayout
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
 import glide.ui.theme.GlideButton
@@ -80,7 +81,7 @@ private data class RelatedPersonFormState(
 @Composable
 fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var formState by remember { mutableStateOf(RelatedPersonFormState()) }
+    val form = rememberFormDirtyTracker(RelatedPersonFormState())
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
@@ -102,7 +103,7 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
 
     fun clearLocalSelection() {
         selectedId = null
-        formState = RelatedPersonFormState()
+        form.load(RelatedPersonFormState())
         formError = null
     }
 
@@ -120,10 +121,12 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
     fun loadIntoForm(person: RelatedPerson) {
         RelatedPanelState.onRelatedPersonSelected(person.id)
         selectedId = person.id
-        formState = RelatedPersonFormState(
-            name = person.name,
-            dateOfBirth = person.dateOfBirth,
-            notes = person.notes,
+        form.load(
+            RelatedPersonFormState(
+                name = person.name,
+                dateOfBirth = person.dateOfBirth,
+                notes = person.notes,
+            ),
         )
         formError = null
     }
@@ -296,8 +299,8 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                                 .verticalScroll(rememberScrollState()),
                         ) {
                             RelatedPersonForm(
-                                state = formState,
-                                onStateChange = { formState = it },
+                                state = form.draft,
+                                onStateChange = { form.draft = it },
                                 spacing = spacing,
                             )
 
@@ -329,14 +332,14 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                         ) {
                             GlideButton(
                                 onClick = {
-                                    if (!formState.isValid()) {
+                                    if (!form.draft.isValid()) {
                                         formError = "Name is required."
                                         return@GlideButton
                                     }
                                     formError = null
                                     val existing = selectedId?.let { RelatedPersonStore.findById(it) }
                                     if (existing != null) {
-                                        val updated = formState.toRelatedPerson(
+                                        val updated = form.draft.toRelatedPerson(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
@@ -344,6 +347,7 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                                         loadIntoForm(updated)
                                     }
                                 },
+                                enabled = form.isDirty,
                                 modifier = Modifier.weight(1f),
                             ) {
                                 Text(saveLabel)

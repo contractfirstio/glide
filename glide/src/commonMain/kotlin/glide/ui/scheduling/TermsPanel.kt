@@ -41,6 +41,7 @@ import glide.ui.layout.GlideLayout
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.leads.parseIsoDateToMillis
 import glide.ui.shared.IsoDateField
@@ -90,7 +91,7 @@ private fun overlapErrorMessage(overlapping: AcademicTerm): String {
 @Composable
 fun TermsPanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var formState by remember { mutableStateOf(TermFormState()) }
+    val form = rememberFormDirtyTracker(TermFormState())
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
@@ -100,25 +101,27 @@ fun TermsPanel(modifier: Modifier = Modifier) {
     fun clearSelection() {
         selectedId = null
         isCreating = true
-        formState = TermFormState()
+        form.load(TermFormState())
         formError = null
     }
 
     fun resetFormForCreate() {
         selectedId = null
         isCreating = true
-        formState = TermFormState()
+        form.load(TermFormState())
         formError = null
     }
 
     fun loadIntoForm(term: AcademicTerm) {
         selectedId = term.id
         isCreating = false
-        formState = TermFormState(
-            name = term.name,
-            startDate = term.startDate,
-            endDate = term.endDate,
-            notes = term.notes,
+        form.load(
+            TermFormState(
+                name = term.name,
+                startDate = term.startDate,
+                endDate = term.endDate,
+                notes = term.notes,
+            ),
         )
         formError = null
     }
@@ -232,8 +235,8 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             .verticalScroll(rememberScrollState()),
                     ) {
                         TermForm(
-                            state = formState,
-                            onStateChange = { formState = it },
+                            state = form.draft,
+                            onStateChange = { form.draft = it },
                             spacing = spacing,
                         )
 
@@ -255,12 +258,12 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                     ) {
                         GlideButton(
                             onClick = {
-                                if (!formState.isValid()) {
+                                if (!form.draft.isValid()) {
                                     formError = "Name, start date, and end date are required. End must be on or after start."
                                     return@GlideButton
                                 }
                                 val excludeId = if (isCreating) null else selectedId
-                                val candidate = formState.toTerm(existingId = excludeId)
+                                val candidate = form.draft.toTerm(existingId = excludeId)
                                 val overlapping = findOverlappingTerm(terms, candidate, excludeTermId = excludeId)
                                 if (overlapping != null) {
                                     formError = overlapErrorMessage(overlapping)
@@ -276,7 +279,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                                 } else {
                                     val existing = selectedId?.let { TermStore.findById(it) }
                                     if (existing != null) {
-                                        val updated = formState.toTerm(
+                                        val updated = form.draft.toTerm(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
@@ -288,6 +291,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                                     }
                                 }
                             },
+                            enabled = form.isDirty,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(saveLabel)

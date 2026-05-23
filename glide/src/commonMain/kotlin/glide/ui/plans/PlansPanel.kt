@@ -61,6 +61,7 @@ import glide.ui.layout.GlideLayout
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideFieldLabel
@@ -120,7 +121,7 @@ private fun Plan.priceMajorString(): String {
 @Composable
 fun PlansPanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var formState by remember { mutableStateOf(PlanFormState()) }
+    val form = rememberFormDirtyTracker(PlanFormState())
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
@@ -147,7 +148,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
     fun clearLocalSelection() {
         selectedId = null
         isCreating = false
-        formState = PlanFormState()
+        form.load(PlanFormState())
         formError = null
     }
 
@@ -159,7 +160,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
     fun resetFormForCreate() {
         clearLocalSelection()
         isCreating = true
-        formState = PlanFormState()
+        form.load(PlanFormState())
         formError = null
     }
 
@@ -167,13 +168,15 @@ fun PlansPanel(modifier: Modifier = Modifier) {
         PlansPanelState.onPlanSelected(plan.id)
         selectedId = plan.id
         isCreating = false
-        formState = PlanFormState(
-            name = plan.name,
-            kind = plan.kind,
-            lessonCount = plan.lessonCount.toString(),
-            rolling = plan.rolling,
-            priceMajor = plan.priceMajorString(),
-            notes = plan.notes,
+        form.load(
+            PlanFormState(
+                name = plan.name,
+                kind = plan.kind,
+                lessonCount = plan.lessonCount.toString(),
+                rolling = plan.rolling,
+                priceMajor = plan.priceMajorString(),
+                notes = plan.notes,
+            ),
         )
         formError = null
     }
@@ -341,8 +344,8 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             .verticalScroll(rememberScrollState()),
                     ) {
                         PlanForm(
-                            state = formState,
-                            onStateChange = { formState = it },
+                            state = form.draft,
+                            onStateChange = { form.draft = it },
                             spacing = spacing,
                         )
 
@@ -364,14 +367,14 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                     ) {
                         GlideButton(
                             onClick = {
-                                if (!formState.isValid()) {
-                                    formError = when (formState.kind) {
+                                if (!form.draft.isValid()) {
+                                    formError = when (form.draft.kind) {
                                         PlanKind.SINGLE_LESSON_PACK -> "Name and a valid price per person are required."
                                         PlanKind.MULTI_LESSON_PACK -> "Name, class count, and a valid price per person are required."
                                     }
                                     return@GlideButton
                                 }
-                                val plan = formState.toPlan()
+                                val plan = form.draft.toPlan()
                                 if (plan == null) {
                                     formError = "Class count must be a positive number."
                                     return@GlideButton
@@ -383,7 +386,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                                 } else {
                                     val existing = selectedId?.let { PlanStore.findById(it) }
                                     if (existing != null) {
-                                        val updated = formState.toPlan(
+                                        val updated = form.draft.toPlan(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                             existingCurrency = existing.currencyCode,
@@ -395,6 +398,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                                     }
                                 }
                             },
+                            enabled = form.isDirty,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(saveLabel)
@@ -438,7 +442,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                         showDeleteConfirm = false
                         clearSelection()
                         isCreating = true
-                        formState = PlanFormState()
+                        form.load(PlanFormState())
                     },
                 ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)

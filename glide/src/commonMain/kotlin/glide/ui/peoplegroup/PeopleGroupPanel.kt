@@ -76,6 +76,7 @@ import glide.ui.theme.GlideOutlinedField
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.theme.GlideTextButton
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -198,7 +199,7 @@ private fun PeopleGroupPanel(
     modifier: Modifier = Modifier,
 ) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var formState by remember { mutableStateOf(PeopleGroupFormState()) }
+    val form = rememberFormDirtyTracker(PeopleGroupFormState())
     var isCreating by remember(ui.allowCreate) { mutableStateOf(ui.allowCreate) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
@@ -234,14 +235,14 @@ private fun PeopleGroupPanel(
     fun resetFormForCreate() {
         selectedId = null
         isCreating = ui.allowCreate
-        formState = PeopleGroupFormState()
+        form.load(PeopleGroupFormState())
         formError = null
     }
 
     fun clearLocalSelection() {
         selectedId = null
         isCreating = false
-        formState = PeopleGroupFormState()
+        form.load(PeopleGroupFormState())
         formError = null
     }
 
@@ -256,17 +257,19 @@ private fun PeopleGroupPanel(
         selectedId = group.id
         isCreating = false
         val main = group.resolveMainContact()
-        formState = PeopleGroupFormState(
-            mainContactId = group.mainContactId,
-            contactName = if (group.mainContactId != null) "" else main.name,
-            dateOfBirth = if (group.mainContactId != null) "" else main.dateOfBirth,
-            email = if (group.mainContactId != null) "" else main.email,
-            phone = if (group.mainContactId != null) "" else main.phone,
-            relatedPersonIds = group.relatedPersonIds,
-            status = group.status,
-            planId = group.planId,
-            mainContactAttendsClass = group.mainContactAttendsClass,
-            notes = group.notes,
+        form.load(
+            PeopleGroupFormState(
+                mainContactId = group.mainContactId,
+                contactName = if (group.mainContactId != null) "" else main.name,
+                dateOfBirth = if (group.mainContactId != null) "" else main.dateOfBirth,
+                email = if (group.mainContactId != null) "" else main.email,
+                phone = if (group.mainContactId != null) "" else main.phone,
+                relatedPersonIds = group.relatedPersonIds,
+                status = group.status,
+                planId = group.planId,
+                mainContactAttendsClass = group.mainContactAttendsClass,
+                notes = group.notes,
+            ),
         )
         formError = null
     }
@@ -541,8 +544,8 @@ private fun PeopleGroupPanel(
                                 }
                             } else {
                                 PeopleGroupForm(
-                                    state = formState,
-                                    onStateChange = { formState = it },
+                                    state = form.draft,
+                                    onStateChange = { form.draft = it },
                                     spacing = spacing,
                                     notesHeight = notesHeight,
                                     isCustomerGroup = ui.type == PeopleGroupType.CUSTOMER,
@@ -563,19 +566,19 @@ private fun PeopleGroupPanel(
 
                         if (ui.showConvertToCustomer && !isCreating && selectedId != null) {
                             Spacer(modifier = Modifier.height(spacing.field))
-                            val canConvert = formState.hasPlanSelected() && PlanStore.plans.isNotEmpty()
+                            val canConvert = form.draft.hasPlanSelected() && PlanStore.plans.isNotEmpty()
                             GlideOutlinedButton(
                                 onClick = {
-                                    if (!formState.isValidForLead()) {
+                                    if (!form.draft.isValidForLead()) {
                                         formError = "Main contact name is required."
                                         return@GlideOutlinedButton
                                     }
-                                    if (!formState.hasPlanSelected()) {
+                                    if (!form.draft.hasPlanSelected()) {
                                         formError = "Select a pack before making a customer."
                                         return@GlideOutlinedButton
                                     }
                                     val existing = PeopleGroupStore.findById(selectedId!!) ?: return@GlideOutlinedButton
-                                    val updated = formState.toPeopleGroup(
+                                    val updated = form.draft.toPeopleGroup(
                                         type = existing.type,
                                         existingId = existing.id,
                                         createdAtMillis = existing.createdAtMillis,
@@ -617,18 +620,18 @@ private fun PeopleGroupPanel(
                                 GlideButton(
                                     onClick = {
                                         formError = null
-                                        if (ui.type == PeopleGroupType.LEAD && !formState.isValidForLead()) {
+                                        if (ui.type == PeopleGroupType.LEAD && !form.draft.isValidForLead()) {
                                             formError = "Link a contact or enter a new contact name."
                                             return@GlideButton
                                         }
                                         if (isCreating && ui.allowCreate) {
-                                            val group = formState.toPeopleGroup(type = PeopleGroupType.LEAD)
+                                            val group = form.draft.toPeopleGroup(type = PeopleGroupType.LEAD)
                                             PeopleGroupStore.create(group)
                                             loadIntoForm(group)
                                         } else {
                                             val existing = selectedId?.let { PeopleGroupStore.findById(it) }
                                             if (existing != null) {
-                                                val updated = formState.toPeopleGroup(
+                                                val updated = form.draft.toPeopleGroup(
                                                     type = existing.type,
                                                     existingId = existing.id,
                                                     createdAtMillis = existing.createdAtMillis,
@@ -641,6 +644,7 @@ private fun PeopleGroupPanel(
                                             }
                                         }
                                     },
+                                    enabled = form.isDirty,
                                     modifier = Modifier.weight(1f),
                                 ) {
                                     Text(saveLabel)
