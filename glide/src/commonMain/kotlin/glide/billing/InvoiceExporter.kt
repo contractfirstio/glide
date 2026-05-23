@@ -2,7 +2,7 @@ package glide.billing
 
 import glide.model.Bill
 
-/** Platform hook: writes an invoice PDF when a bill is issued. */
+/** Platform hook: writes an invoice PDF for a bill. */
 expect object InvoiceExporter {
-    fun onBillIssued(bill: Bill)
+    fun exportInvoice(bill: Bill)
 }

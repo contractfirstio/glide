@@ -3,6 +3,9 @@ package glide.model
 import java.util.UUID
 
 enum class BillStatus(val label: String) {
+    /** Billing line scheduled; counts toward outstanding. */
+    SCHEDULED("Scheduled"),
+    /** Issued to the customer; awaiting payment. */
     ISSUED("Issued"),
     PAID("Paid"),
     VOID("Void"),
@@ -15,8 +18,15 @@ data class Bill(
     val description: String,
     val amountMinor: Long,
     val currencyCode: String,
-    val status: BillStatus = BillStatus.ISSUED,
-    val issuedAtMillis: Long = System.currentTimeMillis(),
+    val status: BillStatus = BillStatus.SCHEDULED,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    /** Set when the bill is issued to the customer; null while [status] is [BillStatus.SCHEDULED]. */
+    val issuedAtMillis: Long? = null,
     val dueAtMillis: Long? = null,
     val paidAtMillis: Long? = null,
 )
+
+fun Bill.isIssuedToCustomer(): Boolean =
+    status == BillStatus.ISSUED || status == BillStatus.PAID
+
+fun Bill.displayDateMillis(): Long = issuedAtMillis ?: createdAtMillis

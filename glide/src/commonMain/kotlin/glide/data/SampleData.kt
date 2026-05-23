@@ -126,7 +126,7 @@ object SampleData {
         )
         listOf(leo, mia, noah, ivy, sam, zoe, alex).forEach { RelatedPersonStore.create(it) }
 
-        // Customer 1: outstanding issued bill — test Record payment
+        // Customer 1: scheduled bill — test issue toggle and invoice generation
         val emmaGroup = PeopleGroup(
             id = "sample-customer-emma",
             type = PeopleGroupType.CUSTOMER,
@@ -137,7 +137,7 @@ object SampleData {
             createdAtMillis = now - 10 * day,
         )
         seedCustomerBilling(emmaGroup, rollingPack) { enrollment ->
-            BillStore.issueInitialPackBill(enrollment, exportInvoice = false)
+            BillStore.createInitialPackBill(enrollment)
         }
 
         // Customer 2: fully paid — test paid bill display
@@ -152,9 +152,10 @@ object SampleData {
             createdAtMillis = now - 8 * day,
         )
         seedCustomerBilling(jamesGroup, rollingPack) { enrollment ->
-            val bill = BillStore.issueInitialPackBill(enrollment, exportInvoice = false)
+            val bill = BillStore.createInitialPackBill(enrollment)
+            BillStore.setIssued(bill.id, issued = true, issuedAtMillis = now - 8 * day)
             PaymentStore.recordFullPayment(
-                bill = bill,
+                bill = BillStore.findById(bill.id)!!,
                 method = PaymentMethod.BANK_TRANSFER,
                 reference = "BACS-88421",
                 receivedAtMillis = now - 7 * day,
@@ -173,14 +174,15 @@ object SampleData {
             createdAtMillis = now - 6 * day,
         )
         seedCustomerBilling(sarahGroup, rollingPack) { enrollment ->
-            val first = BillStore.issueInitialPackBill(enrollment, exportInvoice = false)
+            val first = BillStore.createInitialPackBill(enrollment)
+            BillStore.setIssued(first.id, issued = true, issuedAtMillis = now - 6 * day)
             PaymentStore.recordFullPayment(
-                bill = first,
+                bill = BillStore.findById(first.id)!!,
                 method = PaymentMethod.CARD,
                 reference = "CARD-22901",
                 receivedAtMillis = now - 5 * day,
             )
-            BillStore.issuePackBill(enrollment, exportInvoice = false)
+            BillStore.createRenewalBill(enrollment)
         }
 
         // Leads for non-billing UI smoke tests

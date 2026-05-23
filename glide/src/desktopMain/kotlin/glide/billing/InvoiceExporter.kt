@@ -5,7 +5,7 @@ import java.awt.Desktop
 import java.io.File
 
 actual object InvoiceExporter {
-    actual fun onBillIssued(bill: Bill) {
+    actual fun exportInvoice(bill: Bill) {
         val content = bill.toInvoiceContent() ?: return
         val file = runCatching { InvoicePdfWriter.write(content, bill.id) }.getOrNull() ?: return
         if (Desktop.isDesktopSupported()) {

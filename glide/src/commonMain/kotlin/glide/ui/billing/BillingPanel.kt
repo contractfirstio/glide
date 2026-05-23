@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -43,6 +44,8 @@ import glide.data.resolveMainContact
 import glide.model.Bill
 import glide.model.BillStatus
 import glide.model.PackEnrollment
+import glide.model.displayDateMillis
+import glide.model.isIssuedToCustomer
 import glide.model.PaymentMethod
 import glide.model.PeopleGroupType
 import glide.model.formatMoney
@@ -149,11 +152,11 @@ fun BillingPanel(
             }
             GlideOutlinedButton(
                 onClick = {
-                    BillingService.issueRenewalBill(peopleGroupId)
+                    BillingService.addRenewalBill(peopleGroupId)
                     selectedBillId = null
                 },
             ) {
-                Text("Issue bill")
+                Text("Add bill")
             }
         }
 
@@ -182,6 +185,12 @@ fun BillingPanel(
                     selected = bill.id == selectedBillId,
                     payment = PaymentStore.forBill(bill.id),
                     onClick = { selectedBillId = bill.id },
+                    onIssuedChange = { issued ->
+                        BillStore.setIssued(bill.id, issued)
+                    },
+                    onGenerateInvoice = {
+                        BillStore.generateInvoice(bill.id)
+                    },
                 )
                 Spacer(modifier = Modifier.height(2.dp))
             }
@@ -199,6 +208,9 @@ fun BillingPanel(
                 onVoid = {
                     BillStore.voidBill(selectedBill.id)
                     selectedBillId = null
+                },
+                onGenerateInvoice = {
+                    BillStore.generateInvoice(selectedBill.id)
                 },
             )
         }
@@ -297,6 +309,8 @@ private fun BillRow(
     selected: Boolean,
     payment: glide.model.Payment?,
     onClick: () -> Unit,
+    onIssuedChange: (Boolean) -> Unit,
+    onGenerateInvoice: () -> Unit,
 ) {
     val background = if (selected) {
         MaterialTheme.colorScheme.primaryContainer
@@ -329,6 +343,7 @@ private fun BillRow(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = bill.status.label,
@@ -336,10 +351,32 @@ private fun BillRow(
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
-                text = dateFormat.format(Date(bill.issuedAtMillis)),
+                text = dateFormat.format(Date(bill.displayDateMillis())),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (bill.status != BillStatus.VOID && bill.status != BillStatus.PAID) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = bill.isIssuedToCustomer(),
+                        onCheckedChange = onIssuedChange,
+                        enabled = bill.status == BillStatus.SCHEDULED || bill.status == BillStatus.ISSUED,
+                    )
+                    Text(
+                        text = "Issued",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                GlideTextButton(onClick = onGenerateInvoice) {
+                    Text("Invoice")
+                }
+            }
         }
         payment?.let {
             Text(
@@ -356,6 +393,7 @@ private fun BillDetailActions(
     bill: Bill,
     onRecordPayment: () -> Unit,
     onVoid: () -> Unit,
+    onGenerateInvoice: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -372,12 +410,40 @@ private fun BillDetailActions(
         )
         Spacer(modifier = Modifier.height(6.dp))
         when (bill.status) {
+            BillStatus.SCHEDULED -> {
+                Text(
+                    text = "Scheduled billing line — mark Issued when sent to the customer, then record payment.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                GlideOutlinedButton(
+                    onClick = onGenerateInvoice,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Generate invoice PDF")
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                GlideOutlinedButton(
+                    onClick = onVoid,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Void bill", color = MaterialTheme.colorScheme.error)
+                }
+            }
             BillStatus.ISSUED -> {
                 GlideButton(
                     onClick = onRecordPayment,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Record payment")
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                GlideOutlinedButton(
+                    onClick = onGenerateInvoice,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Generate invoice PDF")
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 GlideOutlinedButton(

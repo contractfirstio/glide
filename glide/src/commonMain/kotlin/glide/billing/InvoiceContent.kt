@@ -4,6 +4,7 @@ import glide.data.PeopleGroupStore
 import glide.data.resolveMainContact
 import glide.model.Bill
 import glide.model.BillStatus
+import glide.model.displayDateMillis
 import glide.model.formatMoney
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,7 +39,7 @@ fun Bill.toInvoiceContent(): InvoiceContent? {
     val main = group.resolveMainContact()
     return InvoiceContent(
         invoiceNumber = id.replace("-", "").take(8).uppercase(Locale.UK),
-        issuedAtMillis = issuedAtMillis,
+        issuedAtMillis = displayDateMillis(),
         dueAtMillis = dueAtMillis,
         billToName = main.name.ifBlank { "Customer" },
         billToEmail = main.email,
