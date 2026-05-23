@@ -14,13 +14,18 @@ object PeopleGroupStore {
     val customers: List<PeopleGroup> get() = _groups.filter { it.type == PeopleGroupType.CUSTOMER }
 
     /**
-     * Customer groups for the Customers panel — all groups, or only those whose main contact is
-     * [contactId] when a contact is selected in the Contacts panel.
+     * Customer groups for the Customers panel — all groups, those whose main contact is
+     * [contactId], or those that include [relatedPersonId].
      */
-    fun forCustomersPanel(contactId: String?): List<PeopleGroup> =
-        when (contactId) {
-            null -> customers
-            else -> customers.filter { it.mainContactId == contactId }
+    fun forCustomersPanel(
+        contactId: String? = null,
+        relatedPersonId: String? = null,
+    ): List<PeopleGroup> =
+        when {
+            relatedPersonId != null ->
+                customers.filter { relatedPersonId in it.relatedPersonIds }
+            contactId != null -> customers.filter { it.mainContactId == contactId }
+            else -> customers
         }
 
     /** Sample / dev data only — inserts an already-converted customer group. */

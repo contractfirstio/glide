@@ -18,7 +18,11 @@ object RelatedPersonStore {
      * [customerGroupId] when a customer group is selected, or everyone linked to [contactId]
      * across that contact's leads and customer groups.
      */
-    fun forRelatedPanel(customerGroupId: String?, contactId: String? = null): List<RelatedPerson> =
+    fun forRelatedPanel(
+        customerGroupId: String? = null,
+        contactId: String? = null,
+        relatedPersonId: String? = null,
+    ): List<RelatedPerson> =
         when {
             customerGroupId != null ->
                 PeopleGroupStore.findById(customerGroupId)
@@ -26,6 +30,8 @@ object RelatedPersonStore {
                     ?.resolveRelatedPeople()
                     ?: emptyList()
             contactId != null -> relatedPeopleForMainContact(contactId)
+            relatedPersonId != null ->
+                findById(relatedPersonId)?.let { listOf(it) } ?: emptyList()
             else -> onCustomerPacks
         }
 

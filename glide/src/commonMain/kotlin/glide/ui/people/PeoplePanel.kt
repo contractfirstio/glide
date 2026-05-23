@@ -37,6 +37,8 @@ import glide.data.BillingPanelState
 import glide.data.ContactStore
 import glide.data.ContactsPanelState
 import glide.data.PeopleGroupStore
+import glide.data.RelatedPanelState
+import glide.data.RelatedPersonStore
 import glide.data.resolveMainContact
 import glide.model.Contact
 import glide.ui.layout.GlideLayout
@@ -80,11 +82,15 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
 
     val customerGroupId = BillingPanelState.peopleGroupId
     val contactFilterId = ContactsPanelState.selectedContactId
-    val contacts = ContactStore.forContactsPanel(customerGroupId)
+    val relatedFilterId = RelatedPanelState.selectedRelatedPersonId
+    val contacts = ContactStore.forContactsPanel(customerGroupId, relatedFilterId)
     val customerGroupLabel = customerGroupId?.let { id ->
         PeopleGroupStore.findById(id)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
     }
     val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+    val relatedFilterLabel = relatedFilterId?.let {
+        RelatedPersonStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    }
 
     fun clearLocalSelection() {
         selectedId = null
@@ -97,8 +103,8 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
         ContactsPanelState.clearContactFilter()
     }
 
-    LaunchedEffect(customerGroupId) {
-        if (customerGroupId != null && selectedId != null) {
+    LaunchedEffect(customerGroupId, relatedFilterId) {
+        if ((customerGroupId != null || relatedFilterId != null) && selectedId != null) {
             clearLocalSelection()
         }
     }
@@ -144,6 +150,10 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                             val label = contactFilterLabel ?: "this contact"
                             "Filtering customer groups for $label. Use Clear filter to reset."
                         }
+                        relatedFilterId != null -> {
+                            val label = relatedFilterLabel ?: "this related person"
+                            "Showing contacts linked to $label. Use Clear filter in Related to reset."
+                        }
                         else ->
                             "Edit contacts created from leads. New contacts are added when you make a customer on a lead."
                     },
@@ -167,6 +177,11 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
                             if (contactFilterId != null) {
                                 GlideTextButton(onClick = { ContactsPanelState.clearContactFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            if (relatedFilterId != null) {
+                                GlideTextButton(onClick = { RelatedPanelState.clearRelatedPersonFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
@@ -197,10 +212,13 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = if (customerGroupId == null) {
-                                    "No contacts yet. Contacts are created when leads become customers."
-                                } else {
-                                    "No main contact for this customer group."
+                                text = when {
+                                    customerGroupId != null ->
+                                        "No main contact for this customer group."
+                                    relatedFilterId != null ->
+                                        "No contacts linked to this related person."
+                                    else ->
+                                        "No contacts yet. Contacts are created when leads become customers."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,

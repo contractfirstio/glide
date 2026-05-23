@@ -45,6 +45,8 @@ import glide.data.BillStore
 import glide.data.BillingPanelState
 import glide.data.ContactStore
 import glide.data.ContactsPanelState
+import glide.data.RelatedPanelState
+import glide.data.RelatedPersonStore
 import glide.data.PackEnrollmentStore
 import glide.data.PeopleGroupNavigation
 import glide.data.PeopleGroupStore
@@ -194,11 +196,19 @@ private fun PeopleGroupPanel(
     } else {
         null
     }
+    val relatedFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
+        RelatedPanelState.selectedRelatedPersonId
+    } else {
+        null
+    }
     val groups = when (ui.type) {
         PeopleGroupType.LEAD -> PeopleGroupStore.leads
-        PeopleGroupType.CUSTOMER -> PeopleGroupStore.forCustomersPanel(contactFilterId)
+        PeopleGroupType.CUSTOMER -> PeopleGroupStore.forCustomersPanel(contactFilterId, relatedFilterId)
     }
     val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+    val relatedFilterLabel = relatedFilterId?.let {
+        RelatedPersonStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    }
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     fun resetFormForCreate() {
@@ -258,16 +268,16 @@ private fun PeopleGroupPanel(
         }
     }
 
-    LaunchedEffect(contactFilterId) {
+    LaunchedEffect(contactFilterId, relatedFilterId) {
         if (ui.type == PeopleGroupType.CUSTOMER &&
-            contactFilterId != null &&
+            (contactFilterId != null || relatedFilterId != null) &&
             selectedId != null
         ) {
             clearLocalSelection()
         }
     }
 
-    LaunchedEffect(contactFilterId, groups, selectedId) {
+    LaunchedEffect(contactFilterId, relatedFilterId, groups, selectedId) {
         if (ui.type == PeopleGroupType.CUSTOMER &&
             selectedId != null &&
             groups.none { it.id == selectedId }
@@ -294,11 +304,16 @@ private fun PeopleGroupPanel(
         ) {
             if (!compact) {
                 Text(
-                    text = if (ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null) {
-                        val label = contactFilterLabel ?: "this contact"
-                        "Showing customer groups for $label. Use Clear filter to reset."
-                    } else {
-                        ui.subtitle
+                    text = when {
+                        ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null -> {
+                            val label = relatedFilterLabel ?: "this related person"
+                            "Showing customer groups for $label. Use Clear filter in Related to reset."
+                        }
+                        ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null -> {
+                            val label = contactFilterLabel ?: "this contact"
+                            "Showing customer groups for $label. Use Clear filter to reset."
+                        }
+                        else -> ui.subtitle
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -318,6 +333,11 @@ private fun PeopleGroupPanel(
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null) {
+                                GlideTextButton(onClick = { RelatedPanelState.clearRelatedPersonFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
                             if (ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null) {
                                 GlideTextButton(onClick = { ContactsPanelState.clearContactFilter() }) {
                                     Text("Clear filter")
@@ -355,10 +375,12 @@ private fun PeopleGroupPanel(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = if (ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null) {
-                                    "No customer groups for this contact."
-                                } else {
-                                    ui.emptyListMessage
+                                text = when {
+                                    ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null ->
+                                        "No customer groups for this related person."
+                                    ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null ->
+                                        "No customer groups for this contact."
+                                    else -> ui.emptyListMessage
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,

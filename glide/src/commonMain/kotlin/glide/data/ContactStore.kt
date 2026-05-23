@@ -10,19 +10,28 @@ object ContactStore {
     val all: List<Contact> get() = _contacts
 
     /**
-     * Contacts for the Contacts panel — all contacts, or only the main contact for
-     * [customerGroupId] when a customer group is selected in the Customers panel.
+     * Contacts for the Contacts panel — all contacts, the main contact for [customerGroupId],
+     * or main contacts on groups that include [relatedPersonId].
      */
-    fun forContactsPanel(customerGroupId: String?): List<Contact> =
-        when (customerGroupId) {
-            null -> all
-            else ->
+    fun forContactsPanel(
+        customerGroupId: String? = null,
+        relatedPersonId: String? = null,
+    ): List<Contact> =
+        when {
+            customerGroupId != null ->
                 PeopleGroupStore.findById(customerGroupId)
                     ?.takeIf { it.type == PeopleGroupType.CUSTOMER }
                     ?.mainContactId
                     ?.let { findById(it) }
                     ?.let { listOf(it) }
                     ?: emptyList()
+            relatedPersonId != null ->
+                PeopleGroupStore.all
+                    .filter { relatedPersonId in it.relatedPersonIds }
+                    .mapNotNull { it.mainContactId }
+                    .distinct()
+                    .mapNotNull { findById(it) }
+            else -> all
         }
 
     /** Only call from lead conversion — contacts are not created elsewhere. */
