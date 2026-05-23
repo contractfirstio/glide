@@ -32,6 +32,8 @@ fun ScheduledClass.usesLocation(locationId: String): Boolean = this.locationId =
 fun ScheduledClass.scheduleLine(): String =
     "${dayOfWeek.label} · $startTime–$endTime"
 
+fun ScheduledClass.timeRangeLine(): String = "$startTime–$endTime"
+
 fun ScheduledClass.spansTerm(termId: String): Boolean = termId in termIds
 
 fun isValidTime24h(value: String): Boolean {

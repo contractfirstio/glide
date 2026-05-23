@@ -80,7 +80,7 @@ fun classesOnDate(
 ): List<ScheduledClass> =
     classes
         .filter { it.spansTerm(termId) && it.dayOfWeek.toJavaDayOfWeek() == date.dayOfWeek }
-        .sortedWith(compareBy({ it.startTime }, { it.name }))
+        .sortedWith(compareBy({ it.startTime }, { it.endTime }, { it.name }))
 
 fun buildMonthGrid(
     yearMonth: YearMonth,

@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -34,11 +36,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import glide.data.LocationStore
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
 import glide.model.AcademicTerm
 import glide.model.ScheduledClass
 import glide.model.scheduleLine
+import glide.model.timeRangeLine
 import glide.ui.layout.GlideLayout
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.theme.GlideOutlinedButton
@@ -340,31 +344,57 @@ private fun TermCalendarDayCellView(
             if (cell.classes.isNotEmpty()) {
                 Column(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .padding(top = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                        .matchParentSize()
+                        .padding(top = 11.dp, start = 1.dp, end = 1.dp, bottom = 1.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    cell.classes.take(3).forEach { scheduledClass ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(3.dp)
-                                .clip(RoundedCornerShape(1.dp))
-                                .background(scheduledClass.resolvedCalendarColor()),
-                        )
-                    }
-                    if (cell.classes.size > 3) {
-                        Text(
-                            text = "+${cell.classes.size - 3}",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 7.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center,
-                        )
+                    cell.classes.forEach { scheduledClass ->
+                        TermCalendarClassBlock(scheduledClass = scheduledClass)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TermCalendarClassBlock(scheduledClass: ScheduledClass) {
+    val locationName = scheduledClass.locationId?.let { LocationStore.findById(it)?.name }
+    val blockTextColor = Color(0xFF0A1018)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(2.dp))
+            .background(scheduledClass.resolvedCalendarColor())
+            .padding(horizontal = 3.dp, vertical = 3.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = scheduledClass.timeRangeLine(),
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 7.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = blockTextColor,
+                maxLines = 1,
+            )
+            if (!locationName.isNullOrBlank()) {
+                Text(
+                    text = locationName,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 7.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = blockTextColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End,
+                )
             }
         }
     }
