@@ -66,6 +66,8 @@ import glide.model.PeopleGroupStatus
 import glide.model.PeopleGroupType
 import glide.model.parseIsoLocalDate
 import glide.model.summaryLine
+import glide.ui.leads.formatIsoDateForDisplay
+import glide.ui.leads.millisToIsoDate
 import glide.ui.leads.todayIsoDate
 import glide.ui.shared.formatPersonLabel
 import glide.ui.layout.GlideLayout
@@ -804,6 +806,15 @@ private fun PeopleGroupListItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = planStartDateLabelForGroup(group),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         } else {
             Text(
                 text = formatPersonLabel(main.name, main.dateOfBirth),
@@ -871,6 +882,19 @@ private fun planNameForGroup(group: PeopleGroup): String =
     group.planId
         ?.let { PlanStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() } }
         ?: "No plan"
+
+private fun planStartDateLabelForGroup(group: PeopleGroup): String {
+    val fromGroup = group.planStartDate.takeIf { it.isNotBlank() }
+        ?.let { formatIsoDateForDisplay(it) }
+        ?.takeIf { it.isNotBlank() }
+    if (fromGroup != null) return fromGroup
+
+    return PackEnrollmentStore.forPeopleGroup(group.id)
+        ?.startedAtMillis
+        ?.let { formatIsoDateForDisplay(millisToIsoDate(it)) }
+        ?.takeIf { it.isNotBlank() }
+        ?: "No start date"
+}
 
 private fun planLabelForGroup(group: PeopleGroup): String? {
     val planId = group.planId ?: return null

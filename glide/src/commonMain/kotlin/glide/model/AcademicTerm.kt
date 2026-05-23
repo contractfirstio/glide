@@ -12,6 +12,8 @@ data class AcademicTerm(
     val startDate: String,
     val endDate: String,
     val notes: String = "",
+    /** When true, rolling pack classes may span into this term. */
+    val acceptsRollingPlans: Boolean = true,
     val createdAtMillis: Long = System.currentTimeMillis(),
 )
 

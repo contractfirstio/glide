@@ -151,9 +151,61 @@ fun scheduledClassHasRollingCustomerGroup(scheduledClass: ScheduledClass): Boole
         PackEnrollmentStore.forPeopleGroup(groupId)?.planSnapshot?.rolling == true
     }
 
+fun ScheduledClass.linkedAcademicTerms(): List<AcademicTerm> =
+    termIds.mapNotNull { TermStore.findById(it) }
+
+/** Rolling pack enrollments require at least one linked term and every linked term to accept rolling plans. */
+fun ScheduledClass.canAcceptRollingPackEnrollments(): Boolean {
+    val linked = linkedAcademicTerms()
+    return linked.isNotEmpty() && linked.all { it.acceptsRollingPlans }
+}
+
+fun rollingPackNotAllowedOnClassMessage(): String =
+    "Rolling pack enrollments require every linked term to accept rolling plans."
+
+fun peopleGroupHasRollingPack(peopleGroupId: String): Boolean =
+    PackEnrollmentStore.forPeopleGroup(peopleGroupId)?.planSnapshot?.rolling == true
+
+fun validateRollingPackEnrollmentForClass(
+    peopleGroupId: String,
+    scheduledClass: ScheduledClass,
+): String? {
+    if (!peopleGroupHasRollingPack(peopleGroupId)) return null
+    if (scheduledClass.canAcceptRollingPackEnrollments()) return null
+    val label = PeopleGroupStore.findById(peopleGroupId)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+        ?: "This customer group"
+    return "$label has a rolling pack. ${rollingPackNotAllowedOnClassMessage()}"
+}
+
+fun validateRollingPackEnrollmentsForClass(
+    customerGroupIds: List<String>,
+    scheduledClass: ScheduledClass,
+): String? {
+    for (groupId in customerGroupIds) {
+        validateRollingPackEnrollmentForClass(groupId, scheduledClass)?.let { return it }
+    }
+    return null
+}
+
+fun validateTermDisablingRollingPlans(term: AcademicTerm): String? {
+    if (term.acceptsRollingPlans) return null
+    for (scheduledClass in ScheduledClassStore.classes) {
+        if (term.id !in scheduledClass.termIds) continue
+        for (groupId in scheduledClass.customerGroupIds) {
+            if (!peopleGroupHasRollingPack(groupId)) continue
+            val label = PeopleGroupStore.findById(groupId)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+                ?: "A customer group"
+            return "Cannot disable rolling plans on this term: \"$label\" on class \"${scheduledClass.name}\" " +
+                "has a rolling pack."
+        }
+    }
+    return null
+}
+
 /** Whether [newTerm] should be linked to [scheduledClass] when it is created (extends calendar forward). */
 fun shouldAutoLinkNewTermToClass(scheduledClass: ScheduledClass, newTerm: AcademicTerm): Boolean {
     if (newTerm.id in scheduledClass.termIds) return false
+    if (!newTerm.acceptsRollingPlans) return false
     if (scheduledClass.isSingleDay()) return false
     if (!scheduledClassHasRollingCustomerGroup(scheduledClass)) return false
 

@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
+import glide.data.validateTermDisablingRollingPlans
 import glide.model.AcademicTerm
 import glide.model.findOverlappingTerm
 import glide.ui.layout.GlideLayout
@@ -58,6 +60,7 @@ private data class TermFormState(
     val startDate: String = "",
     val endDate: String = "",
     val notes: String = "",
+    val acceptsRollingPlans: Boolean = true,
 ) {
     fun isValid(): Boolean {
         if (name.isBlank()) return false
@@ -75,6 +78,7 @@ private data class TermFormState(
         startDate = startDate,
         endDate = endDate,
         notes = notes.trim(),
+        acceptsRollingPlans = acceptsRollingPlans,
         createdAtMillis = createdAtMillis,
     )
 }
@@ -121,6 +125,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                 startDate = term.startDate,
                 endDate = term.endDate,
                 notes = term.notes,
+                acceptsRollingPlans = term.acceptsRollingPlans,
             ),
         )
         formError = null
@@ -267,6 +272,10 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                                 val overlapping = findOverlappingTerm(terms, candidate, excludeTermId = excludeId)
                                 if (overlapping != null) {
                                     formError = overlapErrorMessage(overlapping)
+                                    return@GlideButton
+                                }
+                                validateTermDisablingRollingPlans(candidate)?.let { message ->
+                                    formError = message
                                     return@GlideButton
                                 }
                                 formError = null
@@ -453,6 +462,36 @@ private fun TermForm(
             value = state.endDate,
             onValueChange = { onStateChange(state.copy(endDate = it)) },
         )
+    }
+
+    FormPanelSectionsDivider(label = "Rolling plans", spacing = spacing)
+
+    FormPanelSection(
+        title = "Rolling plans",
+        description = "Whether rolling pack classes can extend into this term.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Checkbox(
+                checked = state.acceptsRollingPlans,
+                onCheckedChange = { onStateChange(state.copy(acceptsRollingPlans = it)) },
+            )
+            Column(modifier = Modifier.padding(start = 4.dp)) {
+                Text(
+                    text = "Accepts Rolling Plans",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    text = "Rolling pack schedules may span into this term when a new term is added.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 
     FormPanelSectionsDivider(label = "Notes", spacing = spacing)

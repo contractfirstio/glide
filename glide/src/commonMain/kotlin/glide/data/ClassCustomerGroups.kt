@@ -18,6 +18,7 @@ sealed class AddCustomerGroupResult {
         val groupHeadcount: Int,
         val maxCapacity: Int,
     ) : AddCustomerGroupResult()
+    data object RollingPackNotAllowedOnClass : AddCustomerGroupResult()
 }
 
 fun headcountForCustomerGroups(customerGroupIds: List<String>): Int =
@@ -58,6 +59,9 @@ fun tryAddCustomerGroup(
 
     val cls = scheduledClass ?: classId?.let { ScheduledClassStore.findById(it) }
     if (cls != null) {
+        validateRollingPackEnrollmentForClass(groupId, cls)?.let {
+            return AddCustomerGroupResult.RollingPackNotAllowedOnClass
+        }
         packScheduleCheckForClass(groupId, cls)?.let { check ->
             if (!check.canFullySchedule) {
                 return AddCustomerGroupResult.PackCannotBeFullyScheduled(
@@ -94,4 +98,5 @@ fun AddCustomerGroupResult.toUserMessage(): String = when (this) {
         packCannotFullyScheduleMessage(packSessions, availableSessions)
     is AddCustomerGroupResult.CapacityExceeded ->
         "Room capacity exceeded ($currentHeadcount + $groupHeadcount > $maxCapacity)."
+    AddCustomerGroupResult.RollingPackNotAllowedOnClass -> rollingPackNotAllowedOnClassMessage()
 }

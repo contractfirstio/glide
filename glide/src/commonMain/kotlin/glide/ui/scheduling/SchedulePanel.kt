@@ -52,6 +52,9 @@ import glide.data.isCustomerGroupAvailableForClass
 import glide.data.tryAddCustomerGroup
 import glide.data.validateCustomerGroupsForClass
 import glide.data.validatePackSchedulesForClass
+import glide.data.validateRollingPackEnrollmentsForClass
+import glide.data.peopleGroupHasRollingPack
+import glide.data.canAcceptRollingPackEnrollments
 import glide.data.PeopleGroupStore
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
@@ -340,6 +343,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             FormPanelSectionsDivider(label = "Enrollment", spacing = spacing)
                             ClassCustomerGroupsSection(
                                 classId = selectedId,
+                                termIds = form.draft.termIds.toList(),
                                 customerGroupIds = form.draft.customerGroupIds.toList(),
                                 locationId = form.draft.locationId,
                                 onCustomerGroupIdsChange = { ids ->
@@ -400,6 +404,13 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                             createdAtMillis = existing.createdAtMillis,
                                         )
                                         validatePackSchedulesForClass(
+                                            updated.customerGroupIds,
+                                            updated,
+                                        )?.let { message ->
+                                            formError = message
+                                            return@GlideButton
+                                        }
+                                        validateRollingPackEnrollmentsForClass(
                                             updated.customerGroupIds,
                                             updated,
                                         )?.let { message ->
@@ -553,6 +564,7 @@ private fun ClassListItem(
 @Composable
 private fun ClassCustomerGroupsSection(
     classId: String?,
+    termIds: List<String>,
     customerGroupIds: List<String>,
     locationId: String?,
     onCustomerGroupIdsChange: (List<String>) -> Unit,
@@ -562,14 +574,19 @@ private fun ClassCustomerGroupsSection(
     var enrollmentMessage by remember { mutableStateOf<String?>(null) }
 
     val scheduledClass = classId?.let { ScheduledClassStore.findById(it) }
+    val classForValidation = scheduledClass?.copy(termIds = termIds)
     val assignedIds = customerGroupIds
     val location = locationId?.let { LocationStore.findById(it) }
     val headcount = headcountForCustomerGroups(customerGroupIds)
 
-    val searchResults = remember(searchQuery, assignedIds, classId) {
+    val searchResults = remember(searchQuery, assignedIds, classId, termIds, classForValidation) {
         PeopleGroupStore.customers
             .filter { it.id !in assignedIds }
             .filter { group -> isCustomerGroupAvailableForClass(group.id, classId) }
+            .filter { group ->
+                if (!peopleGroupHasRollingPack(group.id)) return@filter true
+                classForValidation?.canAcceptRollingPackEnrollments() == true
+            }
             .filter { group ->
                 val main = group.resolveMainContact()
                 searchQuery.isBlank() ||
@@ -609,11 +626,11 @@ private fun ClassCustomerGroupsSection(
                     groupId = groupId,
                     locationId = locationId,
                     classId = classId,
-                    scheduledClass = scheduledClass,
+                    scheduledClass = classForValidation,
                 )
                 if (result == AddCustomerGroupResult.Success) {
                     onCustomerGroupIdsChange(customerGroupIds + groupId)
-                    scheduledClass?.let { cls -> assignPackClassSchedule(groupId, cls) }
+                    classForValidation?.let { cls -> assignPackClassSchedule(groupId, cls) }
                     RollingPackBillingService.syncRollingPackBilling(groupId)
                     enrollmentMessage = result.toUserMessage()
                 } else {
@@ -630,7 +647,8 @@ private fun ClassCustomerGroupsSection(
                 color = if (
                     message.contains("exceeded", ignoreCase = true) ||
                     message.contains("already", ignoreCase = true) ||
-                    message.contains("Create a new term", ignoreCase = true)
+                    message.contains("Create a new term", ignoreCase = true) ||
+                    message.contains("rolling pack", ignoreCase = true)
                 ) {
                     MaterialTheme.colorScheme.error
                 } else {
