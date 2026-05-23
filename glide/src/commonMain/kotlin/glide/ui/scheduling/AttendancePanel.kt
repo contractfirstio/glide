@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -28,11 +29,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import glide.data.AbsentCreditPreview
+import glide.data.AttendanceCreditService
 import glide.data.ClassAttendanceStore
 import glide.data.LocationStore
 import glide.data.ScheduledClassStore
 import glide.data.attendeesForClass
 import glide.model.AttendanceStatus
+import glide.model.formatMoney
 import glide.model.ClassAttendee
 import glide.model.ClassSessionKey
 import glide.model.ScheduledClass
@@ -41,6 +45,7 @@ import glide.ui.layout.GlideLayout
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideOutlinedButton
+import glide.ui.theme.GlideTextButton
 import glide.ui.theme.glideListItemTitleColor
 
 fun attendancePanelTitle(scheduledClass: ScheduledClass?, sessionDate: String): String {
@@ -71,10 +76,68 @@ fun AttendancePanel(
         mutableStateOf(ClassAttendanceStore.draftForSession(session, attendeeKeys))
     }
     var saveMessage by remember(session) { mutableStateOf<String?>(null) }
+    var saveMessageIsError by remember(session) { mutableStateOf(false) }
+    var highlightUnmarked by remember(session) { mutableStateOf(false) }
+    var showCreditDialog by remember(session) { mutableStateOf(false) }
+    var creditDialogPreviews by remember(session) { mutableStateOf<List<AbsentCreditPreview>>(emptyList()) }
 
     LaunchedEffect(session, attendeeKeys) {
         draftByAttendeeKey = ClassAttendanceStore.draftForSession(session, attendeeKeys)
         saveMessage = null
+        saveMessageIsError = false
+        highlightUnmarked = false
+        showCreditDialog = false
+        creditDialogPreviews = emptyList()
+    }
+
+    fun finalizeSave(applyCredits: Boolean) {
+        if (applyCredits) {
+            val absent = AttendanceCreditService.absentAttendees(attendees, draftByAttendeeKey)
+            val result = AttendanceCreditService.applyCreditsForAbsentAttendees(
+                session = session,
+                className = scheduledClass?.name ?: "Class",
+                absentAttendees = absent,
+            )
+            ClassAttendanceStore.saveSession(session, draftByAttendeeKey, attendeeKeys)
+            highlightUnmarked = false
+            saveMessageIsError = false
+            saveMessage = when {
+                result.creditsAdded > 0 -> {
+                    val creditLabel = formatMoney(result.totalCreditMinor, result.currencyCode)
+                    "Attendance saved. $creditLabel credited toward next pack bill."
+                }
+                result.creditsSkipped > 0 ->
+                    "Attendance saved. No billing credits were added (enrollment missing or already credited)."
+                else -> "Attendance saved."
+            }
+        } else {
+            ClassAttendanceStore.saveSession(session, draftByAttendeeKey, attendeeKeys)
+            highlightUnmarked = false
+            saveMessageIsError = false
+            saveMessage = "Attendance saved."
+        }
+        showCreditDialog = false
+    }
+
+    fun attemptSave() {
+        val unmarked = ClassAttendanceStore.unmarkedAttendeeKeys(draftByAttendeeKey, attendeeKeys)
+        if (unmarked.isNotEmpty()) {
+            highlightUnmarked = true
+            saveMessageIsError = true
+            saveMessage = if (unmarked.size == 1) {
+                "Mark the remaining student as present or absent before saving."
+            } else {
+                "Mark all ${unmarked.size} students as present or absent before saving."
+            }
+            return
+        }
+        val absent = AttendanceCreditService.absentAttendees(attendees, draftByAttendeeKey)
+        if (absent.isEmpty()) {
+            finalizeSave(applyCredits = false)
+            return
+        }
+        creditDialogPreviews = AttendanceCreditService.previewCredits(session, absent)
+        showCreditDialog = true
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -132,7 +195,11 @@ fun AttendancePanel(
                 Text(
                     text = message,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (saveMessageIsError) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
                 )
             }
 
@@ -162,6 +229,8 @@ fun AttendancePanel(
                         onClick = {
                             draftByAttendeeKey = markAllDraft(draftByAttendeeKey, attendees, AttendanceStatus.PRESENT)
                             saveMessage = null
+                            saveMessageIsError = false
+                            highlightUnmarked = false
                         },
                         modifier = Modifier.weight(1f),
                     ) {
@@ -171,6 +240,8 @@ fun AttendancePanel(
                         onClick = {
                             draftByAttendeeKey = markAllDraft(draftByAttendeeKey, attendees, AttendanceStatus.ABSENT)
                             saveMessage = null
+                            saveMessageIsError = false
+                            highlightUnmarked = false
                         },
                         modifier = Modifier.weight(1f),
                     ) {
@@ -192,17 +263,21 @@ fun AttendancePanel(
                         AttendanceRow(
                             attendee = attendee,
                             status = draftByAttendeeKey[attendee.key],
+                            needsMark = highlightUnmarked && draftByAttendeeKey[attendee.key] == null,
                             onPresent = {
                                 draftByAttendeeKey = draftByAttendeeKey + (attendee.key to AttendanceStatus.PRESENT)
                                 saveMessage = null
+                                saveMessageIsError = false
                             },
                             onAbsent = {
                                 draftByAttendeeKey = draftByAttendeeKey + (attendee.key to AttendanceStatus.ABSENT)
                                 saveMessage = null
+                                saveMessageIsError = false
                             },
                             onClear = {
                                 draftByAttendeeKey = draftByAttendeeKey + (attendee.key to null)
                                 saveMessage = null
+                                saveMessageIsError = false
                             },
                         )
                         Spacer(modifier = Modifier.height(spacing.field))
@@ -218,10 +293,7 @@ fun AttendancePanel(
                 horizontalArrangement = Arrangement.spacedBy(spacing.field),
             ) {
                 GlideButton(
-                    onClick = {
-                        ClassAttendanceStore.saveSession(session, draftByAttendeeKey)
-                        saveMessage = "Attendance saved."
-                    },
+                    onClick = { attemptSave() },
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(saveLabel)
@@ -229,20 +301,60 @@ fun AttendancePanel(
             }
         }
     }
+
+    if (showCreditDialog && scheduledClass != null) {
+        val eligibleCount = creditDialogPreviews.count { it.eligible && !it.alreadyCredited }
+        AlertDialog(
+            onDismissRequest = { showCreditDialog = false },
+            title = { Text("Credit absent students?") },
+            text = {
+                Text(
+                    AttendanceCreditService.creditDialogMessage(
+                        creditDialogPreviews,
+                        scheduledClass.name,
+                    ),
+                )
+            },
+            confirmButton = {
+                GlideTextButton(
+                    onClick = { finalizeSave(applyCredits = true) },
+                    enabled = eligibleCount > 0,
+                ) {
+                    Text(if (eligibleCount > 0) "Credit & save" else "Credit unavailable")
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GlideTextButton(onClick = { showCreditDialog = false }) {
+                        Text("Cancel")
+                    }
+                    GlideTextButton(onClick = { finalizeSave(applyCredits = false) }) {
+                        Text("Save without credit")
+                    }
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun AttendanceRow(
     attendee: ClassAttendee,
     status: AttendanceStatus?,
+    needsMark: Boolean,
     onPresent: () -> Unit,
     onAbsent: () -> Unit,
     onClear: () -> Unit,
 ) {
+    val rowBackground = if (needsMark) {
+        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clipListItemBackground()
+            .background(rowBackground, MaterialTheme.shapes.small)
             .padding(vertical = 4.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -253,19 +365,23 @@ private fun AttendanceRow(
                 style = MaterialTheme.typography.bodyMedium,
                 color = glideListItemTitleColor(selected = false),
             )
-            if (status != null) {
-                Text(
-                    text = when (status) {
-                        AttendanceStatus.PRESENT -> "Present"
-                        AttendanceStatus.ABSENT -> "Absent"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = when (status) {
-                        AttendanceStatus.PRESENT -> MaterialTheme.colorScheme.primary
-                        AttendanceStatus.ABSENT -> MaterialTheme.colorScheme.error
-                    },
-                )
-            }
+            Text(
+                text = when (status) {
+                    AttendanceStatus.PRESENT -> "Present"
+                    AttendanceStatus.ABSENT -> "Absent"
+                    null -> if (needsMark) "Not marked" else "Unmarked"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = when (status) {
+                    AttendanceStatus.PRESENT -> MaterialTheme.colorScheme.primary
+                    AttendanceStatus.ABSENT -> MaterialTheme.colorScheme.error
+                    null -> if (needsMark) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                },
+            )
         }
         AttendanceToggle(
             label = "Present",
@@ -307,10 +423,6 @@ private fun AttendanceToggle(
         )
     }
 }
-
-@Composable
-private fun Modifier.clipListItemBackground(): Modifier =
-    this.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
 
 private fun markAllDraft(
     draft: Map<String, AttendanceStatus?>,

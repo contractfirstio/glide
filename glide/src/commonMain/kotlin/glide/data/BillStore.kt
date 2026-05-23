@@ -5,6 +5,7 @@ import glide.billing.InvoiceExporter
 import glide.model.Bill
 import glide.model.BillStatus
 import glide.model.PackEnrollment
+import glide.model.formatMoney
 
 object BillStore {
     private val _bills = mutableStateListOf<Bill>()
@@ -43,18 +44,35 @@ object BillStore {
         exportInvoice: Boolean,
     ): Bill {
         val snapshot = enrollment.planSnapshot
+        val householdSize = PeopleGroupStore.findById(enrollment.peopleGroupId)?.memberCount() ?: 1
+        val grossMinor = snapshot.totalAmountMinor(householdSize)
         val bill = Bill(
             enrollmentId = enrollment.id,
             peopleGroupId = enrollment.peopleGroupId,
             description = description,
-            amountMinor = snapshot.priceAmountMinor,
+            amountMinor = grossMinor,
             currencyCode = snapshot.currencyCode,
         )
         _bills.add(bill)
-        if (exportInvoice) {
-            InvoiceExporter.onBillIssued(bill)
+        var issuedBill = bill
+        val creditApplied = BillingCreditStore.consumeForBill(
+            enrollmentId = enrollment.id,
+            billId = bill.id,
+            maxToApplyMinor = grossMinor,
+        )
+        if (creditApplied > 0) {
+            val netMinor = (grossMinor - creditApplied).coerceAtLeast(0)
+            val creditLabel = formatMoney(creditApplied, snapshot.currencyCode)
+            issuedBill = bill.copy(
+                amountMinor = netMinor,
+                description = "$description ($creditLabel credit applied)",
+            )
+            _bills[_bills.lastIndex] = issuedBill
         }
-        return bill
+        if (exportInvoice) {
+            InvoiceExporter.onBillIssued(issuedBill)
+        }
+        return issuedBill
     }
 
     fun markPaid(billId: String, paidAtMillis: Long = System.currentTimeMillis()): Boolean {

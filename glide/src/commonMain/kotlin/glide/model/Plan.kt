@@ -13,7 +13,7 @@ data class Plan(
     val name: String,
     val lessonCount: Int,
     val rolling: Boolean = true,
-    /** Price in minor currency units (e.g. pence). */
+    /** Price per person in minor currency units (e.g. pence). */
     val priceAmountMinor: Long = 0L,
     val currencyCode: String = DEFAULT_CURRENCY_CODE,
     val notes: String = "",

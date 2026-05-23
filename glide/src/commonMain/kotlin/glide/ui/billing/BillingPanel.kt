@@ -32,11 +32,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import glide.data.BillStore
+import glide.data.BillingCreditStore
 import glide.data.BillingService
 import glide.data.PackEnrollmentStore
 import glide.data.PaymentStore
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
+import glide.data.memberCount
 import glide.data.resolveMainContact
 import glide.model.Bill
 import glide.model.BillStatus
@@ -236,6 +238,7 @@ private fun EnrollmentSummary(
     dateFormat: SimpleDateFormat,
 ) {
     val snapshot = enrollment.planSnapshot
+    val householdSize = PeopleGroupStore.findById(enrollment.peopleGroupId)?.memberCount() ?: 1
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -262,14 +265,28 @@ private fun EnrollmentSummary(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            text = "Agreed price: ${formatMoney(snapshot.priceAmountMinor, snapshot.currencyCode)}",
+            text = "Agreed price: ${formatMoney(snapshot.priceAmountMinor, snapshot.currencyCode)} per person",
             style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            text = "Pack total: ${formatMoney(snapshot.totalAmountMinor(householdSize), snapshot.currencyCode)} " +
+                "($householdSize ${if (householdSize == 1) "person" else "people"})",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = "Started ${dateFormat.format(Date(enrollment.startedAtMillis))} · ${enrollment.status.label}",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        val pendingCredit = BillingCreditStore.unappliedTotalMinor(enrollment.id)
+        if (pendingCredit > 0) {
+            Text(
+                text = "Credit on next bill: ${formatMoney(pendingCredit, snapshot.currencyCode)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
     }
 }
 

@@ -363,8 +363,8 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             onClick = {
                                 if (!formState.isValid()) {
                                     formError = when (formState.kind) {
-                                        PlanKind.SINGLE_LESSON_PACK -> "Name and a valid price are required."
-                                        PlanKind.MULTI_LESSON_PACK -> "Name, class count, and a valid price are required."
+                                        PlanKind.SINGLE_LESSON_PACK -> "Name and a valid price per person are required."
+                                        PlanKind.MULTI_LESSON_PACK -> "Name, class count, and a valid price per person are required."
                                     }
                                     return@GlideButton
                                 }
@@ -494,7 +494,7 @@ private fun PlanListItem(
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = formatMoney(plan.priceAmountMinor, plan.currencyCode),
+            text = "${formatMoney(plan.priceAmountMinor, plan.currencyCode)} per person",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -629,8 +629,8 @@ private fun PlanForm(
     GlideOutlinedField(
         value = state.priceMajor,
         onValueChange = { onStateChange(state.copy(priceMajor = it)) },
-        label = "Price",
-        placeholder = "e.g. 120.00",
+        label = "Price per person",
+        placeholder = "e.g. 12.00",
     )
     Spacer(modifier = Modifier.height(spacing.field))
     GlideOutlinedField(

@@ -64,23 +64,38 @@ object ClassAttendanceStore {
     ): Map<String, AttendanceStatus?> =
         attendeeKeys.associateWith { key -> statusFor(session, key) }
 
-    /** Replaces all attendance for [session] with non-null entries in [statusByAttendeeKey]. */
-    fun saveSession(session: ClassSessionKey, statusByAttendeeKey: Map<String, AttendanceStatus?>) {
+    fun unmarkedAttendeeKeys(
+        statusByAttendeeKey: Map<String, AttendanceStatus?>,
+        requiredAttendeeKeys: List<String>,
+    ): List<String> = requiredAttendeeKeys.filter { statusByAttendeeKey[it] == null }
+
+    /**
+     * Replaces all attendance for [session]. Returns false if any [requiredAttendeeKeys]
+     * lack a present/absent mark.
+     */
+    fun saveSession(
+        session: ClassSessionKey,
+        statusByAttendeeKey: Map<String, AttendanceStatus?>,
+        requiredAttendeeKeys: List<String>,
+    ): Boolean {
+        if (unmarkedAttendeeKeys(statusByAttendeeKey, requiredAttendeeKeys).isNotEmpty()) {
+            return false
+        }
         _records.removeAll {
             it.scheduledClassId == session.scheduledClassId && it.sessionDate == session.sessionDate
         }
-        statusByAttendeeKey.forEach { (attendeeKey, status) ->
-            if (status != null) {
-                _records.add(
-                    ClassAttendanceRecord(
-                        scheduledClassId = session.scheduledClassId,
-                        sessionDate = session.sessionDate,
-                        attendeeKey = attendeeKey,
-                        status = status,
-                    ),
-                )
-            }
+        requiredAttendeeKeys.forEach { attendeeKey ->
+            val status = statusByAttendeeKey[attendeeKey] ?: return false
+            _records.add(
+                ClassAttendanceRecord(
+                    scheduledClassId = session.scheduledClassId,
+                    sessionDate = session.sessionDate,
+                    attendeeKey = attendeeKey,
+                    status = status,
+                ),
+            )
         }
+        return true
     }
 
     fun clearForClass(scheduledClassId: String) {
