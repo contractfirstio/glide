@@ -1,11 +1,14 @@
 package glide.ui.peoplegroup
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -104,15 +107,69 @@ fun ReadOnlyRelatedPeopleSection(relatedPersonIds: List<String>) {
 }
 
 @Composable
-fun ReadOnlyPackSection(planId: String?) {
+fun ReadOnlyPackSection(
+    planId: String?,
+    prominent: Boolean = false,
+) {
     val plan = planId?.let { PlanStore.findById(it) }
-    GlideFieldLabel("Pack")
-    Spacer(modifier = Modifier.height(2.dp))
-    Text(
-        text = plan?.let { "${it.name} (${it.summaryLine()})" } ?: "—",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
+    if (prominent) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.small)
+                .background(
+                    if (plan != null) {
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    },
+                )
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+            Text(
+                text = "Plan",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = if (plan != null) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            if (plan != null) {
+                Text(
+                    text = plan.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 2,
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = plan.summaryLine(),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f),
+                )
+            } else {
+                Text(
+                    text = "No pack assigned",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    } else {
+        GlideFieldLabel("Pack")
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = plan?.let { "${it.name} (${it.summaryLine()})" } ?: "—",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
 }
 
 @Composable

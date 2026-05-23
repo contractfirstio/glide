@@ -31,6 +31,8 @@ data class PeopleGroup(
     val relatedPersonIds: List<String> = emptyList(),
     val status: PeopleGroupStatus = PeopleGroupStatus.New,
     val planId: String? = null,
+    /** When false, the main contact is not counted on classes; related people always attend. */
+    val mainContactAttendsClass: Boolean = true,
     val notes: String = "",
     val createdAtMillis: Long = System.currentTimeMillis(),
 )

@@ -1,5 +1,7 @@
 package glide.ui.scheduling
 
+import glide.data.PeopleGroupStore
+import glide.data.rosterNameLabels
 import glide.model.AcademicTerm
 import glide.model.DayOfWeek
 import glide.model.ScheduledClass
@@ -81,6 +83,13 @@ fun classesOnDate(
     classes
         .filter { it.spansTerm(termId) && it.dayOfWeek.toJavaDayOfWeek() == date.dayOfWeek }
         .sortedWith(compareBy({ it.startTime }, { it.endTime }, { it.name }))
+
+/** One line per customer group on the class: main contact and related names, comma-separated. */
+fun rosterLinesForClass(scheduledClass: ScheduledClass): List<String> =
+    scheduledClass.customerGroupIds
+        .mapNotNull { groupId -> PeopleGroupStore.findById(groupId) }
+        .map { group -> group.rosterNameLabels().joinToString(", ") }
+        .filter { it.isNotBlank() }
 
 fun buildMonthGrid(
     yearMonth: YearMonth,

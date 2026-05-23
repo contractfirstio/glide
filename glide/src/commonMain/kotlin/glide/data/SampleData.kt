@@ -147,6 +147,7 @@ object SampleData {
             mainContactId = james.id,
             relatedPersonIds = listOf(ivy.id, sam.id, alex.id),
             planId = rollingPack.id,
+            mainContactAttendsClass = false,
             status = PeopleGroupStatus.Won,
             createdAtMillis = now - 8 * day,
         )
@@ -264,6 +265,7 @@ object SampleData {
                 id = "sample-class-tuesday-ballet",
                 name = "Tuesday Beginner Ballet",
                 termIds = listOf(springTerm.id, summerTerm.id),
+                customerGroupIds = listOf("sample-customer-emma", "sample-customer-james"),
                 locationId = studioA.id,
                 dayOfWeek = DayOfWeek.TUESDAY,
                 startTime = "16:00",
@@ -277,6 +279,7 @@ object SampleData {
                 id = "sample-class-saturday-drama",
                 name = "Saturday Drama Club",
                 termIds = listOf(springTerm.id),
+                customerGroupIds = listOf("sample-customer-sarah"),
                 locationId = mainHall.id,
                 dayOfWeek = DayOfWeek.SATURDAY,
                 startTime = "10:30",

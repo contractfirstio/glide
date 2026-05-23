@@ -16,6 +16,7 @@ data class ScheduledClass(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val termIds: List<String> = emptyList(),
+    val customerGroupIds: List<String> = emptyList(),
     val locationId: String? = null,
     val dayOfWeek: DayOfWeek,
     /** 24-hour time, e.g. 09:00 */
@@ -35,6 +36,8 @@ fun ScheduledClass.scheduleLine(): String =
 fun ScheduledClass.timeRangeLine(): String = "$startTime–$endTime"
 
 fun ScheduledClass.spansTerm(termId: String): Boolean = termId in termIds
+
+fun ScheduledClass.hasCustomerGroup(groupId: String): Boolean = groupId in customerGroupIds
 
 fun isValidTime24h(value: String): Boolean {
     val parts = value.split(":")

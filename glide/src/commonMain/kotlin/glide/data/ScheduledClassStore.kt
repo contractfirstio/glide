@@ -2,6 +2,7 @@ package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
 import glide.model.ScheduledClass
+import glide.model.hasCustomerGroup
 import glide.model.spansTerm
 import glide.model.usesLocation
 
@@ -22,7 +23,6 @@ object ScheduledClassStore {
 
     fun delete(id: String) {
         _classes.removeAll { it.id == id }
-        ClassGroupAssignmentStore.clearForClass(id)
     }
 
     fun findById(id: String): ScheduledClass? = _classes.find { it.id == id }
@@ -41,6 +41,15 @@ object ScheduledClassStore {
             val item = _classes[index]
             if (item.usesLocation(locationId)) {
                 _classes[index] = item.copy(locationId = null)
+            }
+        }
+    }
+
+    fun clearCustomerGroupReference(groupId: String) {
+        for (index in _classes.indices) {
+            val item = _classes[index]
+            if (item.hasCustomerGroup(groupId)) {
+                _classes[index] = item.copy(customerGroupIds = item.customerGroupIds - groupId)
             }
         }
     }

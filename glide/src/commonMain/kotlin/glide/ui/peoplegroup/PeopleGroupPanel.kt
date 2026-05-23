@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -55,6 +57,8 @@ import glide.data.PeopleGroupNavigation
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
 import glide.model.formatMoney
+import glide.data.classAttendeeCount
+import glide.data.memberCount
 import glide.data.resolveMainContact
 import glide.data.resolveRelatedPeople
 import glide.model.PeopleGroup
@@ -151,6 +155,7 @@ private data class PeopleGroupFormState(
     val relatedPersonIds: List<String> = emptyList(),
     val status: PeopleGroupStatus = PeopleGroupStatus.New,
     val planId: String? = null,
+    val mainContactAttendsClass: Boolean = true,
     val notes: String = "",
 ) {
     fun isValidForLead(): Boolean =
@@ -177,6 +182,7 @@ private data class PeopleGroupFormState(
             relatedPersonIds = relatedPersonIds,
             status = status,
             planId = planId,
+            mainContactAttendsClass = mainContactAttendsClass,
             notes = notes.trim(),
             createdAtMillis = createdAtMillis,
         )
@@ -256,6 +262,7 @@ private fun PeopleGroupPanel(
             relatedPersonIds = group.relatedPersonIds,
             status = group.status,
             planId = group.planId,
+            mainContactAttendsClass = group.mainContactAttendsClass,
             notes = group.notes,
         )
         formError = null
@@ -426,6 +433,7 @@ private fun PeopleGroupPanel(
                                     selected = group.id == selectedId,
                                     compact = compact,
                                     showPipelineStatus = ui.showPipelineStatus,
+                                    emphasizePlan = ui.type == PeopleGroupType.CUSTOMER,
                                     onClick = {
                                         if (group.id == selectedId) {
                                             clearSelection()
@@ -692,6 +700,7 @@ private fun PeopleGroupListItem(
     selected: Boolean,
     compact: Boolean,
     showPipelineStatus: Boolean,
+    emphasizePlan: Boolean,
     onClick: () -> Unit,
 ) {
     val spacing = if (compact) GlideLayout.compact else GlideLayout.comfortable
@@ -719,6 +728,10 @@ private fun PeopleGroupListItem(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        if (emphasizePlan) {
+            Spacer(modifier = Modifier.height(4.dp))
+            PeopleGroupPlanLabel(group = group, prominent = true)
+        }
         if (main.email.isNotBlank() && !compact) {
             Text(
                 text = main.email,
@@ -737,14 +750,16 @@ private fun PeopleGroupListItem(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        planLabelForGroup(group)?.let { packLabel ->
-            Text(
-                text = packLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        if (!emphasizePlan) {
+            planLabelForGroup(group)?.let { packLabel ->
+                Text(
+                    text = packLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -778,6 +793,44 @@ private fun planLabelForGroup(group: PeopleGroup): String? {
     return "Pack: ${plan.name}"
 }
 
+@Composable
+private fun PeopleGroupPlanLabel(
+    group: PeopleGroup,
+    prominent: Boolean,
+) {
+    val plan = group.planId?.let { PlanStore.findById(it) }
+    if (plan != null) {
+        Text(
+            text = plan.name,
+            style = if (prominent) {
+                MaterialTheme.typography.bodyMedium
+            } else {
+                MaterialTheme.typography.labelSmall
+            },
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (prominent) {
+            Text(
+                text = plan.summaryLine(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    } else if (prominent) {
+        Text(
+            text = "No pack assigned",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 private fun PeopleGroup.relatedPeopleSummary(compact: Boolean): String? {
     val related = resolveRelatedPeople()
     if (related.isEmpty()) return null
@@ -794,11 +847,34 @@ private fun CustomerGroupDetailView(
 ) {
     val enrollment = PackEnrollmentStore.forPeopleGroup(group.id)
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
+    ReadOnlyPackSection(planId = group.planId, prominent = true)
+    Spacer(modifier = Modifier.height(spacing.section))
     ReadOnlyMainContactSection(contactId = group.mainContactId)
+    Spacer(modifier = Modifier.height(spacing.field))
+    Text(
+        text = if (group.mainContactAttendsClass) {
+            "Main contact attends class"
+        } else {
+            "Main contact does not attend class"
+        },
+        style = MaterialTheme.typography.bodySmall,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    Text(
+        text = "Related people always attend. Set on the lead before conversion.",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 2.dp),
+    )
     Spacer(modifier = Modifier.height(spacing.section))
     ReadOnlyRelatedPeopleSection(relatedPersonIds = group.relatedPersonIds)
-    Spacer(modifier = Modifier.height(spacing.field))
-    ReadOnlyPackSection(planId = group.planId)
+    Text(
+        text = "${group.classAttendeeCount()} attending on classes · ${group.memberCount()} in household",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = spacing.field),
+    )
     Spacer(modifier = Modifier.height(spacing.field))
     if (group.notes.isNotBlank()) {
         GlideFieldLabel("Notes")
@@ -844,6 +920,41 @@ private fun CustomerGroupDetailView(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text("Clone to new lead")
+    }
+}
+
+@Composable
+private fun LeadMainContactAttendsField(
+    attends: Boolean,
+    onAttendsChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = attends,
+            onCheckedChange = onAttendsChange,
+            colors = CheckboxDefaults.colors(
+                checkedColor = MaterialTheme.colorScheme.primary,
+            ),
+        )
+        Column(modifier = Modifier.padding(start = 4.dp)) {
+            Text(
+                text = "Main contact attends class",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = if (attends) {
+                    "Main contact counts toward room capacity when this group is on a class."
+                } else {
+                    "Only related people attend; main contact is not counted on classes."
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -904,6 +1015,14 @@ private fun PeopleGroupForm(
         PlanPackDropdown(
             selectedPlanId = state.planId,
             onPlanSelected = { onStateChange(state.copy(planId = it)) },
+        )
+    }
+
+    if (!isCustomerGroup) {
+        Spacer(modifier = Modifier.height(spacing.field))
+        LeadMainContactAttendsField(
+            attends = state.mainContactAttendsClass,
+            onAttendsChange = { onStateChange(state.copy(mainContactAttendsClass = it)) },
         )
     }
 

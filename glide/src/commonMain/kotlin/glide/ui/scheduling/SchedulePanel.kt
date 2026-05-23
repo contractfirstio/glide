@@ -41,11 +41,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import glide.data.ClassGroupAssignmentStore
 import glide.data.LocationStore
+import glide.data.enrolledHeadcount
+import glide.data.headcountForCustomerGroups
+import glide.data.AddCustomerGroupResult
+import glide.data.tryAddCustomerGroup
 import glide.data.PeopleGroupStore
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
+import glide.data.classAttendeeCount
 import glide.data.memberCount
 import glide.data.resolveMainContact
 import glide.data.toUserMessage
@@ -73,6 +77,7 @@ import java.util.UUID
 private data class ClassFormState(
     val name: String = "",
     val termIds: Set<String> = emptySet(),
+    val customerGroupIds: Set<String> = emptySet(),
     val locationId: String? = null,
     val dayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
     val startTime: String = "09:00",
@@ -94,6 +99,7 @@ private data class ClassFormState(
         id = existingId ?: UUID.randomUUID().toString(),
         name = name.trim(),
         termIds = termIds.toList(),
+        customerGroupIds = customerGroupIds.toList(),
         locationId = locationId,
         dayOfWeek = dayOfWeek,
         startTime = startTime,
@@ -136,6 +142,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
         formState = ClassFormState(
             name = scheduledClass.name,
             termIds = scheduledClass.termIds.toSet(),
+            customerGroupIds = scheduledClass.customerGroupIds.toSet(),
             locationId = scheduledClass.locationId,
             dayOfWeek = scheduledClass.dayOfWeek,
             startTime = scheduledClass.startTime,
@@ -282,7 +289,11 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                         if (!isCreating && selectedId != null) {
                             Spacer(modifier = Modifier.height(spacing.field))
                             ClassCustomerGroupsSection(
-                                classId = selectedId!!,
+                                customerGroupIds = formState.customerGroupIds.toList(),
+                                locationId = formState.locationId,
+                                onCustomerGroupIdsChange = { ids ->
+                                    formState = formState.copy(customerGroupIds = ids.toSet())
+                                },
                                 spacing = spacing,
                             )
                         }
@@ -400,8 +411,8 @@ private fun ClassListItem(
     val locationLine = location?.let { loc ->
         listOfNotNull(loc.name, loc.maxCapacity?.let { "Max $it" }).joinToString(" · ")
     }
-    val groupCount = ClassGroupAssignmentStore.groupsForClass(scheduledClass.id).size
-    val enrolledCount = ClassGroupAssignmentStore.headcountForClass(scheduledClass.id)
+    val groupCount = scheduledClass.customerGroupIds.size
+    val enrolledCount = scheduledClass.enrolledHeadcount()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -462,19 +473,19 @@ private fun ClassListItem(
 
 @Composable
 private fun ClassCustomerGroupsSection(
-    classId: String,
+    customerGroupIds: List<String>,
+    locationId: String?,
+    onCustomerGroupIdsChange: (List<String>) -> Unit,
     spacing: GlideLayout.Spacing,
 ) {
-    var searchQuery by remember(classId) { mutableStateOf("") }
-    var enrollmentMessage by remember(classId) { mutableStateOf<String?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var enrollmentMessage by remember { mutableStateOf<String?>(null) }
 
-    val assignedIds = ClassGroupAssignmentStore.groupsForClass(classId)
-    val scheduledClass = ScheduledClassStore.findById(classId)
-    val location = scheduledClass?.locationId?.let { LocationStore.findById(it) }
-    val headcount = ClassGroupAssignmentStore.headcountForClass(classId)
-    val assignmentRevision = ClassGroupAssignmentStore.assignments.size
+    val assignedIds = customerGroupIds
+    val location = locationId?.let { LocationStore.findById(it) }
+    val headcount = headcountForCustomerGroups(customerGroupIds)
 
-    val searchResults = remember(searchQuery, assignedIds, assignmentRevision) {
+    val searchResults = remember(searchQuery, assignedIds) {
         PeopleGroupStore.customers
             .filter { it.id !in assignedIds }
             .filter { group ->
@@ -488,7 +499,7 @@ private fun ClassCustomerGroupsSection(
                 SearchResultItem(
                     id = group.id,
                     primaryLabel = formatPersonLabel(main.name, main.dateOfBirth),
-                    secondaryLabel = "${group.memberCount()} people",
+                    secondaryLabel = "${group.classAttendeeCount()} attending",
                 )
             }
     }
@@ -508,7 +519,14 @@ private fun ClassCustomerGroupsSection(
             onQueryChange = { searchQuery = it },
             results = searchResults,
             onSelect = { groupId ->
-                val result = ClassGroupAssignmentStore.assign(classId, groupId)
+                val result = tryAddCustomerGroup(
+                    currentGroupIds = customerGroupIds,
+                    groupId = groupId,
+                    locationId = locationId,
+                )
+                if (result == AddCustomerGroupResult.Success) {
+                    onCustomerGroupIdsChange(customerGroupIds + groupId)
+                }
                 enrollmentMessage = result.toUserMessage()
             },
             noResultsText = "No matching customer groups.",
@@ -538,7 +556,7 @@ private fun ClassCustomerGroupsSection(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 2.dp),
+                        .padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -546,18 +564,26 @@ private fun ClassCustomerGroupsSection(
                         Text(
                             text = formatPersonLabel(main.name, main.dateOfBirth),
                             style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            text = "${group.memberCount()} people",
+                            text = buildString {
+                                append("${group.classAttendeeCount()} attending · ${group.memberCount()} in group")
+                                if (!group.mainContactAttendsClass) {
+                                    append(" · main contact not attending")
+                                }
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                     GlideTextButton(
                         onClick = {
-                            ClassGroupAssignmentStore.unassign(classId, groupId)
+                            onCustomerGroupIdsChange(customerGroupIds.filter { it != groupId })
                             enrollmentMessage = "Customer group removed from class."
                         },
                     ) {

@@ -361,6 +361,7 @@ private fun TermCalendarDayCellView(
 @Composable
 private fun TermCalendarClassBlock(scheduledClass: ScheduledClass) {
     val locationName = scheduledClass.locationId?.let { LocationStore.findById(it)?.name }
+    val rosterLines = rosterLinesForClass(scheduledClass)
     val blockTextColor = Color(0xFF0A1018)
 
     Box(
@@ -370,30 +371,47 @@ private fun TermCalendarClassBlock(scheduledClass: ScheduledClass) {
             .background(scheduledClass.resolvedCalendarColor())
             .padding(horizontal = 3.dp, vertical = 3.dp),
     ) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(
-                text = scheduledClass.timeRangeLine(),
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 7.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = blockTextColor,
-                maxLines = 1,
-            )
-            if (!locationName.isNullOrBlank()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 Text(
-                    text = locationName,
-                    modifier = Modifier.weight(1f),
+                    text = scheduledClass.timeRangeLine(),
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 7.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = blockTextColor,
                     maxLines = 1,
+                )
+                if (!locationName.isNullOrBlank()) {
+                    Text(
+                        text = locationName,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 7.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = blockTextColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.End,
+                    )
+                }
+            }
+            rosterLines.forEach { line ->
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 7.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = blockTextColor.copy(alpha = 0.92f),
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.End,
+                    lineHeight = 8.sp,
                 )
             }
         }

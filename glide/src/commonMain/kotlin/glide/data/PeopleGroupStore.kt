@@ -136,6 +136,7 @@ object PeopleGroupStore {
             relatedPersonIds = source.relatedPersonIds,
             status = PeopleGroupStatus.New,
             planId = source.planId,
+            mainContactAttendsClass = source.mainContactAttendsClass,
             notes = source.notes,
         )
         create(lead)
