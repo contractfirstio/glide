@@ -20,6 +20,7 @@ import glide.ui.layout.SchedulingPanelSlots
 import glide.ui.scheduling.LocationsFloatingPanel
 import glide.ui.scheduling.ScheduleFloatingPanel
 import glide.ui.scheduling.SchedulingCustomerGroupsFloatingPanel
+import glide.ui.scheduling.TermCalendarFloatingPanel
 import glide.ui.scheduling.TermsFloatingPanel
 
 @Composable
@@ -83,6 +84,10 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
                             windowHeightPx = windowHeightPx,
                         )
                         SchedulingPanelSlots.LOCATIONS -> LocationsFloatingPanel(
+                            windowWidthPx = windowWidthPx,
+                            windowHeightPx = windowHeightPx,
+                        )
+                        SchedulingPanelSlots.CALENDAR -> TermCalendarFloatingPanel(
                             windowWidthPx = windowWidthPx,
                             windowHeightPx = windowHeightPx,
                         )

@@ -22,6 +22,8 @@ data class ScheduledClass(
     val startTime: String,
     val endTime: String,
     val notes: String = "",
+    /** ARGB color for the term calendar; null uses a stable default from the class id. */
+    val calendarColorArgb: Int? = null,
     val createdAtMillis: Long = System.currentTimeMillis(),
 )
 

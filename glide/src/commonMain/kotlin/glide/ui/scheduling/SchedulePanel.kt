@@ -78,6 +78,8 @@ private data class ClassFormState(
     val startTime: String = "09:00",
     val endTime: String = "10:00",
     val notes: String = "",
+    val calendarColorArgb: Int? = null,
+    val classId: String? = null,
 ) {
     fun isValid(): Boolean {
         if (name.isBlank()) return false
@@ -97,6 +99,7 @@ private data class ClassFormState(
         startTime = startTime,
         endTime = endTime,
         notes = notes.trim(),
+        calendarColorArgb = calendarColorArgb,
         createdAtMillis = createdAtMillis,
     )
 }
@@ -138,6 +141,8 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
             startTime = scheduledClass.startTime,
             endTime = scheduledClass.endTime,
             notes = scheduledClass.notes,
+            calendarColorArgb = scheduledClass.calendarColorArgb,
+            classId = scheduledClass.id,
         )
         formError = null
     }
@@ -618,6 +623,11 @@ private fun ClassForm(
     var locationExpanded by remember { mutableStateOf(false) }
     var termsExpanded by remember { mutableStateOf(false) }
     var locationSectionExpanded by remember { mutableStateOf(false) }
+    val colorPicker = rememberClassColorPickerState()
+    val previewColorArgb = state.calendarColorArgb
+        ?: state.classId?.let { defaultCalendarColorArgb(it) }
+        ?: state.name.takeIf { it.isNotBlank() }?.let { defaultCalendarColorArgb(it) }
+        ?: ClassCalendarPalette.first()
 
     val termsSummary = when {
         state.termIds.isEmpty() -> "None selected"
@@ -634,6 +644,43 @@ private fun ClassForm(
         label = "Class name",
         placeholder = "e.g. Tuesday Beginner Ballet",
     )
+    Spacer(modifier = Modifier.height(spacing.field))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        ClassCalendarColorSwatch(
+            colorArgb = previewColorArgb,
+            onClick = {
+                colorPicker.show(previewColorArgb) { newArgb ->
+                    onStateChange(state.copy(calendarColorArgb = newArgb))
+                }
+            },
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Calendar color",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Shown on the term calendar for each scheduled day.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            )
+        }
+        GlideTextButton(
+            onClick = {
+                colorPicker.show(previewColorArgb) { newArgb ->
+                    onStateChange(state.copy(calendarColorArgb = newArgb))
+                }
+            },
+        ) {
+            Text("Change")
+        }
+    }
+    colorPicker.dialog()
     Spacer(modifier = Modifier.height(spacing.field))
 
     CollapsibleFormSection(

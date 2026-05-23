@@ -27,4 +27,8 @@ object TermStore {
 
     fun sortedForPanel(): List<AcademicTerm> =
         _terms.sortedWith(compareByDescending<AcademicTerm> { it.startDate }.thenBy { it.name })
+
+    /** Chronological order for term calendar navigation (earliest first). */
+    fun sortedChronologically(): List<AcademicTerm> =
+        _terms.sortedWith(compareBy<AcademicTerm> { it.startDate }.thenBy { it.name })
 }

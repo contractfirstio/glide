@@ -12,11 +12,11 @@ object GlideLayout {
     val CompactWidthBreakpoint = 680.dp
 
     const val CustomerManagementPanelCount = 5
-    const val SchedulingPanelCount = 4
+    const val SchedulingPanelCount = 5
     const val CustomerManagementGridColumns = 3
     const val CustomerManagementGridRows = 2
-    const val SchedulingGridColumns = 4
-    const val SchedulingGridRows = 1
+    const val SchedulingGridColumns = 3
+    const val SchedulingGridRows = 2
     const val StartupWindowScale = 3
 
     fun gridColumns(mode: AppViewMode = AppViewState.mode): Int = when (mode) {
@@ -90,14 +90,16 @@ object GlideLayout {
     /**
      * Scheduling grid:
      * ```
-     * [ Schedule ] [ Terms ] [ Customer groups ] [ Locations ]
+     * [ Classes ] [ Term calendar ] [ Customer groups ]
+     * [ Locations ] [ Terms        ] [                ]
      * ```
      */
     fun schedulingPanelGridCell(slot: Int): Pair<Int, Int> = when (slot) {
         SchedulingPanelSlots.SCHEDULE -> 0 to 0
-        SchedulingPanelSlots.TERMS -> 0 to 1
+        SchedulingPanelSlots.CALENDAR -> 0 to 1
         SchedulingPanelSlots.CUSTOMER_GROUPS -> 0 to 2
-        SchedulingPanelSlots.LOCATIONS -> 0 to 3
+        SchedulingPanelSlots.LOCATIONS -> 1 to 0
+        SchedulingPanelSlots.TERMS -> 1 to 1
         else -> 0 to 0
     }
 

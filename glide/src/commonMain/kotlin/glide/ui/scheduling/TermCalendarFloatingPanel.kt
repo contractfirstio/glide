@@ -7,16 +7,17 @@ import glide.ui.components.FloatingPanelShell
 import glide.ui.layout.SchedulingPanelSlots
 
 @Composable
-fun ScheduleFloatingPanel(
+fun TermCalendarFloatingPanel(
     windowWidthPx: Int,
     windowHeightPx: Int,
 ) {
     FloatingPanelShell(
-        title = "Classes",
-        slot = SchedulingPanelSlots.SCHEDULE,
+        title = "Term calendar",
+        slot = SchedulingPanelSlots.CALENDAR,
         windowWidthPx = windowWidthPx,
         windowHeightPx = windowHeightPx,
+        initiallyCollapsed = false,
     ) {
-        SchedulePanel(modifier = Modifier.fillMaxSize())
+        TermCalendarPanel(modifier = Modifier.fillMaxSize())
     }
 }
