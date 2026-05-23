@@ -23,20 +23,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import glide.ui.theme.GlideTextButton
 
 @Composable
 fun ClassCalendarColorSwatch(
     colorArgb: Int,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
+    size: Dp = 20.dp,
 ) {
     val color = Color(colorArgb)
     Box(
         modifier = modifier
-            .size(20.dp)
+            .size(size)
             .clip(CircleShape)
             .background(color)
             .then(
@@ -46,7 +48,7 @@ fun ClassCalendarColorSwatch(
                     Modifier.border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), CircleShape)
                 },
             )
-            .clickable(onClick = onClick),
+            .then(onClick?.let { Modifier.clickable(onClick = it) } ?: Modifier),
     )
 }
 

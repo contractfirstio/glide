@@ -49,6 +49,9 @@ fun defaultTermSelectionId(terms: List<AcademicTerm>, today: LocalDate = LocalDa
     return terms.lastOrNull()?.id
 }
 
+fun indexOfMonthContaining(months: List<YearMonth>, date: LocalDate): Int =
+    months.indexOf(YearMonth.from(date))
+
 fun monthsInTerm(term: AcademicTerm): List<YearMonth> {
     val range = term.dateRange() ?: return emptyList()
     val months = mutableListOf<YearMonth>()
