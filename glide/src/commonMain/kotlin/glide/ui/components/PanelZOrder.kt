@@ -14,6 +14,10 @@ object PanelZOrder {
 
     val order: List<Int> get() = _order
 
+    val focusedSlot: Int? get() = _order.lastOrNull()
+
+    fun isFocused(slot: Int): Boolean = _order.lastOrNull() == slot
+
     fun bringToFront(slot: Int) {
         if (_order.lastOrNull() == slot) return
         _order.remove(slot)

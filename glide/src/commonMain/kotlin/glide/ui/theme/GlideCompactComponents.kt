@@ -1,5 +1,6 @@
 package glide.ui.theme
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -25,9 +27,9 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun GlideFieldLabel(text: String) {
     Text(
-        text = text,
+        text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
     )
 }
 
@@ -59,7 +61,9 @@ fun GlideOutlinedField(
         disabledTextColor = MaterialTheme.colorScheme.onSurface,
         cursorColor = MaterialTheme.colorScheme.primary,
         focusedBorderColor = MaterialTheme.colorScheme.primary,
-        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
     )
 
     Column(modifier = modifier) {
@@ -108,6 +112,11 @@ fun GlideButton(
             .heightIn(min = GlideDimensions.buttonHeight),
         contentPadding = GlideDimensions.buttonPadding,
         shape = MaterialTheme.shapes.small,
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
         content = {
             CompositionLocalProvider(LocalTextStyle provides MaterialTheme.typography.labelMedium) {
                 content()
@@ -131,6 +140,7 @@ fun GlideOutlinedButton(
             .heightIn(min = GlideDimensions.buttonHeight),
         contentPadding = GlideDimensions.buttonPadding,
         shape = MaterialTheme.shapes.small,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
         content = {
             CompositionLocalProvider(LocalTextStyle provides MaterialTheme.typography.labelMedium) {
                 content()
