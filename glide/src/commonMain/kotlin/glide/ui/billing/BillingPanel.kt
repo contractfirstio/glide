@@ -35,8 +35,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import glide.data.BillStore
 import glide.data.BillingCreditStore
+import glide.data.ClassAttendanceStore
+import glide.data.ScheduledClassStore
+import glide.data.TermStore
+import glide.data.attendanceBlocksBillIssuanceMessage
 import glide.data.creditAppliedMinor
 import glide.data.BillingService
+import glide.data.findPastSessionsNeedingAttendance
+import glide.data.openPendingAttendanceSession
 import glide.data.PackEnrollmentStore
 import glide.data.RollingPackBillingService
 import glide.data.countScheduledPackSessionsInPeriod
@@ -90,6 +96,13 @@ fun BillingPanel(
     var selectedBillId by remember(peopleGroupId) { mutableStateOf<String?>(null) }
     var showPaymentDialog by remember(peopleGroupId) { mutableStateOf(false) }
     var paymentError by remember(peopleGroupId) { mutableStateOf<String?>(null) }
+    var billingActionMessage by remember(peopleGroupId) { mutableStateOf<String?>(null) }
+
+    ClassAttendanceStore.records
+    ScheduledClassStore.classes
+    TermStore.terms
+    val pendingAttendance = findPastSessionsNeedingAttendance()
+    val billingBlockedByAttendance = pendingAttendance.isNotEmpty()
 
     val spacing = GlideLayout.comfortable
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
@@ -134,6 +147,27 @@ fun BillingPanel(
         }
 
         EnrollmentSummary(enrollment = enrollment, dateFormat = dateFormat)
+
+        if (billingBlockedByAttendance) {
+            Spacer(modifier = Modifier.height(spacing.field))
+            Text(
+                text = attendanceBlocksBillIssuanceMessage(pendingAttendance.size),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+            GlideTextButton(onClick = { openPendingAttendanceSession(pendingAttendance.first()) }) {
+                Text("Open attendance")
+            }
+        }
+
+        billingActionMessage?.let { message ->
+            Spacer(modifier = Modifier.height(spacing.field))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
 
         Spacer(modifier = Modifier.height(spacing.section))
 
@@ -192,12 +226,31 @@ fun BillingPanel(
                     dateFormat = dateFormat,
                     selected = bill.id == selectedBillId,
                     payment = PaymentStore.forBill(bill.id),
+                    billingBlockedByAttendance = billingBlockedByAttendance,
                     onClick = { selectedBillId = bill.id },
                     onIssuedChange = { issued ->
-                        BillStore.setIssued(bill.id, issued)
+                        if (issued && billingBlockedByAttendance) {
+                            billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                            return@BillRow
+                        }
+                        if (!BillStore.setIssued(bill.id, issued)) {
+                            if (issued && billingBlockedByAttendance) {
+                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                            }
+                            return@BillRow
+                        }
+                        billingActionMessage = null
                     },
                     onGenerateInvoice = {
-                        BillStore.generateInvoice(bill.id)
+                        if (billingBlockedByAttendance) {
+                            billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                            return@BillRow
+                        }
+                        if (!BillStore.generateInvoice(bill.id)) {
+                            billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                        } else {
+                            billingActionMessage = null
+                        }
                     },
                 )
                 Spacer(modifier = Modifier.height(2.dp))
@@ -209,6 +262,7 @@ fun BillingPanel(
             Spacer(modifier = Modifier.height(spacing.section))
             BillDetailActions(
                 bill = selectedBill,
+                billingBlockedByAttendance = billingBlockedByAttendance,
                 onRecordPayment = {
                     paymentError = null
                     showPaymentDialog = true
@@ -218,7 +272,15 @@ fun BillingPanel(
                     selectedBillId = null
                 },
                 onGenerateInvoice = {
-                    BillStore.generateInvoice(selectedBill.id)
+                    if (billingBlockedByAttendance) {
+                        billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                        return@BillDetailActions
+                    }
+                    if (!BillStore.generateInvoice(selectedBill.id)) {
+                        billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+                    } else {
+                        billingActionMessage = null
+                    }
                 },
             )
         }
@@ -329,10 +391,12 @@ private fun BillRow(
     dateFormat: SimpleDateFormat,
     selected: Boolean,
     payment: glide.model.Payment?,
+    billingBlockedByAttendance: Boolean,
     onClick: () -> Unit,
     onIssuedChange: (Boolean) -> Unit,
     onGenerateInvoice: () -> Unit,
 ) {
+    val canIssue = !billingBlockedByAttendance || bill.isIssuedToCustomer()
     val background = if (selected) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
@@ -395,14 +459,17 @@ private fun BillRow(
                     Checkbox(
                         checked = bill.isIssuedToCustomer(),
                         onCheckedChange = onIssuedChange,
-                        enabled = bill.status == BillStatus.SCHEDULED || bill.status == BillStatus.ISSUED,
+                        enabled = (bill.status == BillStatus.SCHEDULED || bill.status == BillStatus.ISSUED) && canIssue,
                     )
                     Text(
                         text = "Issued",
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
-                GlideTextButton(onClick = onGenerateInvoice) {
+                GlideTextButton(
+                    onClick = onGenerateInvoice,
+                    enabled = canIssue,
+                ) {
                     Text("Invoice")
                 }
             }
@@ -420,10 +487,12 @@ private fun BillRow(
 @Composable
 private fun BillDetailActions(
     bill: Bill,
+    billingBlockedByAttendance: Boolean,
     onRecordPayment: () -> Unit,
     onVoid: () -> Unit,
     onGenerateInvoice: () -> Unit,
 ) {
+    val canIssue = !billingBlockedByAttendance || bill.isIssuedToCustomer()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -449,6 +518,7 @@ private fun BillDetailActions(
                 GlideOutlinedButton(
                     onClick = onGenerateInvoice,
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = canIssue,
                 ) {
                     Text("Generate invoice PDF")
                 }
@@ -471,6 +541,7 @@ private fun BillDetailActions(
                 GlideOutlinedButton(
                     onClick = onGenerateInvoice,
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = canIssue,
                 ) {
                     Text("Generate invoice PDF")
                 }

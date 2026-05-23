@@ -1,6 +1,8 @@
 package glide.data
 
 import glide.model.AcademicTerm
+import glide.model.AttendanceStatus
+import glide.model.ClassAttendanceRecord
 import glide.model.ClassLocation
 import glide.model.Contact
 import glide.model.DayOfWeek
@@ -13,13 +15,21 @@ import glide.model.PlanKind
 import glide.model.PlanSnapshot
 import glide.model.RelatedPerson
 import glide.model.ScheduledClass
+import glide.model.dateRange
 import glide.model.majorToMinor
+import glide.model.occursOn
+import java.time.LocalDate
 
 /**
  * Populates in-memory stores with realistic demo data for manual testing.
  * Runs once per app launch when stores are empty.
  */
 object SampleData {
+    /** Fixed "today" for stable demo data (summer term 2026). */
+    private val sampleToday = LocalDate.of(2026, 5, 23)
+
+    private val deferredBillingActions = mutableListOf<() -> Unit>()
+
     fun loadIfEmpty() {
         if (PlanStore.plans.isNotEmpty()) return
 
@@ -121,14 +131,16 @@ object SampleData {
             id = "sample-related-alex",
             name = "Alex Morgan",
             dateOfBirth = "11/02/2010",
-            notes = "Friend on Emma and James packs — tests shared membership",
+            notes = "Related on Emma and James packs — different classes",
             createdAtMillis = now - 10 * day,
         )
         listOf(leo, mia, noah, ivy, sam, zoe, alex).forEach { RelatedPersonStore.create(it) }
 
+        seedScheduling(now, day)
+
         // Customer 1: scheduled bill — test issue toggle and invoice generation
         val emmaGroup = PeopleGroup(
-            id = "sample-customer-emma",
+            id = SAMPLE_CUSTOMER_EMMA,
             type = PeopleGroupType.CUSTOMER,
             mainContactId = emma.id,
             relatedPersonIds = listOf(mia.id, noah.id, alex.id),
@@ -136,13 +148,13 @@ object SampleData {
             planId = rollingPack.id,
             createdAtMillis = now - 10 * day,
         )
-        seedCustomerBilling(emmaGroup, rollingPack) { enrollment ->
+        registerCustomerBilling(emmaGroup, rollingPack) { enrollment ->
             BillStore.createInitialPackBill(enrollment)
         }
 
         // Customer 2: fully paid — test paid bill display
         val jamesGroup = PeopleGroup(
-            id = "sample-customer-james",
+            id = SAMPLE_CUSTOMER_JAMES,
             type = PeopleGroupType.CUSTOMER,
             mainContactId = james.id,
             relatedPersonIds = listOf(ivy.id, sam.id, alex.id),
@@ -151,7 +163,7 @@ object SampleData {
             status = PeopleGroupStatus.Won,
             createdAtMillis = now - 8 * day,
         )
-        seedCustomerBilling(jamesGroup, rollingPack) { enrollment ->
+        registerCustomerBilling(jamesGroup, rollingPack) { enrollment ->
             val bill = BillStore.createInitialPackBill(enrollment)
             BillStore.setIssued(bill.id, issued = true, issuedAtMillis = now - 8 * day)
             PaymentStore.recordFullPayment(
@@ -164,7 +176,7 @@ object SampleData {
 
         // Customer 3: paid initial + outstanding renewal — test Issue bill / outstanding
         val sarahGroup = PeopleGroup(
-            id = "sample-customer-sarah",
+            id = SAMPLE_CUSTOMER_SARAH,
             type = PeopleGroupType.CUSTOMER,
             mainContactId = sarah.id,
             relatedPersonIds = listOf(leo.id, zoe.id),
@@ -173,7 +185,7 @@ object SampleData {
             notes = "Family pack",
             createdAtMillis = now - 6 * day,
         )
-        seedCustomerBilling(sarahGroup, rollingPack) { enrollment ->
+        registerCustomerBilling(sarahGroup, rollingPack) { enrollment ->
             val first = BillStore.createInitialPackBill(enrollment)
             BillStore.setIssued(first.id, issued = true, issuedAtMillis = now - 6 * day)
             PaymentStore.recordFullPayment(
@@ -185,7 +197,11 @@ object SampleData {
             BillStore.createRenewalBill(enrollment)
         }
 
-        // Leads for non-billing UI smoke tests
+        assignPackSchedulesForRollingGroups()
+        seedPastAttendance(now, sampleToday)
+        deferredBillingActions.forEach { it() }
+        RollingPackBillingService.syncAllActiveRollingPackBilling()
+
         val ella = RelatedPerson(
             id = "sample-related-ella",
             name = "Ella O'Brien",
@@ -219,8 +235,6 @@ object SampleData {
                 createdAtMillis = now - day,
             ),
         )
-
-        seedScheduling(now, day)
     }
 
     private fun seedScheduling(now: Long, day: Long) {
@@ -262,17 +276,32 @@ object SampleData {
         )
         LocationStore.create(mainHall)
 
+        // One customer group per class
         ScheduledClassStore.create(
             ScheduledClass(
                 id = "sample-class-tuesday-ballet",
                 name = "Tuesday Beginner Ballet",
                 termIds = listOf(springTerm.id, summerTerm.id),
-                customerGroupIds = listOf("sample-customer-emma", "sample-customer-james"),
+                customerGroupIds = listOf(SAMPLE_CUSTOMER_EMMA),
                 locationId = studioA.id,
                 dayOfWeek = DayOfWeek.TUESDAY,
                 startTime = "16:00",
                 endTime = "17:00",
-                notes = "Runs across Spring and Summer",
+                notes = "Emma's household — rolling pack",
+                createdAtMillis = now - 4 * day,
+            ),
+        )
+        ScheduledClassStore.create(
+            ScheduledClass(
+                id = "sample-class-thursday-tap",
+                name = "Thursday Tap",
+                termIds = listOf(springTerm.id, summerTerm.id),
+                customerGroupIds = listOf(SAMPLE_CUSTOMER_JAMES),
+                locationId = studioA.id,
+                dayOfWeek = DayOfWeek.THURSDAY,
+                startTime = "17:30",
+                endTime = "18:30",
+                notes = "James household — main contact does not attend",
                 createdAtMillis = now - 4 * day,
             ),
         )
@@ -280,8 +309,8 @@ object SampleData {
             ScheduledClass(
                 id = "sample-class-saturday-drama",
                 name = "Saturday Drama Club",
-                termIds = listOf(springTerm.id),
-                customerGroupIds = listOf("sample-customer-sarah"),
+                termIds = listOf(springTerm.id, summerTerm.id),
+                customerGroupIds = listOf(SAMPLE_CUSTOMER_SARAH),
                 locationId = mainHall.id,
                 dayOfWeek = DayOfWeek.SATURDAY,
                 startTime = "10:30",
@@ -299,13 +328,13 @@ object SampleData {
                 singleDate = "2026-03-18",
                 startTime = "14:00",
                 endTime = "16:00",
-                notes = "One-off open day — single date only",
+                notes = "One-off open day — no enrolled groups",
                 createdAtMillis = now - 4 * day,
             ),
         )
     }
 
-    private fun seedCustomerBilling(
+    private fun registerCustomerBilling(
         group: PeopleGroup,
         plan: Plan,
         configureBills: (glide.model.PackEnrollment) -> Unit,
@@ -315,6 +344,53 @@ object SampleData {
             group = group,
             planSnapshot = PlanSnapshot.from(plan),
         ) ?: return
-        configureBills(enrollment)
+        deferredBillingActions.add { configureBills(enrollment) }
+    }
+
+    private fun assignPackSchedulesForRollingGroups() {
+        ScheduledClassStore.classes.forEach { scheduledClass ->
+            scheduledClass.customerGroupIds.forEach { groupId ->
+                val rolling = PackEnrollmentStore.forPeopleGroup(groupId)?.planSnapshot?.rolling == true
+                if (rolling) {
+                    assignPackClassSchedule(groupId, scheduledClass)
+                }
+            }
+        }
+    }
+
+    private fun seedPastAttendance(recordedAtMillis: Long, asOf: LocalDate) {
+        for (scheduledClass in ScheduledClassStore.classes) {
+            if (scheduledClass.customerGroupIds.isEmpty()) continue
+            val sessionDates = mutableSetOf<LocalDate>()
+            for (termId in scheduledClass.termIds) {
+                val term = TermStore.findById(termId) ?: continue
+                val range = term.dateRange() ?: continue
+                var date = range.start
+                while (!date.isAfter(range.endInclusive) && date.isBefore(asOf)) {
+                    if (scheduledClass.occursOn(date)) {
+                        sessionDates.add(date)
+                    }
+                    date = date.plusDays(1)
+                }
+            }
+            for (date in sessionDates) {
+                val attendees = attendeesForClass(scheduledClass, date)
+                for (attendee in attendees) {
+                    ClassAttendanceStore.seed(
+                        ClassAttendanceRecord(
+                            scheduledClassId = scheduledClass.id,
+                            sessionDate = date.toString(),
+                            attendeeKey = attendee.key,
+                            status = AttendanceStatus.PRESENT,
+                            recordedAtMillis = recordedAtMillis,
+                        ),
+                    )
+                }
+            }
+        }
     }
 }
+
+private const val SAMPLE_CUSTOMER_EMMA = "sample-customer-emma"
+private const val SAMPLE_CUSTOMER_JAMES = "sample-customer-james"
+private const val SAMPLE_CUSTOMER_SARAH = "sample-customer-sarah"

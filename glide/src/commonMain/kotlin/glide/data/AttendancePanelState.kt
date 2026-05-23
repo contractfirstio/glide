@@ -30,6 +30,12 @@ object AttendancePanelState {
         visible = AppViewState.mode == AppViewMode.SCHEDULING
     }
 
+    fun openForReminder(scheduledClassId: String, sessionDate: LocalDate) {
+        this.scheduledClassId = scheduledClassId
+        this.sessionDate = sessionDate.toString()
+        visible = true
+    }
+
     fun close() {
         visible = false
     }

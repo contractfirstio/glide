@@ -1,6 +1,7 @@
 package glide.ui.components
 
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -10,6 +11,11 @@ import glide.data.AppViewMode
 import glide.data.AppViewState
 import glide.data.AttendancePanelState
 import glide.data.BillingPanelState
+import glide.data.ClassAttendanceStore
+import glide.data.ScheduledClassStore
+import glide.data.TermStore
+import glide.data.findPastSessionsNeedingAttendance
+import glide.ui.scheduling.PendingAttendanceAlertBanner
 import glide.ui.billing.BillingFloatingPanel
 import glide.ui.scheduling.AttendanceFloatingPanel
 import glide.ui.customers.CustomersFloatingPanel
@@ -28,7 +34,18 @@ import glide.ui.scheduling.TermsFloatingPanel
 @Composable
 fun FloatingPanelsHost(modifier: Modifier = Modifier) {
     val viewMode = AppViewState.mode
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    ClassAttendanceStore.records
+    ScheduledClassStore.classes
+    TermStore.terms
+    val pendingAttendance = findPastSessionsNeedingAttendance()
+    Column(modifier = modifier.fillMaxSize()) {
+        if (viewMode == AppViewMode.SCHEDULING) {
+            PendingAttendanceAlertBanner(
+                pending = pendingAttendance,
+                compact = true,
+            )
+        }
+        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxSize()) {
         val windowWidthPx = constraints.maxWidth
         val windowHeightPx = constraints.maxHeight
 
@@ -131,6 +148,7 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
                     windowHeightPx = windowHeightPx,
                 )
             }
+        }
         }
     }
 }
