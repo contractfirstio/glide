@@ -13,6 +13,18 @@ object PeopleGroupStore {
     val leads: List<PeopleGroup> get() = _groups.filter { it.type == PeopleGroupType.LEAD }
     val customers: List<PeopleGroup> get() = _groups.filter { it.type == PeopleGroupType.CUSTOMER }
 
+    /** Sample / dev data only — inserts an already-converted customer group. */
+    internal fun seedCustomer(group: PeopleGroup) {
+        require(group.type == PeopleGroupType.CUSTOMER) {
+            "Seed customer groups must have type CUSTOMER."
+        }
+        require(group.mainContactId != null) { "Seed customer groups need a main contact." }
+        require(ContactStore.findById(group.mainContactId) != null) {
+            "Seed customer main contact must exist."
+        }
+        _groups.add(group)
+    }
+
     fun create(group: PeopleGroup) {
         require(group.type == PeopleGroupType.LEAD) {
             "People groups must be created as leads first."
@@ -91,6 +103,7 @@ object PeopleGroupStore {
                 phone = "",
             ),
         ) || return false
+        BillingService.onCustomerConverted(id)
         return true
     }
 

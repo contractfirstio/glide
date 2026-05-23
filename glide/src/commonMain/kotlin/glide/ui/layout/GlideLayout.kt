@@ -62,6 +62,7 @@ object GlideLayout {
         PanelSlots.PLANS -> 0 to 1
         PanelSlots.RELATED -> 0 to 2
         PanelSlots.PEOPLE -> 1 to 0
+        PanelSlots.BILLING -> 1 to 1
         PanelSlots.CUSTOMERS -> 1 to 2
         else -> 0 to 0
     }
@@ -116,4 +117,5 @@ object PanelSlots {
     const val RELATED = 2
     const val PEOPLE = 3
     const val CUSTOMERS = 4
+    const val BILLING = 5
 }

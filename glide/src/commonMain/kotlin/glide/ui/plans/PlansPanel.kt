@@ -43,11 +43,16 @@ import androidx.compose.ui.unit.dp
 import glide.data.PlanStore
 import glide.model.Plan
 import glide.model.PlanKind
+import glide.model.formatMoney
+import glide.model.majorToMinor
+import glide.model.parseMajorAmount
 import glide.model.summaryLine
+import glide.model.DEFAULT_CURRENCY_CODE
 import glide.ui.layout.GlideLayout
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideFieldLabel
+import glide.ui.theme.glideListItemTitleColor
 import glide.ui.theme.GlideOutlinedButton
 import glide.ui.theme.GlideOutlinedField
 import glide.ui.theme.GlideTextButton
@@ -58,31 +63,46 @@ private data class PlanFormState(
     val kind: PlanKind = PlanKind.MULTI_LESSON_PACK,
     val lessonCount: String = "10",
     val rolling: Boolean = true,
+    val priceMajor: String = "",
     val notes: String = "",
 ) {
     fun isValid(): Boolean {
         if (name.isBlank()) return false
+        if (parseMajorAmount(priceMajor) == null) return false
         return when (kind) {
             PlanKind.SINGLE_LESSON_PACK -> true
             PlanKind.MULTI_LESSON_PACK -> lessonCount.toIntOrNull()?.let { it > 0 } == true
         }
     }
 
-    fun toPlan(existingId: String? = null, createdAtMillis: Long = System.currentTimeMillis()): Plan? {
+    fun toPlan(
+        existingId: String? = null,
+        createdAtMillis: Long = System.currentTimeMillis(),
+        existingCurrency: String = DEFAULT_CURRENCY_CODE,
+    ): Plan? {
         val count = when (kind) {
             PlanKind.SINGLE_LESSON_PACK -> 1
             PlanKind.MULTI_LESSON_PACK -> lessonCount.toIntOrNull() ?: return null
         }
+        val priceMajorAmount = parseMajorAmount(priceMajor) ?: return null
         return Plan(
             id = existingId ?: UUID.randomUUID().toString(),
             kind = kind,
             name = name.trim(),
             lessonCount = count,
             rolling = kind != PlanKind.SINGLE_LESSON_PACK && rolling,
+            priceAmountMinor = majorToMinor(priceMajorAmount),
+            currencyCode = existingCurrency,
             notes = notes.trim(),
             createdAtMillis = createdAtMillis,
         )
     }
+}
+
+private fun Plan.priceMajorString(): String {
+    val major = priceAmountMinor / 100
+    val minor = priceAmountMinor % 100
+    return if (minor == 0L) major.toString() else "$major.${minor.toString().padStart(2, '0')}"
 }
 
 @Composable
@@ -110,6 +130,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
             kind = plan.kind,
             lessonCount = plan.lessonCount.toString(),
             rolling = plan.rolling,
+            priceMajor = plan.priceMajorString(),
             notes = plan.notes,
         )
         formError = null
@@ -243,8 +264,8 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             onClick = {
                                 if (!formState.isValid()) {
                                     formError = when (formState.kind) {
-                                        PlanKind.SINGLE_LESSON_PACK -> "Plan name is required."
-                                        PlanKind.MULTI_LESSON_PACK -> "Name and a valid class count are required."
+                                        PlanKind.SINGLE_LESSON_PACK -> "Name and a valid price are required."
+                                        PlanKind.MULTI_LESSON_PACK -> "Name, class count, and a valid price are required."
                                     }
                                     return@GlideButton
                                 }
@@ -263,6 +284,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                                         val updated = formState.toPlan(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
+                                            existingCurrency = existing.currencyCode,
                                         )
                                         if (updated != null) {
                                             PlanStore.update(updated)
@@ -354,6 +376,7 @@ private fun PlanListItem(
             text = plan.name,
             style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
+            color = glideListItemTitleColor(selected),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -368,6 +391,11 @@ private fun PlanListItem(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = formatMoney(plan.priceAmountMinor, plan.currencyCode),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -496,6 +524,13 @@ private fun PlanForm(
         }
     }
 
+    Spacer(modifier = Modifier.height(spacing.field))
+    GlideOutlinedField(
+        value = state.priceMajor,
+        onValueChange = { onStateChange(state.copy(priceMajor = it)) },
+        label = "Price",
+        placeholder = "e.g. 120.00",
+    )
     Spacer(modifier = Modifier.height(spacing.field))
     GlideOutlinedField(
         value = state.notes,

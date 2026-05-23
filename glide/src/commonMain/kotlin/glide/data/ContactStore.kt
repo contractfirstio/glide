@@ -13,6 +13,11 @@ object ContactStore {
         _contacts.add(contact)
     }
 
+    /** Sample / dev data only. */
+    internal fun seed(contact: Contact) {
+        _contacts.add(contact)
+    }
+
     fun update(contact: Contact) {
         val index = _contacts.indexOfFirst { it.id == contact.id }
         if (index >= 0) {

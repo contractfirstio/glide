@@ -39,6 +39,7 @@ import glide.ui.layout.GlideLayout
 import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
 import glide.ui.theme.GlideButton
+import glide.ui.theme.glideListItemTitleColor
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideOutlinedButton
 import glide.ui.theme.GlideOutlinedField
@@ -347,6 +348,7 @@ private fun ContactListItem(
             text = formatPersonLabel(contact.name, contact.dateOfBirth),
             style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
+            color = glideListItemTitleColor(selected),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

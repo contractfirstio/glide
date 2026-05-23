@@ -54,6 +54,7 @@ fun FloatingPanelShell(
     windowWidthPx: Int,
     windowHeightPx: Int,
     modifier: Modifier = Modifier,
+    onClose: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     if (windowWidthPx <= 0 || windowHeightPx <= 0) return
@@ -238,6 +239,16 @@ fun FloatingPanelShell(
                             color = accent.copy(alpha = 0.75f),
                             modifier = Modifier.padding(end = 4.dp),
                         )
+                    }
+                    if (onClose != null) {
+                        GlideTextButton(
+                            onClick = {
+                                bringToFront()
+                                onClose()
+                            },
+                        ) {
+                            Text("Close")
+                        }
                     }
                     GlideTextButton(
                         onClick = {

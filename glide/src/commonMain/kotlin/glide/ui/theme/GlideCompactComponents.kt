@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -21,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -97,6 +99,33 @@ fun GlideOutlinedField(
     }
 }
 
+/** Dark text on solid pale-blue primary buttons. */
+@Composable
+private fun GlideFilledButtonText(content: @Composable () -> Unit) {
+    val textColor = MaterialTheme.colorScheme.onPrimary
+    CompositionLocalProvider(
+        LocalContentColor provides textColor,
+        LocalTextStyle provides MaterialTheme.typography.labelMedium.copy(color = textColor),
+    ) {
+        content()
+    }
+}
+
+/** Light text on translucent outlined / text buttons (explicit [Text] colors, e.g. error red, still apply). */
+@Composable
+private fun GlideTranslucentButtonText(
+    style: TextStyle,
+    content: @Composable () -> Unit,
+) {
+    val textColor = MaterialTheme.colorScheme.onSurface
+    CompositionLocalProvider(
+        LocalContentColor provides textColor,
+        LocalTextStyle provides style.copy(color = textColor),
+    ) {
+        content()
+    }
+}
+
 @Composable
 fun GlideButton(
     onClick: () -> Unit,
@@ -117,11 +146,7 @@ fun GlideButton(
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
         ),
-        content = {
-            CompositionLocalProvider(LocalTextStyle provides MaterialTheme.typography.labelMedium) {
-                content()
-            }
-        },
+        content = { GlideFilledButtonText(content) },
     )
 }
 
@@ -141,10 +166,11 @@ fun GlideOutlinedButton(
         contentPadding = GlideDimensions.buttonPadding,
         shape = MaterialTheme.shapes.small,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
         content = {
-            CompositionLocalProvider(LocalTextStyle provides MaterialTheme.typography.labelMedium) {
-                content()
-            }
+            GlideTranslucentButtonText(MaterialTheme.typography.labelMedium, content)
         },
     )
 }
@@ -162,10 +188,11 @@ fun GlideTextButton(
         enabled = enabled,
         modifier = modifier.heightIn(min = GlideDimensions.buttonHeight),
         contentPadding = contentPadding,
+        colors = ButtonDefaults.textButtonColors(
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
         content = {
-            CompositionLocalProvider(LocalTextStyle provides MaterialTheme.typography.labelSmall) {
-                content()
-            }
+            GlideTranslucentButtonText(MaterialTheme.typography.labelSmall, content)
         },
     )
 }

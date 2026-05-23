@@ -41,10 +41,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import glide.data.BillStore
+import glide.data.BillingPanelState
 import glide.data.ContactStore
+import glide.data.PackEnrollmentStore
 import glide.data.PeopleGroupNavigation
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
+import glide.model.formatMoney
 import glide.data.resolveMainContact
 import glide.data.resolveRelatedPeople
 import glide.model.PeopleGroup
@@ -56,6 +60,7 @@ import glide.ui.layout.GlideLayout
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideFieldLabel
+import glide.ui.theme.glideListItemTitleColor
 import glide.ui.theme.GlideOutlinedButton
 import glide.ui.theme.GlideOutlinedField
 import glide.ui.theme.GlideTextButton
@@ -199,6 +204,9 @@ private fun PeopleGroupPanel(
         isCreating = false
         formState = PeopleGroupFormState()
         formError = null
+        if (ui.type == PeopleGroupType.CUSTOMER) {
+            BillingPanelState.onCustomerGroupCleared()
+        }
     }
 
     fun loadIntoForm(group: PeopleGroup) {
@@ -312,7 +320,12 @@ private fun PeopleGroupPanel(
                                     selected = group.id == selectedId,
                                     compact = compact,
                                     showPipelineStatus = ui.showPipelineStatus,
-                                    onClick = { loadIntoForm(group) },
+                                    onClick = {
+                                        loadIntoForm(group)
+                                        if (ui.type == PeopleGroupType.CUSTOMER) {
+                                            BillingPanelState.onCustomerGroupSelected(group.id)
+                                        }
+                                    },
                                 )
                             }
                         }
@@ -365,6 +378,7 @@ private fun PeopleGroupPanel(
                                     CustomerGroupDetailView(
                                         group = group,
                                         spacing = spacing,
+                                        onOpenBilling = { BillingPanelState.reopenForCurrentGroup() },
                                         onCloneToLead = {
                                             cloneMessage = null
                                             val lead = PeopleGroupStore.cloneToLead(group.id)
@@ -585,6 +599,7 @@ private fun PeopleGroupListItem(
             text = formatPersonLabel(main.name, main.dateOfBirth),
             style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
+            color = glideListItemTitleColor(selected),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -658,8 +673,11 @@ private fun PeopleGroup.relatedPeopleSummary(compact: Boolean): String? {
 private fun CustomerGroupDetailView(
     group: PeopleGroup,
     spacing: GlideLayout.Spacing,
+    onOpenBilling: () -> Unit,
     onCloneToLead: () -> Unit,
 ) {
+    val enrollment = PackEnrollmentStore.forPeopleGroup(group.id)
+    val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
     ReadOnlyMainContactSection(contactId = group.mainContactId)
     Spacer(modifier = Modifier.height(spacing.section))
     ReadOnlyRelatedPeopleSection(relatedPersonIds = group.relatedPersonIds)
@@ -674,6 +692,29 @@ private fun CustomerGroupDetailView(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface,
         )
+    }
+    enrollment?.let {
+        Spacer(modifier = Modifier.height(spacing.field))
+        Text(
+            text = if (outstanding > 0) {
+                "Outstanding: ${formatMoney(outstanding, it.planSnapshot.currencyCode)}"
+            } else {
+                "No outstanding bills"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = if (outstanding > 0) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+    }
+    Spacer(modifier = Modifier.height(spacing.field))
+    GlideButton(
+        onClick = onOpenBilling,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text("Billing")
     }
     Spacer(modifier = Modifier.height(spacing.field))
     Text(

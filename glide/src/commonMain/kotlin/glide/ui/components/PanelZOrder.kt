@@ -23,4 +23,15 @@ object PanelZOrder {
         _order.remove(slot)
         _order.add(slot)
     }
+
+    fun registerBilling() {
+        if (PanelSlots.BILLING !in _order) {
+            _order.add(PanelSlots.BILLING)
+        }
+        bringToFront(PanelSlots.BILLING)
+    }
+
+    fun unregisterBilling() {
+        _order.remove(PanelSlots.BILLING)
+    }
 }

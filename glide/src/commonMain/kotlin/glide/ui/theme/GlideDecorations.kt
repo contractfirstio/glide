@@ -16,6 +16,7 @@ object GlideAccents {
     val Related = Color(0xFF9AAFD4)
     val People = Color(0xFF8EC4D4)
     val Customers = Color(0xFFA8C0D0)
+    val Billing = Color(0xFFB8C8A0)
 
     fun forPanel(slot: Int): Color = when (slot) {
         PanelSlots.LEADS -> Leads
@@ -23,6 +24,7 @@ object GlideAccents {
         PanelSlots.RELATED -> Related
         PanelSlots.PEOPLE -> People
         PanelSlots.CUSTOMERS -> Customers
+        PanelSlots.BILLING -> Billing
         else -> Color(0xFF8CB4DC)
     }
 }
