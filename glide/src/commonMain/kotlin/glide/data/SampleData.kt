@@ -281,6 +281,8 @@ object SampleData {
             id = "sample-location-studio-a",
             name = "Studio A",
             maxCapacity = 12,
+            addressLine1 = "12 Dance Lane",
+            city = "Central",
             notes = "Ground floor · mirrors and barre",
             createdAtMillis = now - 5 * day,
         )
@@ -290,6 +292,8 @@ object SampleData {
             id = "sample-location-main-hall",
             name = "Main Hall",
             maxCapacity = 24,
+            addressLine1 = "48 Community Road",
+            city = "Wan Chai",
             createdAtMillis = now - 5 * day,
         )
         LocationStore.create(mainHall)

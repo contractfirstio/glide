@@ -54,6 +54,9 @@ import java.util.UUID
 private data class LocationFormState(
     val name: String = "",
     val maxCapacityText: String = "",
+    val addressLine1: String = "",
+    val addressLine2: String = "",
+    val city: String = "",
     val notes: String = "",
 ) {
     fun parsedMaxCapacity(): Int? {
@@ -76,6 +79,9 @@ private data class LocationFormState(
         id = existingId ?: UUID.randomUUID().toString(),
         name = name.trim(),
         maxCapacity = parsedMaxCapacity(),
+        addressLine1 = addressLine1.trim(),
+        addressLine2 = addressLine2.trim(),
+        city = city.trim(),
         notes = notes.trim(),
         createdAtMillis = createdAtMillis,
     )
@@ -126,11 +132,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         selectedId = location.id
         isCreating = false
         form.load(
-            LocationFormState(
-                name = location.name,
-                maxCapacityText = location.maxCapacity?.toString() ?: "",
-                notes = location.notes,
-            ),
+            location.toFormState(),
         )
         formError = null
     }
@@ -140,11 +142,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         isCreating = false
         SchedulePanelState.onLocationSelected(location.id)
         form.load(
-            LocationFormState(
-                name = location.name,
-                maxCapacityText = location.maxCapacity?.toString() ?: "",
-                notes = location.notes,
-            ),
+            location.toFormState(),
         )
         formError = null
     }
@@ -432,6 +430,16 @@ private fun LocationListItem(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        val addressPreview = location.formattedAddressLines().joinToString(", ")
+        if (addressPreview.isNotBlank()) {
+            Text(
+                text = addressPreview,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (location.notes.isNotBlank()) {
             Text(
                 text = location.notes,
@@ -472,6 +480,36 @@ private fun LocationForm(
         )
     }
 
+    FormPanelSectionsDivider(label = "Address", spacing = spacing)
+
+    FormPanelSection(
+        title = "Venue address",
+        description = "Printed on invoices so customers know where classes take place.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
+        GlideOutlinedField(
+            value = state.addressLine1,
+            onValueChange = { onStateChange(state.copy(addressLine1 = it)) },
+            label = "Address line 1",
+            placeholder = "e.g. 12 High Street",
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        GlideOutlinedField(
+            value = state.addressLine2,
+            onValueChange = { onStateChange(state.copy(addressLine2 = it)) },
+            label = "Address line 2",
+            placeholder = "e.g. Unit 3",
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        GlideOutlinedField(
+            value = state.city,
+            onValueChange = { onStateChange(state.copy(city = it)) },
+            label = "District / area",
+            placeholder = "e.g. Central",
+        )
+    }
+
     FormPanelSectionsDivider(label = "Capacity", spacing = spacing)
 
     FormPanelSection(
@@ -507,3 +545,12 @@ private fun LocationForm(
         )
     }
 }
+
+private fun ClassLocation.toFormState(): LocationFormState = LocationFormState(
+    name = name,
+    maxCapacityText = maxCapacity?.toString() ?: "",
+    addressLine1 = addressLine1,
+    addressLine2 = addressLine2,
+    city = city,
+    notes = notes,
+)

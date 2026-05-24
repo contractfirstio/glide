@@ -22,6 +22,7 @@ import java.time.LocalDate
 data class InvoiceClassSchedule(
     val className: String,
     val classDetails: String,
+    val locationAddressLines: List<String>,
     val studentNamesLabel: String,
     val billingWindowStartLabel: String,
     val scheduledSessionLabels: List<String>,
@@ -32,12 +33,13 @@ fun Bill.toInvoiceClassSchedule(): InvoiceClassSchedule? {
     val scheduledClass = ScheduledClassStore.findClassContainingCustomerGroup(peopleGroupId) ?: return null
     if (PackEnrollmentStore.findById(enrollmentId) == null) return null
 
-    val locationName = scheduledClass.locationId
-        ?.let { LocationStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() } }
+    val location = scheduledClass.locationId?.let { LocationStore.findById(it) }
+    val locationName = location?.name?.takeIf { name -> name.isNotBlank() }
     val classDetails = buildString {
         append(scheduledClass.scheduleLine())
         locationName?.let { append(" · ").append(it) }
     }
+    val locationAddressLines = location?.formattedAddressLines().orEmpty()
 
     val periodStart = peopleGroupPackPeriodStartDate(peopleGroupId)
     val sessionDates = packBillClassSessionDates(peopleGroupId, scheduledClass, periodStart)
@@ -48,6 +50,7 @@ fun Bill.toInvoiceClassSchedule(): InvoiceClassSchedule? {
     return InvoiceClassSchedule(
         className = scheduledClass.name,
         classDetails = classDetails,
+        locationAddressLines = locationAddressLines,
         studentNamesLabel = group.rosterNameLabels().joinToString(", ").ifBlank { "—" },
         billingWindowStartLabel = formatScheduleIsoDate(periodStart.toString()),
         scheduledSessionLabels = scheduledSessionLabels,

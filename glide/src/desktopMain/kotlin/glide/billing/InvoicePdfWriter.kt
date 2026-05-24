@@ -174,8 +174,14 @@ object InvoicePdfWriter {
         val bodyFontSize = 9.5f
         val lineHeight = lineStep(bodyFontSize)
 
+        val locationAddressRowCount = if (schedule.locationAddressLines.isEmpty()) {
+            0
+        } else {
+            1 + schedule.locationAddressLines.size // heading + lines
+        }
         val rowCount = 1 + // class name
             wrapLines(fontRegular, bodyFontSize, schedule.classDetails, innerWidth).size +
+            locationAddressRowCount +
             1 + // students heading
             wrapLines(fontRegular, bodyFontSize, schedule.studentNamesLabel, innerWidth).size +
             1 + // pack period
@@ -193,6 +199,13 @@ object InvoicePdfWriter {
 
         innerY = drawAt(stream, fontBold, 10.5f, textX, innerY, schedule.className, color = colorInk)
         innerY = drawWrappedLines(stream, textX, innerY, innerWidth, schedule.classDetails, bodyFontSize, colorMuted)
+        if (schedule.locationAddressLines.isNotEmpty()) {
+            innerY -= 4f
+            innerY = drawAt(stream, fontBold, 9.5f, textX, innerY, "Location address", color = colorInk)
+            for (addressLine in schedule.locationAddressLines) {
+                innerY = drawAt(stream, fontRegular, bodyFontSize, textX, innerY, addressLine, color = colorMuted)
+            }
+        }
         innerY -= 6f
 
         innerY = drawAt(stream, fontBold, 9.5f, textX, innerY, "Students", color = colorInk)
