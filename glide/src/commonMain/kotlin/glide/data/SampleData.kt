@@ -19,7 +19,9 @@ import glide.model.ScheduledClass
 import glide.model.dateRange
 import glide.model.majorToMinor
 import glide.model.occursOn
+import glide.model.sessionHasEndedForAttendance
 import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * Populates in-memory stores with realistic demo data for manual testing.
@@ -205,7 +207,7 @@ object SampleData {
         }
 
         assignPackSchedulesForRollingGroups()
-        seedPastAttendance(now, sampleToday)
+        seedPastAttendance(now)
         deferredBillingActions.forEach { it() }
         RollingPackBillingService.syncAllActiveRollingPackBilling()
 
@@ -374,9 +376,11 @@ object SampleData {
         }
     }
 
-    private fun seedPastAttendance(recordedAtMillis: Long, asOf: LocalDate) {
-        // Only pre-submit older sessions; leave the last two weeks open for attendance testing.
-        val attendanceSeedCutoff = asOf.minusDays(14)
+    private fun seedPastAttendance(recordedAtMillis: Long) {
+        val today = LocalDate.now()
+        val now = LocalTime.now()
+        val outstandingSession = latestCompletedSessionWithAttendees(today, now) ?: return
+
         for (scheduledClass in ScheduledClassStore.classes) {
             if (scheduledClass.customerGroupIds.isEmpty()) continue
             val sessionDates = mutableSetOf<LocalDate>()
@@ -384,21 +388,24 @@ object SampleData {
                 val term = TermStore.findById(termId) ?: continue
                 val range = term.dateRange() ?: continue
                 var date = range.start
-                while (!date.isAfter(range.endInclusive) && date.isBefore(asOf)) {
-                    if (scheduledClass.occursOn(date)) {
+                while (!date.isAfter(range.endInclusive) && !date.isAfter(today)) {
+                    if (
+                        scheduledClass.occursOn(date) &&
+                        scheduledClass.sessionHasEndedForAttendance(sessionDate = date, today = today, now = now)
+                    ) {
                         sessionDates.add(date)
                     }
                     date = date.plusDays(1)
                 }
             }
             for (date in sessionDates) {
-                if (!date.isBefore(attendanceSeedCutoff)) continue
-                val attendees = attendeesForClass(scheduledClass, date)
-                if (attendees.isEmpty()) continue
                 val session = ClassSessionKey(
                     scheduledClassId = scheduledClass.id,
                     sessionDate = date.toString(),
                 )
+                if (session == outstandingSession) continue
+                val attendees = attendeesForClass(scheduledClass, date)
+                if (attendees.isEmpty()) continue
                 for (attendee in attendees) {
                     ClassAttendanceStore.seed(
                         ClassAttendanceRecord(
@@ -413,6 +420,39 @@ object SampleData {
                 ClassAttendanceStore.markSessionSubmitted(session)
             }
         }
+    }
+
+    private fun latestCompletedSessionWithAttendees(
+        today: LocalDate,
+        now: LocalTime,
+    ): ClassSessionKey? {
+        var latest: ClassSessionKey? = null
+        var latestDate: LocalDate? = null
+        for (scheduledClass in ScheduledClassStore.classes) {
+            if (scheduledClass.customerGroupIds.isEmpty()) continue
+            for (termId in scheduledClass.termIds) {
+                val term = TermStore.findById(termId) ?: continue
+                val range = term.dateRange() ?: continue
+                var date = range.start
+                while (!date.isAfter(range.endInclusive) && !date.isAfter(today)) {
+                    if (
+                        scheduledClass.occursOn(date) &&
+                        scheduledClass.sessionHasEndedForAttendance(sessionDate = date, today = today, now = now) &&
+                        attendeesForClass(scheduledClass, date).isNotEmpty()
+                    ) {
+                        if (latestDate == null || date.isAfter(latestDate)) {
+                            latestDate = date
+                            latest = ClassSessionKey(
+                                scheduledClassId = scheduledClass.id,
+                                sessionDate = date.toString(),
+                            )
+                        }
+                    }
+                    date = date.plusDays(1)
+                }
+            }
+        }
+        return latest
     }
 }
 

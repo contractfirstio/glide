@@ -106,6 +106,7 @@ object BillStore {
     }
 
     fun generateInvoice(billId: String): Boolean {
+        if (!AppSettingsStore.isConfigured) return false
         val bill = findById(billId) ?: return false
         if (hasOutstandingAttendanceSubmissions()) return false
         if (soldPackBlocksBillIssuance(bill.peopleGroupId)) return false

@@ -67,6 +67,25 @@ fun formatScheduleIsoDate(isoDate: String): String {
     }
 }
 
+private val InvoiceClassSessionDateFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.UK)
+
+fun formatInvoiceClassSessionDate(isoDate: String): String {
+    if (isoDate.isBlank()) return ""
+    return try {
+        InvoiceClassSessionDateFormatter.format(LocalDate.parse(isoDate))
+    } catch (_: DateTimeParseException) {
+        isoDate
+    }
+}
+
+fun ScheduledClass.timeRangeLabel(): String = "$startTime–$endTime"
+
+fun formatInvoiceClassSessionLabel(isoDate: String, scheduledClass: ScheduledClass): String {
+    val dateLabel = formatInvoiceClassSessionDate(isoDate)
+    if (dateLabel.isBlank()) return ""
+    return "${dateLabel} · ${scheduledClass.timeRangeLabel()}"
+}
+
 fun parseScheduleIsoDate(isoDate: String): LocalDate? {
     if (isoDate.isBlank()) return null
     return try {

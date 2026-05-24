@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -18,6 +19,7 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import glide.data.AppSettingsStore
 import glide.data.AppViewMode
 import glide.data.AppViewState
 import glide.data.RollingPackBillingService
@@ -37,6 +39,7 @@ import glide.ui.theme.GlideTheme
 @Composable
 fun App() {
     GlideTheme {
+        val appSettings by AppSettingsStore.settingsState
         val focusRequester = remember { FocusRequester() }
         val viewMode = AppViewState.mode
         val pendingAttendance = rememberPendingAttendanceSessions()
@@ -81,6 +84,13 @@ fun App() {
                 UnassignedSoldPackAlertBanner(unassigned = unassignedSoldPacks)
                 FloatingPanelsHost(modifier = Modifier.weight(1f))
             }
+        }
+
+        if (!appSettings.isConfigured) {
+            CompanySetupDialog(
+                initial = appSettings,
+                onConfirm = AppSettingsStore::save,
+            )
         }
     }
 }
