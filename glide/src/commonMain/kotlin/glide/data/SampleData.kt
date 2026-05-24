@@ -14,7 +14,7 @@ import glide.model.PeopleGroupType
 import glide.model.Plan
 import glide.model.PlanKind
 import glide.model.PlanSnapshot
-import glide.model.RelatedPerson
+import glide.model.Student
 import glide.model.ScheduledClass
 import glide.model.dateRange
 import glide.model.majorToMinor
@@ -91,56 +91,56 @@ object SampleData {
         ClientStore.seed(james)
         ClientStore.seed(sarah)
 
-        val leo = RelatedPerson(
-            id = "sample-related-leo",
+        val leo = Student(
+            id = "sample-student-leo",
             name = "Leo Thompson",
             dateOfBirth = "08/11/2014",
             notes = "Sarah's son",
             createdAtMillis = now - 14 * day,
         )
-        val mia = RelatedPerson(
-            id = "sample-related-mia",
+        val mia = Student(
+            id = "sample-student-mia",
             name = "Mia Walsh",
             dateOfBirth = "22/01/2012",
             notes = "Emma's daughter",
             createdAtMillis = now - 12 * day,
         )
-        val noah = RelatedPerson(
-            id = "sample-related-noah",
+        val noah = Student(
+            id = "sample-student-noah",
             name = "Noah Walsh",
             dateOfBirth = "14/06/2015",
             notes = "Emma's son",
             createdAtMillis = now - 12 * day,
         )
-        val ivy = RelatedPerson(
-            id = "sample-related-ivy",
+        val ivy = Student(
+            id = "sample-student-ivy",
             name = "Ivy Chen",
             dateOfBirth = "03/09/1990",
             notes = "James's partner",
             createdAtMillis = now - 11 * day,
         )
-        val sam = RelatedPerson(
-            id = "sample-related-sam",
+        val sam = Student(
+            id = "sample-student-sam",
             name = "Sam Chen",
             dateOfBirth = "19/04/2018",
             notes = "James's son",
             createdAtMillis = now - 11 * day,
         )
-        val zoe = RelatedPerson(
-            id = "sample-related-zoe",
+        val zoe = Student(
+            id = "sample-student-zoe",
             name = "Zoe Thompson",
             dateOfBirth = "30/07/2016",
             notes = "Sarah's daughter",
             createdAtMillis = now - 13 * day,
         )
-        val alex = RelatedPerson(
-            id = "sample-related-alex",
+        val alex = Student(
+            id = "sample-student-alex",
             name = "Alex Morgan",
             dateOfBirth = "11/02/2010",
-            notes = "Related on Emma and James plans — different classes",
+            notes = "Student on Emma and James plans — different classes",
             createdAtMillis = now - 10 * day,
         )
-        listOf(leo, mia, noah, ivy, sam, zoe, alex).forEach { RelatedPersonStore.create(it) }
+        listOf(leo, mia, noah, ivy, sam, zoe, alex).forEach { StudentStore.create(it) }
 
         seedScheduling(now, day)
 
@@ -149,7 +149,7 @@ object SampleData {
             id = SAMPLE_CUSTOMER_EMMA,
             type = PeopleGroupType.CUSTOMER,
             mainClientId = emma.id,
-            relatedPersonIds = listOf(mia.id, noah.id, alex.id),
+            studentIds = listOf(mia.id, noah.id, alex.id),
             status = PeopleGroupStatus.Contacted,
             planId = rollingPlan.id,
             planStartDate = SAMPLE_PLAN_START_DATE,
@@ -164,7 +164,7 @@ object SampleData {
             id = SAMPLE_CUSTOMER_JAMES,
             type = PeopleGroupType.CUSTOMER,
             mainClientId = james.id,
-            relatedPersonIds = listOf(ivy.id, sam.id, alex.id),
+            studentIds = listOf(ivy.id, sam.id, alex.id),
             planId = rollingPlan.id,
             mainClientAttendsClass = false,
             status = PeopleGroupStatus.Contacted,
@@ -187,7 +187,7 @@ object SampleData {
             id = SAMPLE_CUSTOMER_SARAH,
             type = PeopleGroupType.CUSTOMER,
             mainClientId = sarah.id,
-            relatedPersonIds = listOf(leo.id, zoe.id),
+            studentIds = listOf(leo.id, zoe.id),
             planId = rollingPlan.id,
             planStartDate = SAMPLE_PLAN_START_DATE,
             status = PeopleGroupStatus.Contacted,
@@ -218,14 +218,14 @@ object SampleData {
                 BillStore.setIssued(renewal.id, issued = true, issuedAtMillis = now - 10 * day)
             }
 
-        val ella = RelatedPerson(
-            id = "sample-related-ella",
+        val ella = Student(
+            id = "sample-student-ella",
             name = "Ella O'Brien",
             dateOfBirth = "25/03/2013",
             notes = "On Mike's lead only — not on a customer plan yet",
             createdAtMillis = now - 2 * day,
         )
-        RelatedPersonStore.create(ella)
+        StudentStore.create(ella)
 
         PeopleGroupStore.create(
             PeopleGroup(
@@ -234,7 +234,7 @@ object SampleData {
                 clientName = "Mike O'Brien",
                 email = "mike.obrien@example.com",
                 phone = "07700 900 404",
-                relatedPersonIds = listOf(ella.id),
+                studentIds = listOf(ella.id),
                 status = PeopleGroupStatus.WaitingReply,
                 planId = rollingPlan.id,
                 planStartDate = sampleToday.toString(),

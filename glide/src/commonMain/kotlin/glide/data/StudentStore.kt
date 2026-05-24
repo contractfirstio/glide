@@ -2,68 +2,68 @@ package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
 import glide.model.PeopleGroupType
-import glide.model.RelatedPerson
+import glide.model.Student
 
-object RelatedPersonStore {
-    private val _people = mutableStateListOf<RelatedPerson>()
+object StudentStore {
+    private val _people = mutableStateListOf<Student>()
 
-    val all: List<RelatedPerson> get() = _people
+    val all: List<Student> get() = _people
 
-    /** Related people linked to at least one sold plan. */
-    val onSoldPlans: List<RelatedPerson> get() =
+    /** Students linked to at least one sold plan. */
+    val onSoldPlans: List<Student> get() =
         _people.filter { isOnSoldPlan(it.id) }
 
     /**
-     * Related people for the Related panel — all on customer plans, those in
+     * Students for the Students panel — all on customer plans, those in
      * [customerGroupId] when a customer group is selected, or everyone linked to [clientId]
      * across that client's leads and customer groups.
      */
-    fun forRelatedPanel(
+    fun forStudentsPanel(
         customerGroupId: String? = null,
         clientId: String? = null,
         planId: String? = null,
-        relatedPersonId: String? = null,
-    ): List<RelatedPerson> =
+        studentId: String? = null,
+    ): List<Student> =
         when {
             customerGroupId != null ->
                 PeopleGroupStore.findById(customerGroupId)
                     ?.takeIf { it.type == PeopleGroupType.CUSTOMER }
-                    ?.resolveRelatedPeople()
+                    ?.resolveStudents()
                     ?: emptyList()
-            clientId != null -> relatedPeopleForMainClient(clientId)
-            planId != null -> relatedPeopleForPlan(planId)
-            relatedPersonId != null ->
-                findById(relatedPersonId)?.let { listOf(it) } ?: emptyList()
+            clientId != null -> studentsForMainClient(clientId)
+            planId != null -> studentsForPlan(planId)
+            studentId != null ->
+                findById(studentId)?.let { listOf(it) } ?: emptyList()
             else -> onSoldPlans
         }
 
-    private fun relatedPeopleForPlan(planId: String): List<RelatedPerson> =
+    private fun studentsForPlan(planId: String): List<Student> =
         PeopleGroupStore.all
             .filter { it.planId == planId }
-            .flatMap { it.relatedPersonIds }
+            .flatMap { it.studentIds }
             .distinct()
             .mapNotNull { findById(it) }
 
-    private fun relatedPeopleForMainClient(clientId: String): List<RelatedPerson> =
+    private fun studentsForMainClient(clientId: String): List<Student> =
         PeopleGroupStore.all
             .filter { it.mainClientId == clientId }
-            .flatMap { it.relatedPersonIds }
+            .flatMap { it.studentIds }
             .distinct()
             .mapNotNull { findById(it) }
 
     fun isOnSoldPlan(personId: String): Boolean =
-        PeopleGroupStore.customers.any { personId in it.relatedPersonIds }
+        PeopleGroupStore.customers.any { personId in it.studentIds }
 
     fun canDelete(personId: String): Boolean = !isOnSoldPlan(personId)
 
     fun soldPlanCount(personId: String): Int =
-        PeopleGroupStore.customers.count { personId in it.relatedPersonIds }
+        PeopleGroupStore.customers.count { personId in it.studentIds }
 
-    fun create(person: RelatedPerson) {
+    fun create(person: Student) {
         _people.add(person)
     }
 
-    fun update(person: RelatedPerson) {
+    fun update(person: Student) {
         val index = _people.indexOfFirst { it.id == person.id }
         if (index >= 0) {
             _people[index] = person
@@ -71,15 +71,15 @@ object RelatedPersonStore {
     }
 
     fun delete(id: String) {
-        if (PeopleGroupStore.customers.any { id in it.relatedPersonIds }) return
+        if (PeopleGroupStore.customers.any { id in it.studentIds }) return
         _people.removeAll { it.id == id }
-        PeopleGroupStore.removeRelatedPersonFromAllGroups(id)
+        PeopleGroupStore.removeStudentFromAllGroups(id)
     }
 
-    fun findById(id: String): RelatedPerson? = _people.find { it.id == id }
+    fun findById(id: String): Student? = _people.find { it.id == id }
 
     fun peopleGroupsFor(personId: String): List<String> =
         PeopleGroupStore.all
-            .filter { personId in it.relatedPersonIds }
+            .filter { personId in it.studentIds }
             .map { it.id }
 }

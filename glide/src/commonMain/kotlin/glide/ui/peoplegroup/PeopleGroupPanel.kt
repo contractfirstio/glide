@@ -50,8 +50,8 @@ import glide.data.ClientStore
 import glide.data.ClientsPanelState
 import glide.data.LocationStore
 import glide.data.PlansPanelState
-import glide.data.RelatedPanelState
-import glide.data.RelatedPersonStore
+import glide.data.StudentsPanelState
+import glide.data.StudentStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
 import glide.data.PlanEnrollmentStore
@@ -64,7 +64,7 @@ import glide.model.formatMoney
 import glide.data.classAttendeeCount
 import glide.data.memberCount
 import glide.data.resolveMainClient
-import glide.data.resolveRelatedPeople
+import glide.data.resolveStudents
 import glide.model.PeopleGroup
 import glide.model.PeopleGroupStatus
 import glide.model.PeopleGroupType
@@ -114,7 +114,7 @@ data class PeopleGroupPanelUi(
 
 private val LeadsPanelUi = PeopleGroupPanelUi(
     type = PeopleGroupType.LEAD,
-    subtitle = "Manage leads, link existing clients, and search to add related people.",
+    subtitle = "Manage leads, link existing clients, and search to add students.",
     emptyListMessage = "No leads yet.",
     newButtonLabel = "New lead",
     createFormTitle = "Create lead",
@@ -167,7 +167,7 @@ private data class PeopleGroupFormState(
     val dateOfBirth: String = "",
     val email: String = "",
     val phone: String = "",
-    val relatedPersonIds: List<String> = emptyList(),
+    val studentIds: List<String> = emptyList(),
     val status: PeopleGroupStatus = PeopleGroupStatus.New,
     val planId: String? = null,
     val planStartDate: String = "",
@@ -195,7 +195,7 @@ private data class PeopleGroupFormState(
             dateOfBirth = if (isCustomer || linkedClient) "" else dateOfBirth.trim(),
             email = if (isCustomer || linkedClient) "" else email.trim(),
             phone = if (isCustomer || linkedClient) "" else phone.trim(),
-            relatedPersonIds = relatedPersonIds,
+            studentIds = studentIds,
             status = status,
             planId = planId,
             planStartDate = planStartDate.trim(),
@@ -259,8 +259,8 @@ private fun PeopleGroupPanel(
     } else {
         null
     }
-    val relatedFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
-        RelatedPanelState.selectedRelatedPersonId
+    val studentFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
+        StudentsPanelState.selectedStudentId
     } else {
         null
     }
@@ -296,12 +296,12 @@ private fun PeopleGroupPanel(
             locationId = soldPlansLocationFilterId,
         )
         ui.type == PeopleGroupType.LEAD -> PeopleGroupStore.leads
-        else -> PeopleGroupStore.forCustomersPanel(clientFilterId, relatedFilterId, planFilterId)
+        else -> PeopleGroupStore.forCustomersPanel(clientFilterId, studentFilterId, planFilterId)
     }
     val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
-    val relatedFilterLabel = relatedFilterId?.let {
-        RelatedPersonStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    val studentFilterLabel = studentFilterId?.let {
+        StudentStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
     val classFilterLabel = classFilterId?.let {
         ScheduledClassStore.findById(it)?.name?.takeIf { it.isNotBlank() }
@@ -348,7 +348,7 @@ private fun PeopleGroupPanel(
                 dateOfBirth = if (group.mainClientId != null) "" else main.dateOfBirth,
                 email = if (group.mainClientId != null) "" else main.email,
                 phone = if (group.mainClientId != null) "" else main.phone,
-                relatedPersonIds = group.relatedPersonIds,
+                studentIds = group.studentIds,
                 status = group.status,
                 planId = group.planId,
                 planStartDate = group.planStartDate.ifBlank { todayIsoDate() },
@@ -391,10 +391,10 @@ private fun PeopleGroupPanel(
         }
     }
 
-    LaunchedEffect(clientFilterId, planFilterId, relatedFilterId, classFilterId, soldPlanFilterId, soldPlansTermFilterId, soldPlansLocationFilterId) {
+    LaunchedEffect(clientFilterId, planFilterId, studentFilterId, classFilterId, soldPlanFilterId, soldPlansTermFilterId, soldPlansLocationFilterId) {
         if (ui.type == PeopleGroupType.CUSTOMER && soldPlanFilterId != null) return@LaunchedEffect
         if (ui.type == PeopleGroupType.CUSTOMER &&
-            (clientFilterId != null || planFilterId != null || relatedFilterId != null ||
+            (clientFilterId != null || planFilterId != null || studentFilterId != null ||
                 classFilterId != null || soldPlansTermFilterId != null || soldPlansLocationFilterId != null) &&
             selectedId != null
         ) {
@@ -405,7 +405,7 @@ private fun PeopleGroupPanel(
     LaunchedEffect(
         clientFilterId,
         planFilterId,
-        relatedFilterId,
+        studentFilterId,
         classFilterId,
         soldPlanFilterId,
         soldPlansTermFilterId,
@@ -456,9 +456,9 @@ private fun PeopleGroupPanel(
                             val label = planFilterLabel ?: "this plan"
                             "Showing customer groups on $label. Use Clear filter in Plans to reset."
                         }
-                        ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null -> {
-                            val label = relatedFilterLabel ?: "this related person"
-                            "Showing customer groups for $label. Use Clear filter in Related to reset."
+                        ui.type == PeopleGroupType.CUSTOMER && studentFilterId != null -> {
+                            val label = studentFilterLabel ?: "this student"
+                            "Showing customer groups for $label. Use Clear filter in Students to reset."
                         }
                         ui.type == PeopleGroupType.CUSTOMER && clientFilterId != null -> {
                             val label = clientFilterLabel ?: "this client"
@@ -506,8 +506,8 @@ private fun PeopleGroupPanel(
                                     Text("Clear filter")
                                 }
                             }
-                            if (ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null) {
-                                GlideTextButton(onClick = { RelatedPanelState.clearRelatedPersonFilter() }) {
+                            if (ui.type == PeopleGroupType.CUSTOMER && studentFilterId != null) {
+                                GlideTextButton(onClick = { StudentsPanelState.clearStudentFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
@@ -551,8 +551,8 @@ private fun PeopleGroupPanel(
                                 text = when {
                                     ui.type == PeopleGroupType.CUSTOMER && planFilterId != null ->
                                         "No customer groups on this plan."
-                                    ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null ->
-                                        "No customer groups for this related person."
+                                    ui.type == PeopleGroupType.CUSTOMER && studentFilterId != null ->
+                                        "No customer groups for this student."
                                     ui.type == PeopleGroupType.CUSTOMER && clientFilterId != null ->
                                         "No customer groups for this client."
                                     schedulingSoldPlansPanel && classFilterId != null ->
@@ -948,7 +948,7 @@ private fun PeopleGroupListItem(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            group.relatedPeopleSummary(compact)?.let { summary ->
+            group.studentsSummary(compact)?.let { summary ->
                 Text(
                     text = summary,
                     style = MaterialTheme.typography.labelSmall,
@@ -1017,11 +1017,11 @@ private fun planLabelForGroup(group: PeopleGroup): String? {
     return "Plan: ${plan.name}"
 }
 
-private fun PeopleGroup.relatedPeopleSummary(compact: Boolean): String? {
-    val related = resolveRelatedPeople()
-    if (related.isEmpty()) return null
-    val labels = related.joinToString { formatPersonLabel(it.name, it.dateOfBirth) }
-    return if (compact) labels else "Related: $labels"
+private fun PeopleGroup.studentsSummary(compact: Boolean): String? {
+    val students = resolveStudents()
+    if (students.isEmpty()) return null
+    val labels = students.joinToString { formatPersonLabel(it.name, it.dateOfBirth) }
+    return if (compact) labels else "Students: $labels"
 }
 
 @Composable
@@ -1156,7 +1156,7 @@ private fun CustomerGroupDetailView(
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
-            text = "Related people always attend. Set on the lead before conversion.",
+            text = "Students always attend. Set on the lead before conversion.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 2.dp),
@@ -1164,12 +1164,12 @@ private fun CustomerGroupDetailView(
     }
 
     FormPanelSection(
-        title = "Related people",
+        title = "Students",
         description = "Others on this plan besides the main client.",
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
-        ReadOnlyRelatedPeopleSection(relatedPersonIds = group.relatedPersonIds, showLabel = false)
+        ReadOnlyStudentsSection(studentIds = group.studentIds, showLabel = false)
         Text(
             text = "${group.classAttendeeCount()} attending on classes · ${group.memberCount()} in household",
             style = MaterialTheme.typography.labelSmall,
@@ -1265,7 +1265,7 @@ private fun LeadMainClientAttendsField(
                 text = if (attends) {
                     "Main client counts toward room capacity when this group is on a class."
                 } else {
-                    "Only related people attend; main client is not counted on classes."
+                    "Only students attend; main client is not counted on classes."
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1317,15 +1317,15 @@ private fun PeopleGroupForm(
     }
 
     if (isCustomerGroup) {
-        RelatedPersonLinkSection(
-            selectedIds = state.relatedPersonIds,
-            onSelectionChange = { onStateChange(state.copy(relatedPersonIds = it)) },
+        StudentLinkSection(
+            selectedIds = state.studentIds,
+            onSelectionChange = { onStateChange(state.copy(studentIds = it)) },
             spacing = spacing,
         )
     } else {
-        LeadRelatedPeopleSection(
-            selectedIds = state.relatedPersonIds,
-            onSelectionChange = { onStateChange(state.copy(relatedPersonIds = it)) },
+        LeadStudentsSection(
+            selectedIds = state.studentIds,
+            onSelectionChange = { onStateChange(state.copy(studentIds = it)) },
             spacing = spacing,
         )
     }

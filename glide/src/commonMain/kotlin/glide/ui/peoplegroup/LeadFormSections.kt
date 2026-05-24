@@ -46,7 +46,7 @@ fun LeadMainClientSummaryCard(
 ) = FormPanelSummaryCard(role = FormPanelSectionRole.Primary, modifier = modifier, content = content)
 
 @Composable
-fun LeadRelatedPeopleLinkedBox(
+fun LeadStudentsLinkedBox(
     modifier: Modifier = Modifier,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) = FormPanelLinkedBox(role = FormPanelSectionRole.Secondary, modifier = modifier, content = content)

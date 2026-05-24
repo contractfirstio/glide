@@ -14,7 +14,7 @@ object ClientsPanelState {
     fun onClientSelected(clientId: String) {
         if (ClientStore.findById(clientId) != null) {
             BillingPanelState.onCustomerGroupCleared()
-            RelatedPanelState.clearRelatedPersonFilter()
+            StudentsPanelState.clearStudentFilter()
             PlansPanelState.clearPlanFilter()
             selectedClientId = clientId
         }

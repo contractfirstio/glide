@@ -19,7 +19,7 @@ import glide.ui.customers.CustomersFloatingPanel
 import glide.ui.leads.LeadsFloatingPanel
 import glide.ui.clients.ClientsFloatingPanel
 import glide.ui.plans.PlansFloatingPanel
-import glide.ui.related.RelatedPeopleFloatingPanel
+import glide.ui.students.StudentsFloatingPanel
 import glide.ui.layout.PanelSlots
 import glide.ui.layout.SchedulingPanelSlots
 import glide.ui.scheduling.LocationsFloatingPanel
@@ -83,7 +83,7 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
                             windowWidthPx = windowWidthPx,
                             windowHeightPx = windowHeightPx,
                         )
-                        PanelSlots.RELATED -> RelatedPeopleFloatingPanel(
+                        PanelSlots.STUDENTS -> StudentsFloatingPanel(
                             windowWidthPx = windowWidthPx,
                             windowHeightPx = windowHeightPx,
                         )

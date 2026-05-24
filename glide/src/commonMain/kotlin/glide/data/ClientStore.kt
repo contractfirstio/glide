@@ -11,12 +11,12 @@ object ClientStore {
 
     /**
      * Clients for the Clients panel — all clients, the main client for [customerGroupId],
-     * main clients on groups with [planId], or on groups that include [relatedPersonId].
+     * main clients on groups with [planId], or on groups that include [studentId].
      */
     fun forClientsPanel(
         customerGroupId: String? = null,
         planId: String? = null,
-        relatedPersonId: String? = null,
+        studentId: String? = null,
     ): List<Client> =
         when {
             customerGroupId != null ->
@@ -32,9 +32,9 @@ object ClientStore {
                     .mapNotNull { it.mainClientId }
                     .distinct()
                     .mapNotNull { findById(it) }
-            relatedPersonId != null ->
+            studentId != null ->
                 PeopleGroupStore.all
-                    .filter { relatedPersonId in it.relatedPersonIds }
+                    .filter { studentId in it.studentIds }
                     .mapNotNull { it.mainClientId }
                     .distinct()
                     .mapNotNull { findById(it) }

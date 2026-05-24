@@ -16,7 +16,7 @@ import glide.ui.layout.SchedulingPanelSlots
 object GlideAccents {
     val Leads = Color(0xFF8CB4DC)
     val Plans = Color(0xFF9EB8C8)
-    val Related = Color(0xFF9AAFD4)
+    val Students = Color(0xFF9AAFD4)
     val Clients = Color(0xFF8EC4D4)
     val Customers = Color(0xFFA8C0D0)
     val Billing = Color(0xFFB8C8A0)
@@ -31,7 +31,7 @@ object GlideAccents {
         AppViewMode.CUSTOMER_MANAGEMENT -> when (slot) {
             PanelSlots.LEADS -> Leads
             PanelSlots.PLANS -> Plans
-            PanelSlots.RELATED -> Related
+            PanelSlots.STUDENTS -> Students
             PanelSlots.CLIENTS -> Clients
             PanelSlots.CUSTOMERS -> Customers
             PanelSlots.BILLING -> Billing

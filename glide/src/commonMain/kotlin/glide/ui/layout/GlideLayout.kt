@@ -74,7 +74,7 @@ object GlideLayout {
      * Customer Management grid:
      * ```
      * [ Leads    ] [ Plans  ] [ Clients ]
-     * [ Customers] [ Billing] [ Related ]
+     * [ Customers] [ Billing] [ Students ]
      * ```
      */
     fun customerManagementPanelGridCell(slot: Int): Pair<Int, Int> = when (slot) {
@@ -83,7 +83,7 @@ object GlideLayout {
         PanelSlots.CLIENTS -> 0 to 2
         PanelSlots.CUSTOMERS -> 1 to 0
         PanelSlots.BILLING -> 1 to 1
-        PanelSlots.RELATED -> 1 to 2
+        PanelSlots.STUDENTS -> 1 to 2
         else -> 0 to 0
     }
 
@@ -160,7 +160,7 @@ object GlideLayout {
 object PanelSlots {
     const val LEADS = 0
     const val PLANS = 1
-    const val RELATED = 2
+    const val STUDENTS = 2
     const val CLIENTS = 3
     const val CUSTOMERS = 4
     const val BILLING = 5

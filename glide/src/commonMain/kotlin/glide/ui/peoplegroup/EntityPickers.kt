@@ -22,8 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import glide.data.ClientStore
 import glide.data.PlanStore
-import glide.data.RelatedPersonStore
-import glide.model.RelatedPerson
+import glide.data.StudentStore
+import glide.model.Student
 import glide.model.summaryLine
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.formatPersonLabel
@@ -81,14 +81,14 @@ fun ReadOnlyMainClientSection(
 }
 
 @Composable
-fun ReadOnlyRelatedPeopleSection(
-    relatedPersonIds: List<String>,
+fun ReadOnlyStudentsSection(
+    studentIds: List<String>,
     showLabel: Boolean = true,
 ) {
-    val people = relatedPersonIds.mapNotNull { RelatedPersonStore.findById(it) }
+    val people = studentIds.mapNotNull { StudentStore.findById(it) }
     if (showLabel) {
         Text(
-            text = "Related people",
+            text = "Students",
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Medium,
         )
@@ -178,8 +178,8 @@ fun ReadOnlyPlanSection(
 }
 
 @Composable
-internal fun LeadRelatedPersonLinkedRow(
-    person: RelatedPerson,
+internal fun LeadStudentLinkedRow(
+    person: Student,
     onRemove: () -> Unit,
 ) {
     Row(
@@ -206,19 +206,19 @@ internal fun LeadRelatedPersonLinkedRow(
 }
 
 @Composable
-fun RelatedPersonLinkSection(
+fun StudentLinkSection(
     selectedIds: List<String>,
     onSelectionChange: (List<String>) -> Unit,
     spacing: GlideLayout.Spacing,
 ) {
-    var relatedSearchQuery by remember { mutableStateOf("") }
-    val linked = selectedIds.mapNotNull { RelatedPersonStore.findById(it) }
-    val relatedSearchResults = remember(relatedSearchQuery, selectedIds, RelatedPersonStore.all) {
-        val query = relatedSearchQuery.trim()
+    var studentSearchQuery by remember { mutableStateOf("") }
+    val linked = selectedIds.mapNotNull { StudentStore.findById(it) }
+    val studentSearchResults = remember(studentSearchQuery, selectedIds, StudentStore.all) {
+        val query = studentSearchQuery.trim()
         if (query.isEmpty()) {
             emptyList()
         } else {
-            RelatedPersonStore.all
+            StudentStore.all
                 .filter { it.id !in selectedIds }
                 .filter { person ->
                     listOf(person.name, person.dateOfBirth, person.notes)
@@ -235,14 +235,14 @@ fun RelatedPersonLinkSection(
     }
 
     Text(
-        text = "Related people",
+        text = "Students",
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Medium,
     )
     Spacer(modifier = Modifier.height(spacing.field))
 
     linked.forEach { person ->
-        LeadRelatedPersonLinkedRow(
+        LeadStudentLinkedRow(
             person = person,
             onRemove = { onSelectionChange(selectedIds.filter { it != person.id }) },
         )
@@ -250,18 +250,18 @@ fun RelatedPersonLinkSection(
     }
 
     EntitySearchPicker(
-        label = "Search related people",
+        label = "Search students",
         placeholder = "Name or date of birth",
-        query = relatedSearchQuery,
-        onQueryChange = { relatedSearchQuery = it },
-        results = relatedSearchResults,
+        query = studentSearchQuery,
+        onQueryChange = { studentSearchQuery = it },
+        results = studentSearchResults,
         onSelect = { id -> onSelectionChange(selectedIds + id) },
-        noResultsText = "No matches. Add related people on a lead first.",
+        noResultsText = "No matches. Add students on a lead first.",
     )
 
     Spacer(modifier = Modifier.height(4.dp))
     Text(
-        text = "Edit details in the Related panel once they are on a customer plan.",
+        text = "Edit details in the Students panel once they are on a customer plan.",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

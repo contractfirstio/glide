@@ -17,16 +17,16 @@ object PeopleGroupStore {
 
     /**
      * Customer groups for the Customers panel — all groups, those on [planId], whose main
-     * client is [clientId], or those that include [relatedPersonId].
+     * client is [clientId], or those that include [studentId].
      */
     fun forCustomersPanel(
         clientId: String? = null,
-        relatedPersonId: String? = null,
+        studentId: String? = null,
         planId: String? = null,
     ): List<PeopleGroup> =
         when {
-            relatedPersonId != null ->
-                customers.filter { relatedPersonId in it.relatedPersonIds }
+            studentId != null ->
+                customers.filter { studentId in it.studentIds }
             clientId != null -> customers.filter { it.mainClientId == clientId }
             planId != null -> customers.filter { it.planId == planId }
             else -> customers
@@ -108,7 +108,7 @@ object PeopleGroupStore {
 
     /**
      * Removes sold-plan billing and class data, then turns the customer group back into a lead.
-     * Same record id is kept so clients and related people stay linked.
+     * Same record id is kept so clients and students stay linked.
      */
     fun revertSoldPlanToLead(id: String): Boolean {
         val index = _groups.indexOfFirst { it.id == id }
@@ -132,12 +132,12 @@ object PeopleGroupStore {
 
     fun findById(id: String): PeopleGroup? = _groups.find { it.id == id }
 
-    fun removeRelatedPersonFromAllGroups(personId: String) {
+    fun removeStudentFromAllGroups(personId: String) {
         _groups.forEachIndexed { index, group ->
             if (group.type == PeopleGroupType.CUSTOMER) return@forEachIndexed
-            if (personId in group.relatedPersonIds) {
+            if (personId in group.studentIds) {
                 _groups[index] = group.copy(
-                    relatedPersonIds = group.relatedPersonIds.filter { it != personId },
+                    studentIds = group.studentIds.filter { it != personId },
                 )
             }
         }
@@ -177,7 +177,7 @@ object PeopleGroupStore {
         return true
     }
 
-    /** Copies a locked customer group into a new editable lead (same client, related people, and plan). */
+    /** Copies a locked customer group into a new editable lead (same client, students, and plan). */
     fun cloneToLead(customerGroupId: String): PeopleGroup? {
         val source = findById(customerGroupId) ?: return null
         if (source.type != PeopleGroupType.CUSTOMER) return null
@@ -186,7 +186,7 @@ object PeopleGroupStore {
         val lead = PeopleGroup(
             type = PeopleGroupType.LEAD,
             mainClientId = source.mainClientId,
-            relatedPersonIds = source.relatedPersonIds,
+            studentIds = source.studentIds,
             status = PeopleGroupStatus.New,
             planId = source.planId,
             planStartDate = LocalDate.now().toString(),

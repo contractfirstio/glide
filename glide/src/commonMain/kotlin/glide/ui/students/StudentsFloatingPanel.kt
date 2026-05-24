@@ -1,4 +1,4 @@
-package glide.ui.related
+package glide.ui.students
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -7,16 +7,16 @@ import glide.ui.components.FloatingPanelShell
 import glide.ui.layout.PanelSlots
 
 @Composable
-fun RelatedPeopleFloatingPanel(
+fun StudentsFloatingPanel(
     windowWidthPx: Int,
     windowHeightPx: Int,
 ) {
     FloatingPanelShell(
-        title = "Related",
-        slot = PanelSlots.RELATED,
+        title = "Students",
+        slot = PanelSlots.STUDENTS,
         windowWidthPx = windowWidthPx,
         windowHeightPx = windowHeightPx,
     ) {
-        RelatedPeoplePanel(modifier = Modifier.fillMaxSize())
+        StudentsPanel(modifier = Modifier.fillMaxSize())
     }
 }

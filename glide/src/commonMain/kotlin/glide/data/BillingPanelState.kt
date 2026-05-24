@@ -22,7 +22,7 @@ object BillingPanelState {
             return
         }
         ClientsPanelState.clearClientFilter()
-        RelatedPanelState.clearRelatedPersonFilter()
+        StudentsPanelState.clearStudentFilter()
         PlansPanelState.clearPlanFilter()
         peopleGroupId = groupId
         visible = AppViewState.mode == AppViewMode.CUSTOMER_MANAGEMENT

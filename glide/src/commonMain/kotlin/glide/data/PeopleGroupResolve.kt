@@ -2,7 +2,7 @@ package glide.data
 
 import glide.model.Client
 import glide.model.PeopleGroup
-import glide.model.RelatedPerson
+import glide.model.Student
 
 data class ResolvedMainClient(
     val name: String,
@@ -25,22 +25,22 @@ fun PeopleGroup.resolveMainClient(): ResolvedMainClient {
     )
 }
 
-fun PeopleGroup.resolveRelatedPeople(): List<RelatedPerson> =
-    relatedPersonIds.mapNotNull { RelatedPersonStore.findById(it) }
+fun PeopleGroup.resolveStudents(): List<Student> =
+    studentIds.mapNotNull { StudentStore.findById(it) }
 
 fun PeopleGroup.hasResolvableMainClient(): Boolean =
     mainClientId != null || clientName.isNotBlank()
 
-/** Household size (main client plus related people). */
+/** Household size (main client plus students). */
 fun PeopleGroup.memberCount(): Int {
     val main = if (hasResolvableMainClient()) 1 else 0
-    return main + relatedPersonIds.size
+    return main + studentIds.size
 }
 
-/** People who take the class: related always; main client only when [mainClientAttendsClass]. */
+/** People who take the class: students always; main client only when [mainClientAttendsClass]. */
 fun PeopleGroup.classAttendeeCount(): Int {
     val main = if (mainClientAttendsClass && hasResolvableMainClient()) 1 else 0
-    return main + relatedPersonIds.size
+    return main + studentIds.size
 }
 
 /** Names shown on the class calendar (attending members only). */
@@ -52,7 +52,7 @@ fun PeopleGroup.rosterNameLabels(): List<String> {
             names.add(main.name.trim())
         }
     }
-    resolveRelatedPeople().forEach { person ->
+    resolveStudents().forEach { person ->
         if (person.name.isNotBlank()) {
             names.add(person.name.trim())
         }

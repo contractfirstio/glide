@@ -46,8 +46,8 @@ import glide.data.ClientsPanelState
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
-import glide.data.RelatedPanelState
-import glide.data.RelatedPersonStore
+import glide.data.StudentsPanelState
+import glide.data.StudentStore
 import glide.data.resolveMainClient
 import glide.model.Plan
 import glide.model.PlanKind
@@ -130,9 +130,9 @@ fun PlansPanel(modifier: Modifier = Modifier) {
 
     val customerGroupId = BillingPanelState.peopleGroupId
     val clientFilterId = ClientsPanelState.selectedClientId
-    val relatedFilterId = RelatedPanelState.selectedRelatedPersonId
+    val studentFilterId = StudentsPanelState.selectedStudentId
     val outboundPlanFilterId = PlansPanelState.selectedPlanId
-    val plans = PlanStore.forPlansPanel(customerGroupId, clientFilterId, relatedFilterId)
+    val plans = PlanStore.forPlansPanel(customerGroupId, clientFilterId, studentFilterId)
     val outboundPlanFilterLabel = outboundPlanFilterId?.let {
         PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
@@ -140,12 +140,12 @@ fun PlansPanel(modifier: Modifier = Modifier) {
         PeopleGroupStore.findById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
     }
     val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
-    val relatedFilterLabel = relatedFilterId?.let {
-        RelatedPersonStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    val studentFilterLabel = studentFilterId?.let {
+        StudentStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
     val hasInboundFilter = customerGroupId != null ||
         clientFilterId != null ||
-        relatedFilterId != null
+        studentFilterId != null
 
     fun clearLocalSelection() {
         selectedId = null
@@ -183,7 +183,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
         formError = null
     }
 
-    LaunchedEffect(customerGroupId, clientFilterId, relatedFilterId) {
+    LaunchedEffect(customerGroupId, clientFilterId, studentFilterId) {
         if (hasInboundFilter && selectedId != null) {
             clearLocalSelection()
         }
@@ -221,13 +221,13 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             val label = clientFilterLabel ?: "this client"
                             "Showing plans for $label. Use Clear filter in Clients to reset."
                         }
-                        relatedFilterId != null -> {
-                            val label = relatedFilterLabel ?: "this related person"
-                            "Showing plans for $label. Use Clear filter in Related to reset."
+                        studentFilterId != null -> {
+                            val label = studentFilterLabel ?: "this student"
+                            "Showing plans for $label. Use Clear filter in Students to reset."
                         }
                         outboundPlanFilterId != null -> {
                             val label = outboundPlanFilterLabel ?: "this plan"
-                            "Filtering customer groups, clients, and related people for $label. Use Clear filter to reset."
+                            "Filtering customer groups, clients, and students for $label. Use Clear filter to reset."
                         }
                         else -> "Define plan types and plans offered to customers."
                     },
@@ -249,8 +249,8 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
-                            if (relatedFilterId != null) {
-                                GlideTextButton(onClick = { RelatedPanelState.clearRelatedPersonFilter() }) {
+                            if (studentFilterId != null) {
+                                GlideTextButton(onClick = { StudentsPanelState.clearStudentFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
@@ -299,8 +299,8 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                                         "No plan on this customer group."
                                     clientFilterId != null ->
                                         "No plans linked to this client."
-                                    relatedFilterId != null ->
-                                        "No plans linked to this related person."
+                                    studentFilterId != null ->
+                                        "No plans linked to this student."
                                     else -> "No plans yet."
                                 },
                                 style = MaterialTheme.typography.bodySmall,

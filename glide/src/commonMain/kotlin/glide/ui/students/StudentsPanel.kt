@@ -1,4 +1,4 @@
-package glide.ui.related
+package glide.ui.students
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -38,10 +38,10 @@ import glide.data.ClientsPanelState
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
-import glide.data.RelatedPanelState
-import glide.data.RelatedPersonStore
+import glide.data.StudentsPanelState
+import glide.data.StudentStore
 import glide.data.resolveMainClient
-import glide.model.RelatedPerson
+import glide.model.Student
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
@@ -58,18 +58,18 @@ import glide.ui.theme.GlideOutlinedField
 import glide.ui.theme.GlideTextButton
 import java.util.UUID
 
-private data class RelatedPersonFormState(
+private data class StudentFormState(
     val name: String = "",
     val dateOfBirth: String = "",
     val notes: String = "",
 ) {
     fun isValid(): Boolean = name.isNotBlank()
 
-    fun toRelatedPerson(
+    fun toStudent(
         existingId: String? = null,
         createdAtMillis: Long = System.currentTimeMillis(),
-    ): RelatedPerson =
-        RelatedPerson(
+    ): Student =
+        Student(
             id = existingId ?: UUID.randomUUID().toString(),
             name = name.trim(),
             dateOfBirth = dateOfBirth.trim(),
@@ -79,21 +79,21 @@ private data class RelatedPersonFormState(
 }
 
 @Composable
-fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
+fun StudentsPanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    val form = rememberFormDirtyTracker(RelatedPersonFormState())
+    val form = rememberFormDirtyTracker(StudentFormState())
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
     val customerGroupId = BillingPanelState.peopleGroupId
     val clientFilterId = ClientsPanelState.selectedClientId
     val planFilterId = PlansPanelState.selectedPlanId
-    val relatedFilterId = RelatedPanelState.selectedRelatedPersonId
-    val people = RelatedPersonStore.forRelatedPanel(
+    val studentFilterId = StudentsPanelState.selectedStudentId
+    val people = StudentStore.forStudentsPanel(
         customerGroupId,
         clientFilterId,
         planFilterId,
-        relatedFilterId,
+        studentFilterId,
     )
     val customerGroupLabel = customerGroupId?.let { id ->
         PeopleGroupStore.findById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
@@ -103,13 +103,13 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
 
     fun clearLocalSelection() {
         selectedId = null
-        form.load(RelatedPersonFormState())
+        form.load(StudentFormState())
         formError = null
     }
 
     fun clearSelection() {
         clearLocalSelection()
-        RelatedPanelState.clearRelatedPersonFilter()
+        StudentsPanelState.clearStudentFilter()
     }
 
     LaunchedEffect(people, selectedId) {
@@ -118,11 +118,11 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
         }
     }
 
-    fun loadIntoForm(person: RelatedPerson) {
-        RelatedPanelState.onRelatedPersonSelected(person.id)
+    fun loadIntoForm(person: Student) {
+        StudentsPanelState.onStudentSelected(person.id)
         selectedId = person.id
         form.load(
-            RelatedPersonFormState(
+            StudentFormState(
                 name = person.name,
                 dateOfBirth = person.dateOfBirth,
                 notes = person.notes,
@@ -147,23 +147,23 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                     text = when {
                         customerGroupId != null -> {
                             val label = customerGroupLabel ?: "this customer group"
-                            "Showing related people for $label. Use Show all to reset."
+                            "Showing students for $label. Use Show all to reset."
                         }
                         clientFilterId != null -> {
                             val label = clientFilterLabel ?: "this client"
-                            "Showing related people for $label. Use Clear filter in Clients to reset."
+                            "Showing students for $label. Use Clear filter in Clients to reset."
                         }
                         planFilterId != null -> {
                             val label = planFilterLabel ?: "this plan"
-                            "Showing related people on groups with $label. Use Clear filter in Plans to reset."
+                            "Showing students on groups with $label. Use Clear filter in Plans to reset."
                         }
-                        relatedFilterId != null -> {
-                            val label = RelatedPersonStore.findById(relatedFilterId)?.name?.takeIf { it.isNotBlank() }
-                                ?: "this related person"
+                        studentFilterId != null -> {
+                            val label = StudentStore.findById(studentFilterId)?.name?.takeIf { it.isNotBlank() }
+                                ?: "this student"
                             "Filtering clients and customer groups for $label. Use Clear filter to reset."
                         }
                         else ->
-                            "Edit related people on customer plans. They appear here after a lead becomes a customer."
+                            "Edit students on customer plans. They appear here after a lead becomes a customer."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -179,7 +179,7 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${people.size} related ${if (people.size == 1) "person" else "people"}",
+                            text = "${people.size} ${if (people.size == 1) "student" else "students"}",
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -188,8 +188,8 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (relatedFilterId != null) {
-                                GlideTextButton(onClick = { RelatedPanelState.clearRelatedPersonFilter() }) {
+                            if (studentFilterId != null) {
+                                GlideTextButton(onClick = { StudentsPanelState.clearStudentFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
@@ -227,15 +227,15 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                             Text(
                                 text = when {
                                     customerGroupId != null ->
-                                        "No related people in this customer group."
+                                        "No students in this customer group."
                                     clientFilterId != null ->
-                                        "No related people linked to this client."
+                                        "No students linked to this client."
                                     planFilterId != null ->
-                                        "No related people on groups with this plan."
-                                    relatedFilterId != null ->
-                                        "Related person not found."
+                                        "No students on groups with this plan."
+                                    studentFilterId != null ->
+                                        "Student not found."
                                     else ->
-                                        "No one on a customer plan yet. Add related people on a lead, then make the lead a customer."
+                                        "No one on a customer plan yet. Add students on a lead, then make the lead a customer."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -253,7 +253,7 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             items(people, key = { it.id }) { person ->
-                                RelatedPersonListItem(
+                                StudentListItem(
                                     person = person,
                                     selected = person.id == selectedId,
                                     compact = compact,
@@ -268,7 +268,7 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
             val formSection: @Composable (Modifier) -> Unit = { formModifier ->
                 Column(modifier = formModifier.fillMaxHeight()) {
                     Text(
-                        text = "Edit related person",
+                        text = "Edit student",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Medium,
                     )
@@ -298,13 +298,13 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                                 .weight(1f)
                                 .verticalScroll(rememberScrollState()),
                         ) {
-                            RelatedPersonForm(
+                            StudentForm(
                                 state = form.draft,
                                 onStateChange = { form.draft = it },
                                 spacing = spacing,
                             )
 
-                            val soldPlanCount = selectedId?.let { RelatedPersonStore.soldPlanCount(it) } ?: 0
+                            val soldPlanCount = selectedId?.let { StudentStore.soldPlanCount(it) } ?: 0
                             if (soldPlanCount > 0) {
                                 Spacer(modifier = Modifier.height(spacing.field))
                                 Text(
@@ -337,13 +337,13 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                                         return@GlideButton
                                     }
                                     formError = null
-                                    val existing = selectedId?.let { RelatedPersonStore.findById(it) }
+                                    val existing = selectedId?.let { StudentStore.findById(it) }
                                     if (existing != null) {
-                                        val updated = form.draft.toRelatedPerson(
+                                        val updated = form.draft.toStudent(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
-                                        RelatedPersonStore.update(updated)
+                                        StudentStore.update(updated)
                                         loadIntoForm(updated)
                                     }
                                 },
@@ -355,7 +355,7 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
 
                             GlideOutlinedButton(
                                 onClick = { showDeleteConfirm = true },
-                                enabled = selectedId?.let { RelatedPersonStore.canDelete(it) } == true,
+                                enabled = selectedId?.let { StudentStore.canDelete(it) } == true,
                             ) {
                                 Text("Delete", color = MaterialTheme.colorScheme.error)
                             }
@@ -382,9 +382,9 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        val onSoldPlan = RelatedPersonStore.isOnSoldPlan(selectedId!!)
+        val onSoldPlan = StudentStore.isOnSoldPlan(selectedId!!)
         DeleteConfirmDialog(
-            title = "Delete related person?",
+            title = "Delete student?",
             message = if (onSoldPlan) {
                 "This person is on one or more sold plans and cannot be deleted."
             } else {
@@ -393,7 +393,7 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
             onDismiss = { showDeleteConfirm = false },
             onContinue = {
                 if (!onSoldPlan) {
-                    RelatedPersonStore.delete(selectedId!!)
+                    StudentStore.delete(selectedId!!)
                     showDeleteConfirm = false
                     clearSelection()
                 } else {
@@ -407,8 +407,8 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun RelatedPersonListItem(
-    person: RelatedPerson,
+private fun StudentListItem(
+    person: Student,
     selected: Boolean,
     compact: Boolean,
     onClick: () -> Unit,
@@ -419,7 +419,7 @@ private fun RelatedPersonListItem(
     } else {
         MaterialTheme.colorScheme.surface
     }
-    val soldPlanCount = RelatedPersonStore.soldPlanCount(person.id)
+    val soldPlanCount = StudentStore.soldPlanCount(person.id)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -449,14 +449,14 @@ private fun RelatedPersonListItem(
 }
 
 @Composable
-private fun RelatedPersonForm(
-    state: RelatedPersonFormState,
-    onStateChange: (RelatedPersonFormState) -> Unit,
+private fun StudentForm(
+    state: StudentFormState,
+    onStateChange: (StudentFormState) -> Unit,
     spacing: GlideLayout.Spacing,
 ) {
     FormPanelSection(
         title = "Identity",
-        description = "Name and date of birth for this related person.",
+        description = "Name and date of birth for this student.",
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {

@@ -38,8 +38,8 @@ import glide.data.ClientsPanelState
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
-import glide.data.RelatedPanelState
-import glide.data.RelatedPersonStore
+import glide.data.StudentsPanelState
+import glide.data.StudentStore
 import glide.data.resolveMainClient
 import glide.model.Client
 import glide.ui.layout.GlideLayout
@@ -89,15 +89,15 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
     val customerGroupId = BillingPanelState.peopleGroupId
     val clientFilterId = ClientsPanelState.selectedClientId
     val planFilterId = PlansPanelState.selectedPlanId
-    val relatedFilterId = RelatedPanelState.selectedRelatedPersonId
-    val clients = ClientStore.forClientsPanel(customerGroupId, planFilterId, relatedFilterId)
+    val studentFilterId = StudentsPanelState.selectedStudentId
+    val clients = ClientStore.forClientsPanel(customerGroupId, planFilterId, studentFilterId)
     val customerGroupLabel = customerGroupId?.let { id ->
         PeopleGroupStore.findById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
     }
     val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
-    val relatedFilterLabel = relatedFilterId?.let {
-        RelatedPersonStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    val studentFilterLabel = studentFilterId?.let {
+        StudentStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
 
     fun clearLocalSelection() {
@@ -111,8 +111,8 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
         ClientsPanelState.clearClientFilter()
     }
 
-    LaunchedEffect(customerGroupId, planFilterId, relatedFilterId) {
-        if ((customerGroupId != null || planFilterId != null || relatedFilterId != null) && selectedId != null) {
+    LaunchedEffect(customerGroupId, planFilterId, studentFilterId) {
+        if ((customerGroupId != null || planFilterId != null || studentFilterId != null) && selectedId != null) {
             clearLocalSelection()
         }
     }
@@ -164,9 +164,9 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                             val label = planFilterLabel ?: "this plan"
                             "Showing clients on groups with $label. Use Clear filter in Plans to reset."
                         }
-                        relatedFilterId != null -> {
-                            val label = relatedFilterLabel ?: "this related person"
-                            "Showing clients linked to $label. Use Clear filter in Related to reset."
+                        studentFilterId != null -> {
+                            val label = studentFilterLabel ?: "this student"
+                            "Showing clients linked to $label. Use Clear filter in Students to reset."
                         }
                         else ->
                             "Edit clients created from leads. New clients are added when you make a customer on a lead."
@@ -199,8 +199,8 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (relatedFilterId != null) {
-                                GlideTextButton(onClick = { RelatedPanelState.clearRelatedPersonFilter() }) {
+                            if (studentFilterId != null) {
+                                GlideTextButton(onClick = { StudentsPanelState.clearStudentFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
@@ -236,8 +236,8 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                                         "No main client for this customer group."
                                     planFilterId != null ->
                                         "No clients on groups with this plan."
-                                    relatedFilterId != null ->
-                                        "No clients linked to this related person."
+                                    studentFilterId != null ->
+                                        "No clients linked to this student."
                                     else ->
                                         "No clients yet. Clients are created when leads become customers."
                                 },

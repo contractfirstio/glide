@@ -27,11 +27,11 @@ private fun PeopleGroup.attendeesForClassRoster(): List<ClassAttendee> {
             ),
         )
     }
-    resolveRelatedPeople().forEach { person ->
-        val name = person.name.trim().ifBlank { "Related person" }
+    resolveStudents().forEach { person ->
+        val name = person.name.trim().ifBlank { "Student" }
         attendees.add(
             ClassAttendee(
-                key = "related:${person.id}",
+                key = "student:${person.id}",
                 displayName = name,
                 peopleGroupId = id,
                 householdLabel = household,

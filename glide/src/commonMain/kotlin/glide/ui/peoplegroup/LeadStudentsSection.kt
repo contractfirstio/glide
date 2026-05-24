@@ -13,8 +13,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import glide.data.RelatedPersonStore
-import glide.model.RelatedPerson
+import glide.data.StudentStore
+import glide.model.Student
 import glide.ui.layout.GlideLayout
 import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
@@ -23,23 +23,23 @@ import glide.ui.theme.GlideOutlinedButton
 import glide.ui.theme.GlideOutlinedField
 
 @Composable
-fun LeadRelatedPeopleSection(
+fun LeadStudentsSection(
     selectedIds: List<String>,
     onSelectionChange: (List<String>) -> Unit,
     spacing: GlideLayout.Spacing,
 ) {
-    var relatedSearchQuery by remember { mutableStateOf("") }
+    var studentSearchQuery by remember { mutableStateOf("") }
     var newName by remember { mutableStateOf("") }
     var newDateOfBirth by remember { mutableStateOf("") }
     var addError by remember { mutableStateOf<String?>(null) }
 
-    val linked = selectedIds.mapNotNull { RelatedPersonStore.findById(it) }
-    val relatedSearchResults = remember(relatedSearchQuery, selectedIds, RelatedPersonStore.all) {
-        val query = relatedSearchQuery.trim()
+    val linked = selectedIds.mapNotNull { StudentStore.findById(it) }
+    val studentSearchResults = remember(studentSearchQuery, selectedIds, StudentStore.all) {
+        val query = studentSearchQuery.trim()
         if (query.isEmpty()) {
             emptyList()
         } else {
-            RelatedPersonStore.all
+            StudentStore.all
                 .filter { it.id !in selectedIds }
                 .filter { person ->
                     listOf(person.name, person.dateOfBirth, person.notes)
@@ -50,17 +50,17 @@ fun LeadRelatedPeopleSection(
     }
 
     LeadPanelSection(
-        title = "Related people",
+        title = "Students",
         description = "Family or others on this lead — separate from the main client.",
         spacing = spacing,
         role = LeadPanelSectionRole.Secondary,
     ) {
         if (linked.isNotEmpty()) {
-            LeadRelatedPeopleLinkedBox {
+            LeadStudentsLinkedBox {
                 GlideFieldLabel("On this lead (${linked.size})")
                 Spacer(modifier = Modifier.height(spacing.field))
                 linked.forEachIndexed { index, person ->
-                    LeadRelatedPersonLinkedRow(
+                    LeadStudentLinkedRow(
                         person = person,
                         onRemove = { onSelectionChange(selectedIds.filter { it != person.id }) },
                     )
@@ -73,25 +73,25 @@ fun LeadRelatedPeopleSection(
         }
 
         LeadActionSubsection(
-            title = "Link existing related person",
+            title = "Link existing student",
             description = "Search people already added on other leads or customer plans.",
             spacing = spacing,
         ) {
             EntitySearchPicker(
-                label = "Search saved related people",
+                label = "Search saved students",
                 placeholder = "Type name or date of birth…",
-                query = relatedSearchQuery,
-                onQueryChange = { relatedSearchQuery = it },
-                results = relatedSearchResults,
+                query = studentSearchQuery,
+                onQueryChange = { studentSearchQuery = it },
+                results = studentSearchResults,
                 onSelect = { id -> onSelectionChange(selectedIds + id) },
-                noResultsText = "No saved people match. Create a new related person below instead.",
+                noResultsText = "No saved people match. Create a new student below instead.",
             )
         }
 
         Spacer(modifier = Modifier.height(spacing.section))
 
         LeadActionSubsection(
-            title = "Create new related person",
+            title = "Create new student",
             description = "Add someone new to the system and attach them to this lead.",
             spacing = spacing,
         ) {
@@ -117,8 +117,8 @@ fun LeadRelatedPeopleSection(
                             addError = "Enter a name before adding."
                             return@GlideOutlinedButton
                         }
-                        val person = RelatedPerson(name = trimmed, dateOfBirth = newDateOfBirth.trim())
-                        RelatedPersonStore.create(person)
+                        val person = Student(name = trimmed, dateOfBirth = newDateOfBirth.trim())
+                        StudentStore.create(person)
                         onSelectionChange(selectedIds + person.id)
                         newName = ""
                         newDateOfBirth = ""
@@ -141,14 +141,14 @@ fun LeadRelatedPeopleSection(
 
         Spacer(modifier = Modifier.height(spacing.field))
         Text(
-            text = "Edit names and details in the Related panel once they are on a customer plan.",
+            text = "Edit names and details in the Students panel once they are on a customer plan.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
-private fun RelatedPerson.toSearchItem() = SearchResultItem(
+private fun Student.toSearchItem() = SearchResultItem(
     id = id,
     primaryLabel = formatPersonLabel(name, dateOfBirth),
     secondaryLabel = notes.takeIf { it.isNotBlank() },
