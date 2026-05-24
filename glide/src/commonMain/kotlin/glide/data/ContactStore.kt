@@ -58,7 +58,14 @@ object ContactStore {
         }
     }
 
+    fun isOnSoldPlan(contactId: String): Boolean =
+        PeopleGroupStore.customers.any { it.mainContactId == contactId }
+
+    fun soldPlanCount(contactId: String): Int =
+        PeopleGroupStore.customers.count { it.mainContactId == contactId }
+
     fun delete(id: String) {
+        if (isOnSoldPlan(id)) return
         _contacts.removeAll { it.id == id }
     }
 

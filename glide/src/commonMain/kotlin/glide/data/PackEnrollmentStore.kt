@@ -72,4 +72,8 @@ object PackEnrollmentStore {
         if (index < 0) return
         _enrollments[index] = _enrollments[index].copy(packPeriodStartedAtMillis = startMillis)
     }
+
+    fun removeAllForPeopleGroup(peopleGroupId: String) {
+        _enrollments.removeAll { it.peopleGroupId == peopleGroupId }
+    }
 }

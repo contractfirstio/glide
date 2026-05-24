@@ -9,9 +9,9 @@ object RelatedPersonStore {
 
     val all: List<RelatedPerson> get() = _people
 
-    /** Related people linked to at least one customer (converted) people group. */
-    val onCustomerPacks: List<RelatedPerson> get() =
-        _people.filter { isOnCustomerPack(it.id) }
+    /** Related people linked to at least one sold plan. */
+    val onSoldPlans: List<RelatedPerson> get() =
+        _people.filter { isOnSoldPlan(it.id) }
 
     /**
      * Related people for the Related panel — all on customer packs, those in
@@ -34,7 +34,7 @@ object RelatedPersonStore {
             planId != null -> relatedPeopleForPlan(planId)
             relatedPersonId != null ->
                 findById(relatedPersonId)?.let { listOf(it) } ?: emptyList()
-            else -> onCustomerPacks
+            else -> onSoldPlans
         }
 
     private fun relatedPeopleForPlan(planId: String): List<RelatedPerson> =
@@ -51,10 +51,10 @@ object RelatedPersonStore {
             .distinct()
             .mapNotNull { findById(it) }
 
-    fun isOnCustomerPack(personId: String): Boolean =
+    fun isOnSoldPlan(personId: String): Boolean =
         PeopleGroupStore.customers.any { personId in it.relatedPersonIds }
 
-    fun customerPackCount(personId: String): Int =
+    fun soldPlanCount(personId: String): Int =
         PeopleGroupStore.customers.count { personId in it.relatedPersonIds }
 
     fun create(person: RelatedPerson) {

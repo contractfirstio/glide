@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenuItem
@@ -58,6 +57,7 @@ import glide.data.TermStore
 import glide.data.PackEnrollmentStore
 import glide.data.PeopleGroupNavigation
 import glide.data.PeopleGroupStore
+import glide.data.soldPlanDeletionBlockReason
 import glide.data.PlanStore
 import glide.data.ScheduledClassStore
 import glide.model.formatMoney
@@ -81,6 +81,7 @@ import glide.ui.theme.GlideFieldLabel
 import glide.ui.theme.glideListItemTitleColor
 import glide.ui.theme.GlideOutlinedButton
 import glide.ui.theme.GlideOutlinedField
+import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
@@ -144,8 +145,8 @@ private val CustomersPanelUi = PeopleGroupPanelUi(
     allowCreate = false,
     readOnly = true,
     noSelectionMessage = "Select a customer group to view.",
-    deleteConfirmTitle = "Delete customer group?",
-    deleteConfirmMessage = "Customer groups cannot be deleted.",
+    deleteConfirmTitle = "Delete sold plan?",
+    deleteConfirmMessage = "This sold plan will be removed permanently. Scheduled bills that have not been issued will also be removed.",
     showClearSelection = true,
 )
 
@@ -661,6 +662,7 @@ private fun PeopleGroupPanel(
                                         SchedulingSoldPlanDetailView(
                                             group = group,
                                             spacing = spacing,
+                                            onDelete = { showDeleteConfirm = true },
                                         )
                                     } else {
                                         CustomerGroupDetailView(
@@ -669,6 +671,7 @@ private fun PeopleGroupPanel(
                                             onOpenBilling = {
                                                 BillingPanelState.reopenForCurrentGroup()
                                             },
+                                            onDelete = { showDeleteConfirm = true },
                                             onCloneToLead = {
                                                 cloneMessage = null
                                                 val lead = PeopleGroupStore.cloneToLead(group.id)
@@ -839,35 +842,31 @@ private fun PeopleGroupPanel(
         }
     }
 
-    if (showDeleteConfirm && selectedId != null && !ui.readOnly) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text(ui.deleteConfirmTitle) },
-            text = { Text(ui.deleteConfirmMessage) },
-            confirmButton = {
-                GlideTextButton(
-                    onClick = {
-                        if (PeopleGroupStore.delete(selectedId!!)) {
-                            showDeleteConfirm = false
-                            if (ui.allowCreate) {
-                                resetFormForCreate()
-                            } else {
-                                clearSelection()
-                            }
-                        } else {
-                            showDeleteConfirm = false
-                            formError = "This record cannot be deleted."
-                        }
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+    if (showDeleteConfirm && selectedId != null && (ui.type == PeopleGroupType.CUSTOMER || !ui.readOnly)) {
+        val soldPlanBlockReason = if (ui.type == PeopleGroupType.CUSTOMER) {
+            soldPlanDeletionBlockReason(selectedId!!)
+        } else {
+            null
+        }
+        DeleteConfirmDialog(
+            title = ui.deleteConfirmTitle,
+            message = soldPlanBlockReason ?: ui.deleteConfirmMessage,
+            onDismiss = { showDeleteConfirm = false },
+            onContinue = {
+                if (PeopleGroupStore.delete(selectedId!!)) {
+                    showDeleteConfirm = false
+                    if (ui.allowCreate) {
+                        resetFormForCreate()
+                    } else {
+                        clearSelection()
+                    }
+                } else {
+                    showDeleteConfirm = false
+                    formError = soldPlanBlockReason
+                        ?: "This record cannot be deleted."
                 }
             },
-            dismissButton = {
-                GlideTextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+            continueEnabled = soldPlanBlockReason == null,
         )
     }
 }
@@ -1021,9 +1020,42 @@ private fun PeopleGroup.relatedPeopleSummary(compact: Boolean): String? {
 }
 
 @Composable
+private fun SoldPlanDeleteSection(
+    groupId: String,
+    spacing: GlideLayout.Spacing,
+    onDelete: () -> Unit,
+) {
+    val blockReason = soldPlanDeletionBlockReason(groupId)
+    Spacer(modifier = Modifier.height(spacing.section))
+    FormPanelSectionsDivider(label = "Danger zone", spacing = spacing)
+    FormPanelSection(
+        title = "Delete sold plan",
+        description = "Only sold plans that are not on a class and have no issued or paid bills can be removed.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        blockReason?.let { reason ->
+            Text(
+                text = reason,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Spacer(modifier = Modifier.height(spacing.field))
+        }
+        GlideOutlinedButton(
+            onClick = onDelete,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Delete sold plan", color = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+@Composable
 private fun SchedulingSoldPlanDetailView(
     group: PeopleGroup,
     spacing: GlideLayout.Spacing,
+    onDelete: () -> Unit,
 ) {
     val enrollment = PackEnrollmentStore.displayForPeopleGroup(group.id)
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
@@ -1069,6 +1101,11 @@ private fun SchedulingSoldPlanDetailView(
             },
         )
     }
+    SoldPlanDeleteSection(
+        groupId = group.id,
+        spacing = spacing,
+        onDelete = onDelete,
+    )
 }
 
 @Composable
@@ -1076,6 +1113,7 @@ private fun CustomerGroupDetailView(
     group: PeopleGroup,
     spacing: GlideLayout.Spacing,
     onOpenBilling: () -> Unit,
+    onDelete: () -> Unit,
     onCloneToLead: () -> Unit,
 ) {
     val enrollment = PackEnrollmentStore.forPeopleGroup(group.id)
@@ -1187,6 +1225,11 @@ private fun CustomerGroupDetailView(
             Text("Clone to new lead")
         }
     }
+    SoldPlanDeleteSection(
+        groupId = group.id,
+        spacing = spacing,
+        onDelete = onDelete,
+    )
 }
 
 @Composable

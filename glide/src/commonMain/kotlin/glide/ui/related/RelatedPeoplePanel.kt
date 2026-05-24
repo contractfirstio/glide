@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -44,6 +43,7 @@ import glide.data.RelatedPersonStore
 import glide.data.resolveMainContact
 import glide.model.RelatedPerson
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
@@ -304,11 +304,11 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                                 spacing = spacing,
                             )
 
-                            val groupCount = selectedId?.let { RelatedPersonStore.customerPackCount(it) } ?: 0
-                            if (groupCount > 0) {
+                            val soldPlanCount = selectedId?.let { RelatedPersonStore.soldPlanCount(it) } ?: 0
+                            if (soldPlanCount > 0) {
                                 Spacer(modifier = Modifier.height(spacing.field))
                                 Text(
-                                    text = "On $groupCount customer pack${if (groupCount == 1) "" else "s"}.",
+                                    text = "On $soldPlanCount sold plan${if (soldPlanCount == 1) "" else "s"}.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -379,40 +379,26 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        val onCustomerPack = RelatedPersonStore.isOnCustomerPack(selectedId!!)
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete related person?") },
-            text = {
-                Text(
-                    if (onCustomerPack) {
-                        "Cannot delete — they are on a customer pack, which is locked."
-                    } else {
-                        "They will be removed from all leads."
-                    },
-                )
+        val onSoldPlan = RelatedPersonStore.isOnSoldPlan(selectedId!!)
+        DeleteConfirmDialog(
+            title = "Delete related person?",
+            message = if (onSoldPlan) {
+                "This person is on one or more sold plans and cannot be deleted."
+            } else {
+                "They will be removed from all leads."
             },
-            confirmButton = {
-                GlideTextButton(
-                    onClick = {
-                        if (!onCustomerPack) {
-                            RelatedPersonStore.delete(selectedId!!)
-                            showDeleteConfirm = false
-                            clearSelection()
-                        } else {
-                            showDeleteConfirm = false
-                            formError = "Cannot delete someone on a locked customer pack."
-                        }
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+            onDismiss = { showDeleteConfirm = false },
+            onContinue = {
+                if (!onSoldPlan) {
+                    RelatedPersonStore.delete(selectedId!!)
+                    showDeleteConfirm = false
+                    clearSelection()
+                } else {
+                    showDeleteConfirm = false
+                    formError = "This person is on a sold plan and cannot be deleted."
                 }
             },
-            dismissButton = {
-                GlideTextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+            continueEnabled = !onSoldPlan,
         )
     }
 }
@@ -430,7 +416,7 @@ private fun RelatedPersonListItem(
     } else {
         MaterialTheme.colorScheme.surface
     }
-    val groupCount = RelatedPersonStore.customerPackCount(person.id)
+    val soldPlanCount = RelatedPersonStore.soldPlanCount(person.id)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -449,9 +435,9 @@ private fun RelatedPersonListItem(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        if (groupCount > 0) {
+        if (soldPlanCount > 0) {
             Text(
-                text = "$groupCount pack${if (groupCount == 1) "" else "s"}",
+                text = "$soldPlanCount sold plan${if (soldPlanCount == 1) "" else "s"}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
             )

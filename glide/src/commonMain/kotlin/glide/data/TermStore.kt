@@ -28,9 +28,15 @@ object TermStore {
         return false
     }
 
-    fun delete(id: String) {
+    fun classCount(termId: String): Int =
+        ScheduledClassStore.countForTerm(termId)
+
+    fun canDelete(termId: String): Boolean = classCount(termId) == 0
+
+    fun delete(id: String): Boolean {
+        if (!canDelete(id)) return false
         _terms.removeAll { it.id == id }
-        ScheduledClassStore.clearTermReference(id)
+        return true
     }
 
     fun findById(id: String): AcademicTerm? = _terms.find { it.id == id }

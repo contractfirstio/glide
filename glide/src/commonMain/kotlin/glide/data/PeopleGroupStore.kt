@@ -97,9 +97,18 @@ object PeopleGroupStore {
 
     fun delete(id: String): Boolean {
         val group = findById(id) ?: return false
-        if (group.type == PeopleGroupType.CUSTOMER) return false
-        _groups.removeAll { it.id == id }
-        return true
+        return when (group.type) {
+            PeopleGroupType.CUSTOMER -> {
+                if (!canDeleteSoldPlan(id)) return false
+                purgeSoldPlanData(id)
+                _groups.removeAll { it.id == id }
+                true
+            }
+            PeopleGroupType.LEAD -> {
+                _groups.removeAll { it.id == id }
+                true
+            }
+        }
     }
 
     fun findById(id: String): PeopleGroup? = _groups.find { it.id == id }

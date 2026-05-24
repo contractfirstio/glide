@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,6 +57,7 @@ import glide.model.parseMajorAmount
 import glide.model.summaryLine
 import glide.model.DEFAULT_CURRENCY_CODE
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
@@ -338,6 +338,10 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                     )
                     Spacer(modifier = Modifier.height(spacing.section))
 
+                    val planReadOnly = !isCreating &&
+                        selectedId != null &&
+                        !PlanStore.canEdit(selectedId!!)
+
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -347,7 +351,18 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             state = form.draft,
                             onStateChange = { form.draft = it },
                             spacing = spacing,
+                            readOnly = planReadOnly,
                         )
+
+                        if (planReadOnly) {
+                            Spacer(modifier = Modifier.height(spacing.field))
+                            Text(
+                                text = PlanStore.planEditBlockReason(selectedId!!)
+                                    ?: "This plan has been sold and cannot be edited.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
 
                         formError?.let { error ->
                             Spacer(modifier = Modifier.height(spacing.field))
@@ -386,19 +401,27 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                                 } else {
                                     val existing = selectedId?.let { PlanStore.findById(it) }
                                     if (existing != null) {
+                                        PlanStore.planEditBlockReason(existing.id)?.let { reason ->
+                                            formError = reason
+                                            return@GlideButton
+                                        }
                                         val updated = form.draft.toPlan(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                             existingCurrency = existing.currencyCode,
                                         )
                                         if (updated != null) {
-                                            PlanStore.update(updated)
-                                            loadIntoForm(updated)
+                                            if (PlanStore.update(updated)) {
+                                                loadIntoForm(updated)
+                                            } else {
+                                                formError = PlanStore.planEditBlockReason(existing.id)
+                                                    ?: "This plan has been sold and cannot be edited."
+                                            }
                                         }
                                     }
                                 }
                             },
-                            enabled = form.isDirty,
+                            enabled = form.isDirty && !planReadOnly,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(saveLabel)
@@ -431,28 +454,23 @@ fun PlansPanel(modifier: Modifier = Modifier) {
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete plan?") },
-            text = { Text("This plan will be removed permanently.") },
-            confirmButton = {
-                GlideTextButton(
-                    onClick = {
-                        PlanStore.delete(selectedId!!)
-                        showDeleteConfirm = false
-                        clearSelection()
-                        isCreating = true
-                        form.load(PlanFormState())
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+        val blockReason = PlanStore.planDeletionBlockReason(selectedId!!)
+        DeleteConfirmDialog(
+            title = "Delete plan?",
+            message = blockReason ?: "This plan will be removed permanently.",
+            onDismiss = { showDeleteConfirm = false },
+            onContinue = {
+                if (PlanStore.delete(selectedId!!)) {
+                    showDeleteConfirm = false
+                    clearSelection()
+                    isCreating = true
+                    form.load(PlanFormState())
+                } else {
+                    showDeleteConfirm = false
+                    formError = blockReason ?: "This plan has been sold and cannot be deleted."
                 }
             },
-            dismissButton = {
-                GlideTextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+            continueEnabled = blockReason == null,
         )
     }
 }
@@ -514,6 +532,7 @@ private fun PlanForm(
     state: PlanFormState,
     onStateChange: (PlanFormState) -> Unit,
     spacing: GlideLayout.Spacing,
+    readOnly: Boolean = false,
 ) {
     var kindExpanded by remember { mutableStateOf(false) }
 
@@ -528,6 +547,7 @@ private fun PlanForm(
             onValueChange = { onStateChange(state.copy(name = it)) },
             label = "Plan name",
             placeholder = "e.g. 10 Class Rolling Pack",
+            readOnly = readOnly,
         )
         Spacer(modifier = Modifier.height(spacing.field))
 
@@ -536,7 +556,7 @@ private fun PlanForm(
             Spacer(modifier = Modifier.height(2.dp))
             ExposedDropdownMenuBox(
                 expanded = kindExpanded,
-                onExpandedChange = { kindExpanded = it },
+                onExpandedChange = { if (!readOnly) kindExpanded = it },
             ) {
                 OutlinedTextField(
                     value = state.kind.label,
@@ -598,6 +618,7 @@ private fun PlanForm(
                     onValueChange = { onStateChange(state.copy(lessonCount = it.filter { c -> c.isDigit() })) },
                     label = "Number of classes",
                     placeholder = "10",
+                    readOnly = readOnly,
                 )
                 Spacer(modifier = Modifier.height(spacing.field))
                 Row(
@@ -607,6 +628,7 @@ private fun PlanForm(
                     Checkbox(
                         checked = state.rolling,
                         onCheckedChange = { onStateChange(state.copy(rolling = it)) },
+                        enabled = !readOnly,
                     )
                     Column(modifier = Modifier.padding(start = 4.dp)) {
                         Text(
@@ -649,6 +671,7 @@ private fun PlanForm(
             onValueChange = { onStateChange(state.copy(priceMajor = it)) },
             label = "Price per person",
             placeholder = "e.g. 12.00",
+            readOnly = readOnly,
         )
         Spacer(modifier = Modifier.height(spacing.field))
         GlideOutlinedField(
@@ -659,6 +682,7 @@ private fun PlanForm(
             minLines = 2,
             maxLines = 4,
             fieldHeight = GlideDimensions.notesMinHeight,
+            readOnly = readOnly,
         )
     }
 }

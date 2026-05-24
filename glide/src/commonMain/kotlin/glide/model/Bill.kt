@@ -39,6 +39,9 @@ fun Bill.isIssuedToCustomer(): Boolean =
 /** Billing line items and amounts can only be edited while scheduled. */
 fun Bill.isBillingEditable(): Boolean = status == BillStatus.SCHEDULED
 
+/** Only scheduled bills can be voided (removed). */
+fun Bill.canBeVoided(): Boolean = status == BillStatus.SCHEDULED
+
 fun Bill.displayDateMillis(): Long = issuedAtMillis ?: createdAtMillis
 
 /** When payment is expected; [dueAtMillis] or issue date plus [PAYMENT_DUE_DAYS_AFTER_ISSUE]. */

@@ -12,7 +12,9 @@ import glide.model.BillLineItemSource
 import glide.model.BillStatus
 import glide.model.PackEnrollment
 import glide.model.billPaymentDueAtMillis
+import glide.model.canBeVoided
 import glide.model.isBillingEditable
+import glide.model.isIssuedToCustomer
 
 object BillStore {
     private val _bills = mutableStateListOf<Bill>()
@@ -24,6 +26,21 @@ object BillStore {
 
     fun forPeopleGroup(peopleGroupId: String): List<Bill> =
         _bills.filter { it.peopleGroupId == peopleGroupId }.sortedByDescending { it.createdAtMillis }
+
+    fun removeAllForPeopleGroup(peopleGroupId: String) {
+        _bills.removeAll { it.peopleGroupId == peopleGroupId && it.canBeVoided() }
+    }
+
+    fun billVoidBlockReason(billId: String): String? {
+        val bill = findById(billId) ?: return "Bill not found."
+        return when {
+            bill.canBeVoided() -> null
+            bill.status == BillStatus.PAID -> "This bill has been paid and cannot be voided."
+            bill.status == BillStatus.VOID -> "This bill has already been voided."
+            bill.isIssuedToCustomer() -> "This bill has been issued and cannot be voided."
+            else -> "This bill cannot be voided."
+        }
+    }
 
     fun findById(id: String): Bill? = _bills.find { it.id == id }
 
@@ -203,11 +220,10 @@ object BillStore {
     }
 
     fun voidBill(billId: String): Boolean {
+        if (billVoidBlockReason(billId) != null) return false
         val index = _bills.indexOfFirst { it.id == billId }
         if (index < 0) return false
-        val bill = _bills[index]
-        if (bill.status != BillStatus.ISSUED && bill.status != BillStatus.SCHEDULED) return false
-        _bills[index] = bill.copy(status = BillStatus.VOID)
+        _bills[index] = _bills[index].copy(status = BillStatus.VOID)
         return true
     }
 

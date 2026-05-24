@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -44,6 +43,7 @@ import glide.data.RelatedPersonStore
 import glide.data.resolveMainContact
 import glide.model.Contact
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
@@ -308,11 +308,11 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                                 spacing = spacing,
                             )
 
-                            val groupCount = PeopleGroupStore.customers.count { it.mainContactId == selectedId }
-                            if (groupCount > 0) {
+                            val soldPlanCount = selectedId?.let { ContactStore.soldPlanCount(it) } ?: 0
+                            if (soldPlanCount > 0) {
                                 Spacer(modifier = Modifier.height(spacing.field))
                                 Text(
-                                    text = "In $groupCount customer group${if (groupCount == 1) "" else "s"}.",
+                                    text = "On $soldPlanCount sold plan${if (soldPlanCount == 1) "" else "s"}.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -383,40 +383,26 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        val inUse = PeopleGroupStore.all.any { it.mainContactId == selectedId }
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete contact?") },
-            text = {
-                Text(
-                    if (inUse) {
-                        "This contact is linked to one or more customer groups. Remove them from those groups first."
-                    } else {
-                        "This contact will be removed permanently."
-                    },
-                )
+        val onSoldPlan = ContactStore.isOnSoldPlan(selectedId!!)
+        DeleteConfirmDialog(
+            title = "Delete contact?",
+            message = if (onSoldPlan) {
+                "This person is the main contact on one or more sold plans and cannot be deleted."
+            } else {
+                "This contact will be removed permanently."
             },
-            confirmButton = {
-                GlideTextButton(
-                    onClick = {
-                        if (!inUse) {
-                            ContactStore.delete(selectedId!!)
-                            showDeleteConfirm = false
-                            clearSelection()
-                        } else {
-                            showDeleteConfirm = false
-                            formError = "Contact is still linked to customer groups."
-                        }
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+            onDismiss = { showDeleteConfirm = false },
+            onContinue = {
+                if (!onSoldPlan) {
+                    ContactStore.delete(selectedId!!)
+                    showDeleteConfirm = false
+                    clearSelection()
+                } else {
+                    showDeleteConfirm = false
+                    formError = "This person is on a sold plan and cannot be deleted."
                 }
             },
-            dismissButton = {
-                GlideTextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+            continueEnabled = !onSoldPlan,
         )
     }
 }
@@ -434,7 +420,7 @@ private fun ContactListItem(
     } else {
         MaterialTheme.colorScheme.surface
     }
-    val groupCount = PeopleGroupStore.customers.count { it.mainContactId == contact.id }
+    val soldPlanCount = ContactStore.soldPlanCount(contact.id)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -462,9 +448,9 @@ private fun ContactListItem(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (groupCount > 0) {
+        if (soldPlanCount > 0) {
             Text(
-                text = "$groupCount group${if (groupCount == 1) "" else "s"}",
+                text = "$soldPlanCount sold plan${if (soldPlanCount == 1) "" else "s"}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
             )

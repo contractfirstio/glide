@@ -66,12 +66,14 @@ import glide.model.minorToMajorString
 import glide.model.parseMajorAmount
 import glide.model.PackEnrollment
 import glide.model.displayDateMillis
+import glide.model.canBeVoided
 import glide.model.isBillingEditable
 import glide.model.isIssuedToCustomer
 import glide.model.PaymentMethod
 import glide.model.PeopleGroupType
 import glide.model.formatMoney
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
@@ -116,6 +118,7 @@ fun BillingPanel(
     var paymentError by remember(peopleGroupId) { mutableStateOf<String?>(null) }
     var billingActionMessage by remember(peopleGroupId) { mutableStateOf<String?>(null) }
     var showCancelPackDialog by remember(peopleGroupId) { mutableStateOf(false) }
+    var showVoidBillConfirm by remember(peopleGroupId) { mutableStateOf(false) }
 
     val pendingAttendance = rememberPendingAttendanceSessions()
     val billingBlockedByAttendance = pendingAttendance.isNotEmpty()
@@ -338,10 +341,7 @@ fun BillingPanel(
                             paymentError = null
                             showPaymentDialog = true
                         },
-                        onVoid = {
-                            BillStore.voidBill(selectedBill.id)
-                            selectedBillId = null
-                        },
+                        onVoid = { showVoidBillConfirm = true },
                         onGenerateInvoice = {
                             if (billingBlockedByAttendance) {
                                 billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
@@ -384,6 +384,26 @@ fun BillingPanel(
                 },
             )
         }
+    }
+
+    if (showVoidBillConfirm && selectedBillId != null) {
+        val voidBlockReason = BillStore.billVoidBlockReason(selectedBillId!!)
+        DeleteConfirmDialog(
+            title = "Void bill?",
+            message = voidBlockReason ?: "This scheduled bill will be voided and cannot be issued or paid.",
+            onDismiss = { showVoidBillConfirm = false },
+            onContinue = {
+                if (BillStore.voidBill(selectedBillId!!)) {
+                    selectedBillId = null
+                    showVoidBillConfirm = false
+                } else {
+                    showVoidBillConfirm = false
+                    billingActionMessage = voidBlockReason
+                        ?: "This bill cannot be voided."
+                }
+            },
+            continueEnabled = voidBlockReason == null,
+        )
     }
 
     if (showCancelPackDialog && enrollment != null) {
@@ -634,12 +654,14 @@ private fun BillDetailActions(
                 ) {
                     Text("Generate invoice PDF")
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                GlideOutlinedButton(
-                    onClick = onVoid,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Void bill", color = MaterialTheme.colorScheme.error)
+                if (bill.canBeVoided()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    GlideOutlinedButton(
+                        onClick = onVoid,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Void bill", color = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
             BillStatus.ISSUED -> {
@@ -666,12 +688,11 @@ private fun BillDetailActions(
                     Text("Generate invoice PDF")
                 }
                 Spacer(modifier = Modifier.height(4.dp))
-                GlideOutlinedButton(
-                    onClick = onVoid,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Void bill", color = MaterialTheme.colorScheme.error)
-                }
+                Text(
+                    text = "This bill has been issued and cannot be voided.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             BillStatus.PAID -> {
                 BillLineItemsSection(bill = bill)
@@ -704,6 +725,7 @@ private fun BillLineItemsSection(
     var editingLineItemId by remember(bill.id, bill.status) { mutableStateOf<String?>(null) }
     var showAddDialog by remember(bill.id, bill.status) { mutableStateOf(false) }
     var addKind by remember(bill.id, bill.status) { mutableStateOf(BillLineItemKind.DEBIT) }
+    var pendingRemoveLineItemId by remember(bill.id, bill.status) { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -737,14 +759,7 @@ private fun BillLineItemsSection(
                     currencyCode = bill.currencyCode,
                     editable = editable && item.isEditableBeforeIssue(),
                     onEdit = { editingLineItemId = item.id },
-                    onDelete = {
-                        if (!BillStore.removeLineItem(bill.id, item.id)) {
-                            lineItemError = "Could not remove line item."
-                        } else {
-                            lineItemError = null
-                            if (editingLineItemId == item.id) editingLineItemId = null
-                        }
-                    },
+                    onDelete = { pendingRemoveLineItemId = item.id },
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))
@@ -799,6 +814,25 @@ private fun BillLineItemsSection(
                 color = MaterialTheme.colorScheme.error,
             )
         }
+    }
+
+    pendingRemoveLineItemId?.let { lineItemId ->
+        val item = lineItems.find { it.id == lineItemId }
+        DeleteConfirmDialog(
+            title = "Remove line item?",
+            message = item?.let { "\"${it.description}\" will be removed from this bill." }
+                ?: "This line item will be removed from the bill.",
+            onDismiss = { pendingRemoveLineItemId = null },
+            onContinue = {
+                if (!BillStore.removeLineItem(bill.id, lineItemId)) {
+                    lineItemError = "Could not remove line item."
+                } else {
+                    lineItemError = null
+                    if (editingLineItemId == lineItemId) editingLineItemId = null
+                }
+                pendingRemoveLineItemId = null
+            },
+        )
     }
 
     if (showAddDialog) {

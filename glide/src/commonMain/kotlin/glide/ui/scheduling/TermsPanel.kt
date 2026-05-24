@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +41,7 @@ import glide.data.validateTermDisablingRollingPlans
 import glide.model.AcademicTerm
 import glide.model.findOverlappingTerm
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
@@ -303,6 +303,19 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             spacing = spacing,
                         )
 
+                        if (!isCreating && selectedId != null) {
+                            val classCount = TermStore.classCount(selectedId!!)
+                            if (classCount > 0) {
+                                Spacer(modifier = Modifier.height(spacing.field))
+                                Text(
+                                    text = "Used by $classCount class${if (classCount == 1) "" else "es"}. " +
+                                        "Remove this term from those classes before deleting.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
                         formError?.let { error ->
                             Spacer(modifier = Modifier.height(spacing.field))
                             Text(
@@ -391,36 +404,27 @@ fun TermsPanel(modifier: Modifier = Modifier) {
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        val linkedClasses = ScheduledClassStore.countForTerm(selectedId!!)
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete term?") },
-            text = {
-                Text(
-                    if (linkedClasses > 0) {
-                        "This term will be removed. $linkedClasses class${if (linkedClasses == 1) "" else "es"} " +
-                            "will be unlinked from this term."
-                    } else {
-                        "This term will be removed permanently."
-                    },
-                )
+        val linkedClasses = TermStore.classCount(selectedId!!)
+        val attachedToClass = linkedClasses > 0
+        DeleteConfirmDialog(
+            title = "Delete term?",
+            message = if (attachedToClass) {
+                "This term is used by $linkedClasses class${if (linkedClasses == 1) "" else "es"} " +
+                    "and cannot be deleted. Remove it from those classes first."
+            } else {
+                "This term will be removed permanently."
             },
-            confirmButton = {
-                GlideTextButton(
-                    onClick = {
-                        TermStore.delete(selectedId!!)
-                        showDeleteConfirm = false
-                        clearSelection()
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+            onDismiss = { showDeleteConfirm = false },
+            onContinue = {
+                if (TermStore.delete(selectedId!!)) {
+                    showDeleteConfirm = false
+                    clearSelection()
+                } else {
+                    showDeleteConfirm = false
+                    formError = "This term is attached to a class and cannot be deleted."
                 }
             },
-            dismissButton = {
-                GlideTextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+            continueEnabled = !attachedToClass,
         )
     }
 }
@@ -470,7 +474,7 @@ private fun TermListItem(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        val classCount = ScheduledClassStore.countForTerm(term.id)
+        val classCount = TermStore.classCount(term.id)
         if (classCount > 0) {
             Text(
                 text = "$classCount class${if (classCount == 1) "" else "es"}",

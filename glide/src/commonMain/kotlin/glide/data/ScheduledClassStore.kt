@@ -22,10 +22,17 @@ object ScheduledClassStore {
         }
     }
 
-    fun delete(id: String) {
+    fun soldPlanCount(classId: String): Int =
+        findById(classId)?.customerGroupIds?.size ?: 0
+
+    fun canDelete(classId: String): Boolean = soldPlanCount(classId) == 0
+
+    fun delete(id: String): Boolean {
+        if (!canDelete(id)) return false
         _classes.removeAll { it.id == id }
         ClassAttendanceStore.clearForClass(id)
         PackClassScheduleStore.clearForClass(id)
+        return true
     }
 
     fun findById(id: String): ScheduledClass? = _classes.find { it.id == id }

@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -78,6 +77,7 @@ import glide.ui.shared.IsoDateField
 import glide.ui.leads.millisToIsoDate
 import glide.ui.leads.parseIsoDateToMillis
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelLinkedBox
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
@@ -448,6 +448,19 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             )
                         }
 
+                        if (!isCreating && selectedId != null) {
+                            val soldPlanCount = ScheduledClassStore.soldPlanCount(selectedId!!)
+                            if (soldPlanCount > 0) {
+                                Spacer(modifier = Modifier.height(spacing.field))
+                                Text(
+                                    text = "$soldPlanCount sold plan${if (soldPlanCount == 1) "" else "s"} " +
+                                        "on this class. Remove them before deleting the class.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
                         formError?.let { error ->
                             Spacer(modifier = Modifier.height(spacing.field))
                             Text(
@@ -554,26 +567,27 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete class?") },
-            text = { Text("This class will be removed permanently.") },
-            confirmButton = {
-                GlideTextButton(
-                    onClick = {
-                        ScheduledClassStore.delete(selectedId!!)
-                        showDeleteConfirm = false
-                        clearSelection()
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+        val soldPlanCount = ScheduledClassStore.soldPlanCount(selectedId!!)
+        val hasSoldPlans = soldPlanCount > 0
+        DeleteConfirmDialog(
+            title = "Delete class?",
+            message = if (hasSoldPlans) {
+                "This class has $soldPlanCount sold plan${if (soldPlanCount == 1) "" else "s"} " +
+                    "and cannot be deleted. Remove them from this class first."
+            } else {
+                "This class will be removed permanently."
+            },
+            onDismiss = { showDeleteConfirm = false },
+            onContinue = {
+                if (ScheduledClassStore.delete(selectedId!!)) {
+                    showDeleteConfirm = false
+                    clearSelection()
+                } else {
+                    showDeleteConfirm = false
+                    formError = "This class has sold plans and cannot be deleted."
                 }
             },
-            dismissButton = {
-                GlideTextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+            continueEnabled = !hasSoldPlans,
         )
     }
 }
@@ -667,6 +681,7 @@ private fun ClassCustomerGroupsSection(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var enrollmentMessage by remember { mutableStateOf<String?>(null) }
+    var pendingRemoveGroupId by remember { mutableStateOf<String?>(null) }
 
     val scheduledClass = classId?.let { ScheduledClassStore.findById(it) }
     val classForValidation = scheduledClass?.copy(termIds = termIds)
@@ -787,13 +802,7 @@ private fun ClassCustomerGroupsSection(
                             )
                         }
                         GlideTextButton(
-                            onClick = {
-                                if (classId != null) {
-                                    PackClassScheduleStore.remove(groupId, classId)
-                                }
-                                onCustomerGroupIdsChange(customerGroupIds.filter { it != groupId })
-                                enrollmentMessage = "Customer group removed from class."
-                            },
+                            onClick = { pendingRemoveGroupId = groupId },
                         ) {
                             Text("Remove", color = MaterialTheme.colorScheme.error)
                         }
@@ -804,6 +813,24 @@ private fun ClassCustomerGroupsSection(
                 }
             }
         }
+    }
+
+    pendingRemoveGroupId?.let { groupId ->
+        val group = PeopleGroupStore.findById(groupId)
+        val label = group?.resolveMainContact()?.name?.takeIf { it.isNotBlank() } ?: "This customer group"
+        DeleteConfirmDialog(
+            title = "Remove from class?",
+            message = "$label will be removed from this class.",
+            onDismiss = { pendingRemoveGroupId = null },
+            onContinue = {
+                if (classId != null) {
+                    PackClassScheduleStore.remove(groupId, classId)
+                }
+                onCustomerGroupIdsChange(customerGroupIds.filter { it != groupId })
+                enrollmentMessage = "Customer group removed from class."
+                pendingRemoveGroupId = null
+            },
+        )
     }
 }
 

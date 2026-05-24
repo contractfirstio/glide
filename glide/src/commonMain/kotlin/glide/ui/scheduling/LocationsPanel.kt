@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +38,7 @@ import glide.data.SchedulePanelState
 import glide.data.TermStore
 import glide.model.ClassLocation
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
@@ -284,6 +284,19 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                             spacing = spacing,
                         )
 
+                        if (!isCreating && selectedId != null) {
+                            val classCount = LocationStore.classCount(selectedId!!)
+                            if (classCount > 0) {
+                                Spacer(modifier = Modifier.height(spacing.field))
+                                Text(
+                                    text = "Used by $classCount class${if (classCount == 1) "" else "es"}. " +
+                                        "Remove this location from those classes before deleting.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
                         formError?.let { error ->
                             Spacer(modifier = Modifier.height(spacing.field))
                             Text(
@@ -356,36 +369,27 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        val linkedClasses = ScheduledClassStore.countForLocation(selectedId!!)
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete location?") },
-            text = {
-                Text(
-                    if (linkedClasses > 0) {
-                        "This location will be removed. $linkedClasses class${if (linkedClasses == 1) "" else "es"} " +
-                            "will be unlinked from this location."
-                    } else {
-                        "This location will be removed permanently."
-                    },
-                )
+        val linkedClasses = LocationStore.classCount(selectedId!!)
+        val attachedToClass = linkedClasses > 0
+        DeleteConfirmDialog(
+            title = "Delete location?",
+            message = if (attachedToClass) {
+                "This location is used by $linkedClasses class${if (linkedClasses == 1) "" else "es"} " +
+                    "and cannot be deleted. Remove it from those classes first."
+            } else {
+                "This location will be removed permanently."
             },
-            confirmButton = {
-                GlideTextButton(
-                    onClick = {
-                        LocationStore.delete(selectedId!!)
-                        showDeleteConfirm = false
-                        clearSelection()
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+            onDismiss = { showDeleteConfirm = false },
+            onContinue = {
+                if (LocationStore.delete(selectedId!!)) {
+                    showDeleteConfirm = false
+                    clearSelection()
+                } else {
+                    showDeleteConfirm = false
+                    formError = "This location is attached to a class and cannot be deleted."
                 }
             },
-            dismissButton = {
-                GlideTextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+            continueEnabled = !attachedToClass,
         )
     }
 }
