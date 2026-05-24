@@ -1,6 +1,7 @@
 package glide.ui.scheduling
 
 import glide.data.PeopleGroupStore
+import glide.data.ScheduledClassStore
 import glide.data.isPeopleGroupOnClassSession
 import glide.data.rosterNameLabels
 import glide.model.AcademicTerm
@@ -84,6 +85,41 @@ fun defaultTermSelectionId(terms: List<AcademicTerm>, today: LocalDate = LocalDa
         start.isAfter(today)
     }?.id?.let { return it }
     return terms.lastOrNull()?.id
+}
+
+/** Which term the calendar should show, driven by cross-panel selection state. */
+fun resolveCalendarTermId(
+    termsChronological: List<AcademicTerm>,
+    allClasses: List<ScheduledClass>,
+    termFilterId: String?,
+    locationFilterId: String?,
+    classSyncId: String?,
+    attendanceSessionDate: String?,
+    attendanceVisible: Boolean,
+): String? {
+    if (termsChronological.isEmpty()) return null
+
+    if (attendanceVisible && !attendanceSessionDate.isNullOrBlank()) {
+        findTermContainingIsoDate(termsChronological, attendanceSessionDate)?.id?.let { return it }
+    }
+
+    termFilterId
+        ?.takeIf { id -> termsChronological.any { it.id == id } }
+        ?.let { return it }
+
+    locationFilterId?.let { locationId ->
+        termIdForLocationSelection(locationId, termsChronological, allClasses)?.let { return it }
+    }
+
+    if (termFilterId == null && locationFilterId == null) {
+        classSyncId?.let { classId ->
+            ScheduledClassStore.findById(classId)?.let { scheduledClass ->
+                termIdForClassSelection(scheduledClass, termsChronological)?.let { return it }
+            }
+        }
+    }
+
+    return defaultTermSelectionId(termsChronological)
 }
 
 fun indexOfMonthContaining(months: List<YearMonth>, date: LocalDate): Int =

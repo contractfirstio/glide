@@ -43,10 +43,13 @@ fun IsoDateField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
     yearRange: IntRange = (LocalDate.now().year - 2)..(LocalDate.now().year + 5),
+    readOnly: Boolean = false,
 ) {
     var showPicker by remember { mutableStateOf(false) }
     val displayValue = formatIsoDateForDisplay(value)
-    val openPicker = { showPicker = true }
+    val openPicker = {
+        if (!readOnly) showPicker = true
+    }
 
     val textStyle = MaterialTheme.typography.bodySmall.copy(
         color = MaterialTheme.colorScheme.onSurface,
@@ -93,11 +96,13 @@ fun IsoDateField(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            GlideTextButton(onClick = openPicker) {
-                Text("Pick")
+            if (!readOnly) {
+                GlideTextButton(onClick = openPicker) {
+                    Text("Pick")
+                }
             }
         }
-        if (value.isNotBlank()) {
+        if (!readOnly && value.isNotBlank()) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,

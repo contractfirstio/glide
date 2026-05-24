@@ -114,6 +114,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
     } else {
         allTerms
     }
+    val highlightedTermId = termFilterId ?: selectedId
     val locationFilterLabel = locationFilterId?.let {
         LocationStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() }
     }
@@ -177,6 +178,12 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         val scheduledClass = ScheduledClassStore.findById(classId) ?: return@LaunchedEffect
         val resolvedTermId = termIdForClassSelection(scheduledClass, allTerms) ?: return@LaunchedEffect
         allTerms.find { it.id == resolvedTermId }?.let { syncTermIntoForm(it) }
+    }
+
+    LaunchedEffect(termFilterId, allTerms) {
+        val id = termFilterId ?: return@LaunchedEffect
+        if (selectedId == id) return@LaunchedEffect
+        allTerms.find { it.id == id }?.let { syncTermIntoForm(it) }
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -273,7 +280,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             items(terms, key = { it.id }) { term ->
                                 TermListItem(
                                     term = term,
-                                    selected = term.id == selectedId,
+                                    selected = term.id == highlightedTermId,
                                     compact = compact,
                                     onClick = { loadIntoForm(term) },
                                 )
@@ -292,6 +299,10 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                     )
                     Spacer(modifier = Modifier.height(spacing.section))
 
+                    val termReadOnly = !isCreating &&
+                        selectedId != null &&
+                        !TermStore.canEdit(selectedId!!)
+
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -301,19 +312,17 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             state = form.draft,
                             onStateChange = { form.draft = it },
                             spacing = spacing,
+                            readOnly = termReadOnly,
                         )
 
-                        if (!isCreating && selectedId != null) {
-                            val classCount = TermStore.classCount(selectedId!!)
-                            if (classCount > 0) {
-                                Spacer(modifier = Modifier.height(spacing.field))
-                                Text(
-                                    text = "Used by $classCount class${if (classCount == 1) "" else "es"}. " +
-                                        "Remove this term from those classes before deleting.",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                        if (termReadOnly) {
+                            Spacer(modifier = Modifier.height(spacing.field))
+                            Text(
+                                text = TermStore.termEditBlockReason(selectedId!!)
+                                    ?: "This term is attached to a class and cannot be edited.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
 
                         formError?.let { error ->
@@ -359,19 +368,24 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                                 } else {
                                     val existing = selectedId?.let { TermStore.findById(it) }
                                     if (existing != null) {
+                                        TermStore.termEditBlockReason(existing.id)?.let { reason ->
+                                            formError = reason
+                                            return@GlideButton
+                                        }
                                         val updated = form.draft.toTerm(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
                                         if (!TermStore.update(updated)) {
-                                            formError = "Could not save term — dates overlap an existing term."
+                                            formError = TermStore.termEditBlockReason(existing.id)
+                                                ?: "Could not save term — dates overlap an existing term."
                                             return@GlideButton
                                         }
                                         loadIntoForm(updated)
                                     }
                                 }
                             },
-                            enabled = form.isDirty,
+                            enabled = form.isDirty && !termReadOnly,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(saveLabel)
@@ -493,6 +507,7 @@ private fun TermForm(
     state: TermFormState,
     onStateChange: (TermFormState) -> Unit,
     spacing: GlideLayout.Spacing,
+    readOnly: Boolean = false,
 ) {
     FormPanelSection(
         title = "Term identity",
@@ -505,6 +520,7 @@ private fun TermForm(
             onValueChange = { onStateChange(state.copy(name = it)) },
             label = "Term name",
             placeholder = "e.g. Spring 2026",
+            readOnly = readOnly,
         )
     }
 
@@ -520,12 +536,14 @@ private fun TermForm(
             label = "Start date",
             value = state.startDate,
             onValueChange = { onStateChange(state.copy(startDate = it)) },
+            readOnly = readOnly,
         )
         Spacer(modifier = Modifier.height(spacing.field))
         IsoDateField(
             label = "End date",
             value = state.endDate,
             onValueChange = { onStateChange(state.copy(endDate = it)) },
+            readOnly = readOnly,
         )
     }
 
@@ -544,6 +562,7 @@ private fun TermForm(
             Checkbox(
                 checked = state.acceptsRollingPlans,
                 onCheckedChange = { onStateChange(state.copy(acceptsRollingPlans = it)) },
+                enabled = !readOnly,
             )
             Column(modifier = Modifier.padding(start = 4.dp)) {
                 Text(
@@ -575,6 +594,7 @@ private fun TermForm(
             minLines = 2,
             maxLines = 4,
             fieldHeight = GlideDimensions.notesMinHeight,
+            readOnly = readOnly,
         )
     }
 }

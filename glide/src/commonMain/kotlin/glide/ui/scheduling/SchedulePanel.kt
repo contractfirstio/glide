@@ -420,6 +420,10 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                     )
                     Spacer(modifier = Modifier.height(spacing.section))
 
+                    val termsReadOnly = !isCreating &&
+                        selectedId != null &&
+                        !ScheduledClassStore.canEditTerms(selectedId!!)
+
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -432,7 +436,18 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             locations = locations,
                             spacing = spacing,
                             isCreating = isCreating,
+                            termsReadOnly = termsReadOnly,
                         )
+
+                        if (termsReadOnly) {
+                            Spacer(modifier = Modifier.height(spacing.field))
+                            Text(
+                                text = ScheduledClassStore.classTermsEditBlockReason(selectedId!!)
+                                    ?: "This class has sold plans and its terms cannot be changed.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
 
                         if (!isCreating && selectedId != null) {
                             FormPanelSectionsDivider(label = "Enrollment", spacing = spacing)
@@ -511,6 +526,13 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
+                                        if (ScheduledClassStore.soldPlanCount(existing.id) > 0 &&
+                                            updated.termIds.toSet() != existing.termIds.toSet()
+                                        ) {
+                                            formError = ScheduledClassStore.classTermsEditBlockReason(existing.id)
+                                                ?: "This class has sold plans and its terms cannot be changed."
+                                            return@GlideButton
+                                        }
                                         validatePackSchedulesForClass(
                                             updated.customerGroupIds,
                                             updated,
@@ -863,6 +885,7 @@ private fun ClassForm(
     locations: List<ClassLocation>,
     spacing: GlideLayout.Spacing,
     isCreating: Boolean,
+    termsReadOnly: Boolean = false,
 ) {
     var scheduleKindExpanded by remember { mutableStateOf(false) }
     var dayExpanded by remember { mutableStateOf(false) }
@@ -942,10 +965,13 @@ private fun ClassForm(
             )
         } else {
             Text(
-                text = if (isCreating && state.scheduleKind == ClassScheduleKind.RECURRING) {
-                    "Current and future terms are selected by default for new weekly classes. Adjust as needed."
-                } else {
-                    "Select all terms this class spans (e.g. rolling classes across seasons)."
+                text = when {
+                    termsReadOnly ->
+                        "Terms are locked while sold plans are on this class."
+                    isCreating && state.scheduleKind == ClassScheduleKind.RECURRING ->
+                        "Current and future terms are selected by default for new weekly classes. Adjust as needed."
+                    else ->
+                        "Select all terms this class spans (e.g. rolling classes across seasons)."
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -955,19 +981,26 @@ private fun ClassForm(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            val next = if (term.id in state.termIds) {
-                                state.termIds - term.id
+                        .then(
+                            if (termsReadOnly) {
+                                Modifier
                             } else {
-                                state.termIds + term.id
-                            }
-                            onStateChange(state.copy(termIds = next))
-                        },
+                                Modifier.clickable {
+                                    val next = if (term.id in state.termIds) {
+                                        state.termIds - term.id
+                                    } else {
+                                        state.termIds + term.id
+                                    }
+                                    onStateChange(state.copy(termIds = next))
+                                }
+                            },
+                        ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(
                         checked = term.id in state.termIds,
                         onCheckedChange = { checked ->
+                            if (termsReadOnly) return@Checkbox
                             val next = if (checked) {
                                 state.termIds + term.id
                             } else {
@@ -975,6 +1008,7 @@ private fun ClassForm(
                             }
                             onStateChange(state.copy(termIds = next))
                         },
+                        enabled = !termsReadOnly,
                     )
                     Column(modifier = Modifier.padding(start = 4.dp)) {
                         Text(
@@ -1072,12 +1106,13 @@ private fun ClassForm(
             Spacer(modifier = Modifier.height(2.dp))
             ExposedDropdownMenuBox(
             expanded = scheduleKindExpanded,
-            onExpandedChange = { scheduleKindExpanded = it },
+            onExpandedChange = { if (!termsReadOnly) scheduleKindExpanded = it },
         ) {
             OutlinedTextField(
                 value = state.scheduleKind.label,
                 onValueChange = {},
                 readOnly = true,
+                enabled = !termsReadOnly,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = scheduleKindExpanded) },
                 shape = MaterialTheme.shapes.small,
                 textStyle = MaterialTheme.typography.bodySmall.copy(
@@ -1184,6 +1219,7 @@ private fun ClassForm(
                         ).withAutoTermForSingleDay(terms),
                     )
                 },
+                readOnly = termsReadOnly,
             )
             Spacer(modifier = Modifier.height(4.dp))
             val autoTerm = state.termIds.singleOrNull()?.let { id -> terms.find { it.id == id } }

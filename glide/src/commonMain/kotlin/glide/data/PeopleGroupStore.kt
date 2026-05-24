@@ -98,17 +98,36 @@ object PeopleGroupStore {
     fun delete(id: String): Boolean {
         val group = findById(id) ?: return false
         return when (group.type) {
-            PeopleGroupType.CUSTOMER -> {
-                if (!canDeleteSoldPlan(id)) return false
-                purgeSoldPlanData(id)
-                _groups.removeAll { it.id == id }
-                true
-            }
+            PeopleGroupType.CUSTOMER -> revertSoldPlanToLead(id)
             PeopleGroupType.LEAD -> {
                 _groups.removeAll { it.id == id }
                 true
             }
         }
+    }
+
+    /**
+     * Removes sold-plan billing and class data, then turns the customer group back into a lead.
+     * Same record id is kept so contacts and related people stay linked.
+     */
+    fun revertSoldPlanToLead(id: String): Boolean {
+        val index = _groups.indexOfFirst { it.id == id }
+        if (index < 0) return false
+        val group = _groups[index]
+        if (group.type != PeopleGroupType.CUSTOMER) return false
+        if (!canDeleteSoldPlan(id)) return false
+
+        purgeSoldPlanData(id)
+
+        _groups[index] = group.copy(
+            type = PeopleGroupType.LEAD,
+            status = PeopleGroupStatus.New,
+            contactName = "",
+            dateOfBirth = "",
+            email = "",
+            phone = "",
+        )
+        return true
     }
 
     fun findById(id: String): PeopleGroup? = _groups.find { it.id == id }

@@ -119,17 +119,15 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
     }
     attendanceRefreshTick
 
-    var selectedTermId by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(termsChronological.map { it.id }) {
-        if (termsChronological.isEmpty()) {
-            selectedTermId = null
-            return@LaunchedEffect
-        }
-        if (selectedTermId == null || termsChronological.none { it.id == selectedTermId }) {
-            selectedTermId = defaultTermSelectionId(termsChronological)
-        }
-    }
+    val displayTermId = resolveCalendarTermId(
+        termsChronological = termsChronological,
+        allClasses = allClasses,
+        termFilterId = termFilterId,
+        locationFilterId = locationFilterId,
+        classSyncId = classSyncId,
+        attendanceSessionDate = activeAttendanceSession?.sessionDate,
+        attendanceVisible = attendanceVisible,
+    )
 
     val spacing = GlideLayout.comfortable
 
@@ -157,7 +155,7 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
             return
         }
 
-        val selectedTerm = selectedTermId?.let { id ->
+        val selectedTerm = displayTermId?.let { id ->
             termsChronological.find { it.id == id }
         } ?: return@Column
         val termIndex = termsChronological.indexOfFirst { it.id == selectedTerm.id }
@@ -166,28 +164,6 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
                 .sortedWith(compareScheduledClasses())
         }
         val months = remember(selectedTerm) { monthsInTerm(selectedTerm) }
-
-        LaunchedEffect(attendanceVisible, activeAttendanceSession, termsChronological) {
-            if (!attendanceVisible) return@LaunchedEffect
-            val iso = activeAttendanceSession?.sessionDate ?: return@LaunchedEffect
-            findTermContainingIsoDate(termsChronological, iso)?.id?.let { selectedTermId = it }
-        }
-
-        LaunchedEffect(termFilterId, termsChronological) {
-            termFilterId?.let { selectedTermId = it }
-        }
-
-        LaunchedEffect(locationFilterId, termsChronological, allClasses) {
-            val locationId = locationFilterId ?: return@LaunchedEffect
-            termIdForLocationSelection(locationId, termsChronological, allClasses)?.let { selectedTermId = it }
-        }
-
-        LaunchedEffect(classSyncId, termsChronological) {
-            if (termFilterId != null || locationFilterId != null) return@LaunchedEffect
-            val classId = classSyncId ?: return@LaunchedEffect
-            val scheduledClass = ScheduledClassStore.findById(classId) ?: return@LaunchedEffect
-            termIdForClassSelection(scheduledClass, termsChronological)?.let { selectedTermId = it }
-        }
 
         LaunchedEffect(attendanceVisible, activeAttendanceSession, selectedTerm.id, months) {
             if (!attendanceVisible) return@LaunchedEffect
@@ -205,11 +181,13 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
             canGoPrevious = termIndex > 0,
             canGoNext = termIndex < termsChronological.lastIndex,
             onPrevious = {
-                if (termIndex > 0) selectedTermId = termsChronological[termIndex - 1].id
+                if (termIndex > 0) {
+                    SchedulePanelState.onTermSelected(termsChronological[termIndex - 1].id)
+                }
             },
             onNext = {
                 if (termIndex < termsChronological.lastIndex) {
-                    selectedTermId = termsChronological[termIndex + 1].id
+                    SchedulePanelState.onTermSelected(termsChronological[termIndex + 1].id)
                 }
             },
         )

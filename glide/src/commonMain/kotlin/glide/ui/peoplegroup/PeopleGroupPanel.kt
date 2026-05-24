@@ -145,8 +145,9 @@ private val CustomersPanelUi = PeopleGroupPanelUi(
     allowCreate = false,
     readOnly = true,
     noSelectionMessage = "Select a customer group to view.",
-    deleteConfirmTitle = "Delete sold plan?",
-    deleteConfirmMessage = "This sold plan will be removed permanently. Scheduled bills that have not been issued will also be removed.",
+    deleteConfirmTitle = "Revert sold plan to lead?",
+    deleteConfirmMessage = "Billing and class enrollment for this sold plan will be removed. " +
+        "The household will become a lead again with the same contact and pack selection.",
     showClearSelection = true,
 )
 
@@ -853,12 +854,16 @@ private fun PeopleGroupPanel(
             message = soldPlanBlockReason ?: ui.deleteConfirmMessage,
             onDismiss = { showDeleteConfirm = false },
             onContinue = {
-                if (PeopleGroupStore.delete(selectedId!!)) {
+                val groupId = selectedId!!
+                if (PeopleGroupStore.delete(groupId)) {
                     showDeleteConfirm = false
-                    if (ui.allowCreate) {
-                        resetFormForCreate()
-                    } else {
-                        clearSelection()
+                    when {
+                        ui.type == PeopleGroupType.CUSTOMER -> {
+                            PeopleGroupNavigation.openLead(groupId)
+                            clearSelection()
+                        }
+                        ui.allowCreate -> resetFormForCreate()
+                        else -> clearSelection()
                     }
                 } else {
                     showDeleteConfirm = false
@@ -1029,8 +1034,9 @@ private fun SoldPlanDeleteSection(
     Spacer(modifier = Modifier.height(spacing.section))
     FormPanelSectionsDivider(label = "Danger zone", spacing = spacing)
     FormPanelSection(
-        title = "Delete sold plan",
-        description = "Only sold plans that are not on a class and have no issued or paid bills can be removed.",
+        title = "Revert to lead",
+        description = "Remove this sold plan and turn the household back into a lead. " +
+            "Only sold plans that are not on a class and have no issued or paid bills can be reverted.",
         spacing = spacing,
         role = FormPanelSectionRole.Tertiary,
     ) {
@@ -1047,7 +1053,7 @@ private fun SoldPlanDeleteSection(
             modifier = Modifier.fillMaxWidth(),
             enabled = blockReason == null,
         ) {
-            Text("Delete sold plan", color = MaterialTheme.colorScheme.error)
+            Text("Revert to lead", color = MaterialTheme.colorScheme.error)
         }
     }
 }

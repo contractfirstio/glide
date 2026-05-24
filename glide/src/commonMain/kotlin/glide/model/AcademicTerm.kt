@@ -66,3 +66,19 @@ fun AcademicTerm.summaryLine(): String {
     if (endDate.isBlank()) return startDate
     return "$startDate – $endDate"
 }
+
+private fun AcademicTerm.sortableStartDate(): LocalDate? = parseIsoLocalDate(startDate)
+
+private fun AcademicTerm.sortableEndDate(): LocalDate? = parseIsoLocalDate(endDate)
+
+/** Latest academic terms first (reverse chronological by start date). */
+fun compareAcademicTermsReverseChronological(): Comparator<AcademicTerm> =
+    compareByDescending<AcademicTerm> { it.sortableStartDate() ?: LocalDate.MIN }
+        .thenByDescending { it.sortableEndDate() ?: LocalDate.MIN }
+        .thenBy { it.name.lowercase() }
+
+/** Earliest academic terms first (for term calendar navigation). */
+fun compareAcademicTermsChronological(): Comparator<AcademicTerm> =
+    compareBy<AcademicTerm> { it.sortableStartDate() ?: LocalDate.MAX }
+        .thenBy { it.sortableEndDate() ?: LocalDate.MAX }
+        .thenBy { it.name.lowercase() }

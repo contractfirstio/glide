@@ -25,7 +25,19 @@ object ScheduledClassStore {
     fun soldPlanCount(classId: String): Int =
         findById(classId)?.customerGroupIds?.size ?: 0
 
+    fun canEditTerms(classId: String): Boolean = soldPlanCount(classId) == 0
+
     fun canDelete(classId: String): Boolean = soldPlanCount(classId) == 0
+
+    fun classTermsEditBlockReason(classId: String): String? {
+        val soldPlans = soldPlanCount(classId)
+        return if (soldPlans == 0) {
+            null
+        } else {
+            "This class has $soldPlans sold plan${if (soldPlans == 1) "" else "s"} " +
+                "and its term${if (soldPlans == 1) "" else "s"} cannot be changed."
+        }
+    }
 
     fun delete(id: String): Boolean {
         if (!canDelete(id)) return false
