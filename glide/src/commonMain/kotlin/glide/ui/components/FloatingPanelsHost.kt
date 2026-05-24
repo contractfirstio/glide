@@ -44,7 +44,7 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
         val windowHeightPx = constraints.maxHeight
 
         val billingVisible = BillingPanelState.visible && viewMode == AppViewMode.CUSTOMER_MANAGEMENT
-        val billingPeopleGroupId = BillingPanelState.peopleGroupId
+        val billingSoldPlanId = BillingPanelState.soldPlanId
 
         val attendanceVisible = AttendancePanelState.visible && viewMode == AppViewMode.SCHEDULING
         val attendanceSession = AttendancePanelState.sessionKey
@@ -91,7 +91,7 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
                             windowWidthPx = windowWidthPx,
                             windowHeightPx = windowHeightPx,
                         )
-                        PanelSlots.CUSTOMERS -> CustomersFloatingPanel(
+                        PanelSlots.SOLD_PLANS -> CustomersFloatingPanel(
                             windowWidthPx = windowWidthPx,
                             windowHeightPx = windowHeightPx,
                         )
@@ -106,7 +106,7 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
                             windowWidthPx = windowWidthPx,
                             windowHeightPx = windowHeightPx,
                         )
-                        SchedulingPanelSlots.CUSTOMER_GROUPS -> SchedulingCustomerGroupsFloatingPanel(
+                        SchedulingPanelSlots.SOLD_PLANS -> SchedulingCustomerGroupsFloatingPanel(
                             windowWidthPx = windowWidthPx,
                             windowHeightPx = windowHeightPx,
                         )
@@ -124,10 +124,10 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
             }
         }
 
-        if (billingVisible && billingPeopleGroupId != null) {
-            key(billingPeopleGroupId) {
+        if (billingVisible && billingSoldPlanId != null) {
+            key(billingSoldPlanId) {
                 BillingFloatingPanel(
-                    peopleGroupId = billingPeopleGroupId,
+                    soldPlanId = billingSoldPlanId,
                     windowWidthPx = windowWidthPx,
                     windowHeightPx = windowHeightPx,
                 )
@@ -135,7 +135,7 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
         }
 
         if (attendanceVisible && attendanceSession != null) {
-            key(attendanceSession.scheduledClassId, attendanceSession.sessionDate) {
+            key(attendanceSession.classId, attendanceSession.sessionDate) {
                 AttendanceFloatingPanel(
                     session = attendanceSession,
                     windowWidthPx = windowWidthPx,

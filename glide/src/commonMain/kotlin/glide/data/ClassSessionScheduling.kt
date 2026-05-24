@@ -1,9 +1,9 @@
 package glide.data
 
-import glide.model.AcademicTerm
+import glide.model.Term
 import glide.model.PlanKind
 import glide.model.PlanSnapshot
-import glide.model.ScheduledClass
+import glide.model.Class
 import glide.model.DayOfWeek
 import glide.model.dateRange
 import glide.model.formatWeeklyDaysLabel
@@ -29,9 +29,9 @@ fun requiredClassSessionsForPlan(snapshot: PlanSnapshot): Int = when (snapshot.k
     else -> snapshot.lessonCount.coerceAtLeast(1)
 }
 
-fun validateWeeklyPlanFitsClass(peopleGroupId: String, scheduledClass: ScheduledClass): String? {
+fun validateWeeklyPlanFitsClass(soldPlanId: String, scheduledClass: Class): String? {
     if (!scheduledClass.isWeekly()) return null
-    val enrollment = PlanEnrollmentStore.forPeopleGroup(peopleGroupId) ?: return null
+    val enrollment = SoldPlanEnrollmentStore.forSoldPlan(soldPlanId) ?: return null
     val required = requiredClassSessionsForPlan(enrollment.planSnapshot)
     val available = scheduledClass.weeklyDays.size
     if (required <= available) return null
@@ -49,10 +49,10 @@ fun dateForDayInWeek(range: ClosedRange<LocalDate>, day: DayOfWeek): LocalDate? 
 }
 
 fun weeklyClassSessionDates(
-    scheduledClass: ScheduledClass,
+    scheduledClass: Class,
     selectedDays: Collection<DayOfWeek>,
-    peopleGroupId: String? = null,
-    startFrom: LocalDate = peopleGroupId?.let { peopleGroupPlanPeriodStartDate(it) } ?: planScheduleStartDate(),
+    soldPlanId: String? = null,
+    startFrom: LocalDate = soldPlanId?.let { soldPlanPlanPeriodStartDate(it) } ?: planScheduleStartDate(),
 ): List<String> {
     if (!scheduledClass.isWeekly()) return emptyList()
     val range = weekDateRangeFromIsoDate(scheduledClass.weekOfDate!!) ?: return emptyList()
@@ -63,28 +63,28 @@ fun weeklyClassSessionDates(
         .map { it.toString() }
 }
 
-fun assignWeeklyPlanClassSchedule(
-    peopleGroupId: String,
-    scheduledClass: ScheduledClass,
+fun assignWeeklySoldPlanClassSchedule(
+    soldPlanId: String,
+    scheduledClass: Class,
     selectedDays: Set<DayOfWeek>,
 ): PlanScheduleAssignment {
-    val limit = sessionLimitForPeopleGroup(peopleGroupId)
-        ?: PlanEnrollmentStore.forPeopleGroup(peopleGroupId)?.let { requiredClassSessionsForPlan(it.planSnapshot) }
+    val limit = sessionLimitForSoldPlan(soldPlanId)
+        ?: SoldPlanEnrollmentStore.forSoldPlan(soldPlanId)?.let { requiredClassSessionsForPlan(it.planSnapshot) }
         ?: return PlanScheduleAssignment.NoSessionsAvailable(0)
     if (selectedDays.size != limit) {
-        PlanClassScheduleStore.remove(peopleGroupId, scheduledClass.id)
+        SoldPlanClassScheduleStore.remove(soldPlanId, scheduledClass.id)
         return PlanScheduleAssignment.Partial(limit, selectedDays.size)
     }
-    val dates = weeklyClassSessionDates(scheduledClass, selectedDays, peopleGroupId)
+    val dates = weeklyClassSessionDates(scheduledClass, selectedDays, soldPlanId)
     if (dates.size < limit) {
-        PlanClassScheduleStore.remove(peopleGroupId, scheduledClass.id)
+        SoldPlanClassScheduleStore.remove(soldPlanId, scheduledClass.id)
         return if (dates.isEmpty()) {
             PlanScheduleAssignment.NoSessionsAvailable(limit)
         } else {
             PlanScheduleAssignment.Partial(limit, dates.size)
         }
     }
-    PlanClassScheduleStore.set(peopleGroupId, scheduledClass.id, dates)
+    SoldPlanClassScheduleStore.set(soldPlanId, scheduledClass.id, dates)
     return PlanScheduleAssignment.Fixed(limit)
 }
 
@@ -92,9 +92,9 @@ fun assignWeeklyPlanClassSchedule(
 fun planScheduleStartDate(today: LocalDate = LocalDate.now()): LocalDate = today
 
 /** Earliest session date for this sold plan (plan start / enrollment), including past dates. */
-fun peopleGroupPlanPeriodStartDate(peopleGroupId: String, today: LocalDate = LocalDate.now()): LocalDate {
-    PeopleGroupStore.findById(peopleGroupId)?.planStartDate?.let { parseIsoLocalDate(it) }?.let { return it }
-    PlanEnrollmentStore.forPeopleGroup(peopleGroupId)?.planPeriodStartedAtMillis
+fun soldPlanPlanPeriodStartDate(soldPlanId: String, today: LocalDate = LocalDate.now()): LocalDate {
+    findSoldPlanById(soldPlanId)?.planStartDate?.let { parseIsoLocalDate(it) }?.let { return it }
+    SoldPlanEnrollmentStore.forSoldPlan(soldPlanId)?.planPeriodStartedAtMillis
         ?.let { localDateFromEpochMillis(it) }
         ?.let { return it }
     return today
@@ -111,7 +111,7 @@ fun filterFutureSessionDates(
 
 /** All future class occurrence dates across the class's linked terms (from today). */
 fun computeAllClassSessionDates(
-    scheduledClass: ScheduledClass,
+    scheduledClass: Class,
     startFrom: LocalDate = planScheduleStartDate(),
 ): List<String> {
     val terms = scheduledClass.termIds.mapNotNull { TermStore.findById(it) }.sortedBy { it.startDate }
@@ -129,8 +129,8 @@ fun computeAllClassSessionDates(
     return dates.distinct().sorted().map { it.toString() }
 }
 
-fun planScheduleCheckForClass(peopleGroupId: String, scheduledClass: ScheduledClass): PlanScheduleCheck? {
-    val snapshot = PlanEnrollmentStore.forPeopleGroup(peopleGroupId)?.planSnapshot ?: return null
+fun planScheduleCheckForClass(soldPlanId: String, scheduledClass: Class): PlanScheduleCheck? {
+    val snapshot = SoldPlanEnrollmentStore.forSoldPlan(soldPlanId)?.planSnapshot ?: return null
     val required = requiredClassSessionsForPlan(snapshot)
     val available = computeAllClassSessionDates(scheduledClass).size
     return PlanScheduleCheck(required, available)
@@ -138,7 +138,7 @@ fun planScheduleCheckForClass(peopleGroupId: String, scheduledClass: ScheduledCl
 
 /** First [maxSessions] class occurrence dates across the class's linked terms. */
 fun computeClassSessionDates(
-    scheduledClass: ScheduledClass,
+    scheduledClass: Class,
     maxSessions: Int,
     startFrom: LocalDate = planScheduleStartDate(),
 ): List<String> {
@@ -149,34 +149,34 @@ fun computeClassSessionDates(
     )
 }
 
-fun sessionLimitForPeopleGroup(peopleGroupId: String): Int? =
-    PlanEnrollmentStore.forPeopleGroup(peopleGroupId)?.planSnapshot?.classSessionLimit()
+fun sessionLimitForSoldPlan(soldPlanId: String): Int? =
+    SoldPlanEnrollmentStore.forSoldPlan(soldPlanId)?.planSnapshot?.classSessionLimit()
 
-fun assignPlanClassSchedule(peopleGroupId: String, scheduledClass: ScheduledClass): PlanScheduleAssignment {
-    val limit = sessionLimitForPeopleGroup(peopleGroupId)
+fun assignSoldPlanClassSchedule(soldPlanId: String, scheduledClass: Class): PlanScheduleAssignment {
+    val limit = sessionLimitForSoldPlan(soldPlanId)
     if (limit == null) {
-        PlanClassScheduleStore.remove(peopleGroupId, scheduledClass.id)
+        SoldPlanClassScheduleStore.remove(soldPlanId, scheduledClass.id)
         return PlanScheduleAssignment.Unlimited
     }
     val dates = computeClassSessionDates(scheduledClass, limit)
     if (dates.size < limit) {
-        PlanClassScheduleStore.remove(peopleGroupId, scheduledClass.id)
+        SoldPlanClassScheduleStore.remove(soldPlanId, scheduledClass.id)
         return if (dates.isEmpty()) {
             PlanScheduleAssignment.NoSessionsAvailable(limit)
         } else {
             PlanScheduleAssignment.Partial(limit, dates.size)
         }
     }
-    PlanClassScheduleStore.set(peopleGroupId, scheduledClass.id, dates)
+    SoldPlanClassScheduleStore.set(soldPlanId, scheduledClass.id, dates)
     return PlanScheduleAssignment.Fixed(limit)
 }
 
-fun ensurePlanClassSchedule(peopleGroupId: String, scheduledClass: ScheduledClass) {
-    val limit = sessionLimitForPeopleGroup(peopleGroupId) ?: return
-    if (PlanClassScheduleStore.sessionDatesFor(peopleGroupId, scheduledClass.id) != null) return
-    val check = planScheduleCheckForClass(peopleGroupId, scheduledClass) ?: return
+fun ensureSoldPlanClassSchedule(soldPlanId: String, scheduledClass: Class) {
+    val limit = sessionLimitForSoldPlan(soldPlanId) ?: return
+    if (SoldPlanClassScheduleStore.sessionDatesFor(soldPlanId, scheduledClass.id) != null) return
+    val check = planScheduleCheckForClass(soldPlanId, scheduledClass) ?: return
     if (!check.canFullySchedule) return
-    assignPlanClassSchedule(peopleGroupId, scheduledClass)
+    assignSoldPlanClassSchedule(soldPlanId, scheduledClass)
 }
 
 sealed class PlanScheduleAssignment {
@@ -207,74 +207,74 @@ fun planCannotFullyScheduleMessage(requiredSessions: Int, availableSessions: Int
     }
 
 fun validatePlanSchedulesForClass(
-    customerGroupIds: List<String>,
-    scheduledClass: ScheduledClass,
+    soldPlanIds: List<String>,
+    scheduledClass: Class,
 ): String? {
-    for (groupId in customerGroupIds) {
+    for (groupId in soldPlanIds) {
         val check = planScheduleCheckForClass(groupId, scheduledClass) ?: continue
         if (!check.canFullySchedule) {
-            val label = PeopleGroupStore.findById(groupId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
-                ?: "A customer group"
+            val label = findSoldPlanById(groupId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
+                ?: "A sold plan"
             return "$label: ${planCannotFullyScheduleMessage(check.requiredSessions, check.availableSessions)}"
         }
     }
     return null
 }
 
-fun scheduledClassHasRollingCustomerGroup(scheduledClass: ScheduledClass): Boolean =
-    scheduledClass.customerGroupIds.any { groupId ->
-        PlanEnrollmentStore.forPeopleGroup(groupId)?.planSnapshot?.rolling == true
+fun scheduledClassHasRollingCustomerGroup(scheduledClass: Class): Boolean =
+    scheduledClass.soldPlanIds.any { groupId ->
+        SoldPlanEnrollmentStore.forSoldPlan(groupId)?.planSnapshot?.rolling == true
     }
 
-fun ScheduledClass.linkedAcademicTerms(): List<AcademicTerm> =
+fun Class.linkedTerms(): List<Term> =
     termIds.mapNotNull { TermStore.findById(it) }
 
 /** Rolling plan enrollments require a recurring class and every linked term to accept rolling plans. */
-fun ScheduledClass.canAcceptRollingPlanEnrollments(): Boolean {
+fun Class.canAcceptRollingSoldPlanEnrollments(): Boolean {
     if (isWeekly()) return false
-    val linked = linkedAcademicTerms()
+    val linked = linkedTerms()
     return linked.isNotEmpty() && linked.all { it.acceptsRollingPlans }
 }
 
-fun rollingPlanNotAllowedOnClassMessage(scheduledClass: ScheduledClass? = null): String =
+fun rollingPlanNotAllowedOnClassMessage(scheduledClass: Class? = null): String =
     if (scheduledClass?.isWeekly() == true) {
         "Rolling plan enrollments cannot be assigned to weekly classes."
     } else {
         "Rolling plan enrollments require every linked term to accept rolling plans."
     }
 
-fun peopleGroupHasRollingPlan(peopleGroupId: String): Boolean =
-    PlanEnrollmentStore.forPeopleGroup(peopleGroupId)?.planSnapshot?.rolling == true
+fun peopleGroupHasRollingPlan(soldPlanId: String): Boolean =
+    SoldPlanEnrollmentStore.forSoldPlan(soldPlanId)?.planSnapshot?.rolling == true
 
-fun validateRollingPlanEnrollmentForClass(
-    peopleGroupId: String,
-    scheduledClass: ScheduledClass,
+fun validateRollingSoldPlanEnrollmentForClass(
+    soldPlanId: String,
+    scheduledClass: Class,
 ): String? {
-    if (!peopleGroupHasRollingPlan(peopleGroupId)) return null
-    if (scheduledClass.canAcceptRollingPlanEnrollments()) return null
-    val label = PeopleGroupStore.findById(peopleGroupId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
-        ?: "This customer group"
+    if (!peopleGroupHasRollingPlan(soldPlanId)) return null
+    if (scheduledClass.canAcceptRollingSoldPlanEnrollments()) return null
+    val label = findSoldPlanById(soldPlanId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
+        ?: "This sold plan"
     return "$label has a rolling plan. ${rollingPlanNotAllowedOnClassMessage(scheduledClass)}"
 }
 
-fun validateRollingPlanEnrollmentsForClass(
-    customerGroupIds: List<String>,
-    scheduledClass: ScheduledClass,
+fun validateRollingSoldPlanEnrollmentsForClass(
+    soldPlanIds: List<String>,
+    scheduledClass: Class,
 ): String? {
-    for (groupId in customerGroupIds) {
-        validateRollingPlanEnrollmentForClass(groupId, scheduledClass)?.let { return it }
+    for (groupId in soldPlanIds) {
+        validateRollingSoldPlanEnrollmentForClass(groupId, scheduledClass)?.let { return it }
     }
     return null
 }
 
-fun validateTermDisablingRollingPlans(term: AcademicTerm): String? {
+fun validateTermDisablingRollingPlans(term: Term): String? {
     if (term.acceptsRollingPlans) return null
-    for (scheduledClass in ScheduledClassStore.classes) {
+    for (scheduledClass in ClassStore.classes) {
         if (term.id !in scheduledClass.termIds) continue
-        for (groupId in scheduledClass.customerGroupIds) {
+        for (groupId in scheduledClass.soldPlanIds) {
             if (!peopleGroupHasRollingPlan(groupId)) continue
-            val label = PeopleGroupStore.findById(groupId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
-                ?: "A customer group"
+            val label = findSoldPlanById(groupId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
+                ?: "A sold plan"
             return "Cannot disable rolling plans on this term: \"$label\" on class \"${scheduledClass.name}\" " +
                 "has a rolling plan."
         }
@@ -283,7 +283,7 @@ fun validateTermDisablingRollingPlans(term: AcademicTerm): String? {
 }
 
 /** Whether [newTerm] should be linked to [scheduledClass] when it is created (extends calendar forward). */
-fun shouldAutoLinkNewTermToClass(scheduledClass: ScheduledClass, newTerm: AcademicTerm): Boolean {
+fun shouldAutoLinkNewTermToClass(scheduledClass: Class, newTerm: Term): Boolean {
     if (newTerm.id in scheduledClass.termIds) return false
     if (!newTerm.acceptsRollingPlans) return false
     if (scheduledClass.isSingleDay()) return false
@@ -303,33 +303,33 @@ fun shouldAutoLinkNewTermToClass(scheduledClass: ScheduledClass, newTerm: Academ
 }
 
 /** Adds [newTerm] to recurring classes with rolling groups and refreshes their plan schedules. */
-fun extendClassesWithRollingGroupsForNewTerm(newTerm: AcademicTerm) {
-    ScheduledClassStore.classes.toList().forEach { scheduledClass ->
+fun extendClassesWithRollingGroupsForNewTerm(newTerm: Term) {
+    ClassStore.classes.toList().forEach { scheduledClass ->
         if (!shouldAutoLinkNewTermToClass(scheduledClass, newTerm)) return@forEach
         val updated = scheduledClass.copy(termIds = scheduledClass.termIds + newTerm.id)
-        ScheduledClassStore.update(updated)
-        updated.customerGroupIds
-            .filter { groupId -> PlanEnrollmentStore.forPeopleGroup(groupId)?.planSnapshot?.rolling == true }
+        ClassStore.update(updated)
+        updated.soldPlanIds
+            .filter { groupId -> SoldPlanEnrollmentStore.forSoldPlan(groupId)?.planSnapshot?.rolling == true }
             .forEach { groupId ->
-                assignPlanClassSchedule(groupId, updated)
+                assignSoldPlanClassSchedule(groupId, updated)
                 RollingPlanBillingService.syncRollingPlanBilling(groupId)
             }
     }
 }
 
-fun isPeopleGroupOnClassSession(
-    peopleGroupId: String,
-    scheduledClass: ScheduledClass,
+fun isSoldPlanOnClassSession(
+    soldPlanId: String,
+    scheduledClass: Class,
     sessionDate: LocalDate,
 ): Boolean {
-    if (peopleGroupId !in scheduledClass.customerGroupIds) return false
-    if (sessionDate.isBefore(peopleGroupPlanPeriodStartDate(peopleGroupId))) return false
-    if (sessionLimitForPeopleGroup(peopleGroupId) != null) {
-        val check = planScheduleCheckForClass(peopleGroupId, scheduledClass)
+    if (soldPlanId !in scheduledClass.soldPlanIds) return false
+    if (sessionDate.isBefore(soldPlanPlanPeriodStartDate(soldPlanId))) return false
+    if (sessionLimitForSoldPlan(soldPlanId) != null) {
+        val check = planScheduleCheckForClass(soldPlanId, scheduledClass)
         if (check != null && !check.canFullySchedule) return false
     }
-    ensurePlanClassSchedule(peopleGroupId, scheduledClass)
-    return PlanClassScheduleStore.isScheduledForSession(peopleGroupId, scheduledClass.id, sessionDate)
+    ensureSoldPlanClassSchedule(soldPlanId, scheduledClass)
+    return SoldPlanClassScheduleStore.isScheduledForSession(soldPlanId, scheduledClass.id, sessionDate)
 }
 
 private fun localDateFromEpochMillis(millis: Long): LocalDate? =

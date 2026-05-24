@@ -5,7 +5,7 @@ import glide.model.BillLineItemKind
 import glide.model.isIssuedToCustomer
 
 fun Bill.grossAmountMinorResolved(): Long =
-    grossAmountMinor ?: (amountMinor + BillingCreditStore.appliedTotalMinorForBill(id))
+    grossAmountMinor ?: (amountMinor + AttendanceCreditStore.appliedTotalMinorForBill(id))
 
 /** Plan line label without legacy credit suffix in [Bill.description]. */
 fun Bill.planLineDescription(): String {

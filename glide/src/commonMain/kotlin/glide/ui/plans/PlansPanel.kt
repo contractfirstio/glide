@@ -43,12 +43,13 @@ import androidx.compose.ui.unit.dp
 import glide.data.BillingPanelState
 import glide.data.ClientStore
 import glide.data.ClientsPanelState
-import glide.data.PeopleGroupStore
+import glide.data.SoldPlanStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
 import glide.data.StudentsPanelState
 import glide.data.StudentStore
 import glide.data.resolveMainClient
+import glide.data.findSoldPlanById
 import glide.model.Plan
 import glide.model.PlanKind
 import glide.model.formatMoney
@@ -128,22 +129,22 @@ fun PlansPanel(modifier: Modifier = Modifier) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
-    val customerGroupId = BillingPanelState.peopleGroupId
+    val soldPlanId = BillingPanelState.soldPlanId
     val clientFilterId = ClientsPanelState.selectedClientId
     val studentFilterId = StudentsPanelState.selectedStudentId
     val outboundPlanFilterId = PlansPanelState.selectedPlanId
-    val plans = PlanStore.forPlansPanel(customerGroupId, clientFilterId, studentFilterId)
+    val plans = PlanStore.forPlansPanel(soldPlanId, clientFilterId, studentFilterId)
     val outboundPlanFilterLabel = outboundPlanFilterId?.let {
         PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
-    val customerGroupLabel = customerGroupId?.let { id ->
-        PeopleGroupStore.findById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
+    val soldPlanLabel = soldPlanId?.let { id ->
+        findSoldPlanById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
     }
     val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val studentFilterLabel = studentFilterId?.let {
         StudentStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
-    val hasInboundFilter = customerGroupId != null ||
+    val hasInboundFilter = soldPlanId != null ||
         clientFilterId != null ||
         studentFilterId != null
 
@@ -183,7 +184,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
         formError = null
     }
 
-    LaunchedEffect(customerGroupId, clientFilterId, studentFilterId) {
+    LaunchedEffect(soldPlanId, clientFilterId, studentFilterId) {
         if (hasInboundFilter && selectedId != null) {
             clearLocalSelection()
         }
@@ -213,8 +214,8 @@ fun PlansPanel(modifier: Modifier = Modifier) {
             if (!compact) {
                 Text(
                     text = when {
-                        customerGroupId != null -> {
-                            val label = customerGroupLabel ?: "this customer group"
+                        soldPlanId != null -> {
+                            val label = soldPlanLabel ?: "this sold plan"
                             "Showing plans for $label. Use Show all in Customers to reset."
                         }
                         clientFilterId != null -> {
@@ -227,7 +228,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                         }
                         outboundPlanFilterId != null -> {
                             val label = outboundPlanFilterLabel ?: "this plan"
-                            "Filtering customer groups, clients, and students for $label. Use Clear filter to reset."
+                            "Filtering sold plans, clients, and students for $label. Use Clear filter to reset."
                         }
                         else -> "Define plan types and plans offered to customers."
                     },
@@ -259,8 +260,8 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (customerGroupId != null) {
-                                GlideTextButton(onClick = { BillingPanelState.onCustomerGroupCleared() }) {
+                            if (soldPlanId != null) {
+                                GlideTextButton(onClick = { BillingPanelState.onSoldPlanCleared() }) {
                                     Text("Show all")
                                 }
                             }
@@ -295,8 +296,8 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                         ) {
                             Text(
                                 text = when {
-                                    customerGroupId != null ->
-                                        "No plan on this customer group."
+                                    soldPlanId != null ->
+                                        "No plan on this sold plan."
                                     clientFilterId != null ->
                                         "No plans linked to this client."
                                     studentFilterId != null ->

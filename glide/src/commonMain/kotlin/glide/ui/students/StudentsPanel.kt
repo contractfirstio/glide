@@ -35,12 +35,13 @@ import androidx.compose.ui.unit.dp
 import glide.data.BillingPanelState
 import glide.data.ClientStore
 import glide.data.ClientsPanelState
-import glide.data.PeopleGroupStore
+import glide.data.SoldPlanStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
 import glide.data.StudentsPanelState
 import glide.data.StudentStore
 import glide.data.resolveMainClient
+import glide.data.findSoldPlanById
 import glide.model.Student
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
@@ -85,18 +86,18 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
-    val customerGroupId = BillingPanelState.peopleGroupId
+    val soldPlanId = BillingPanelState.soldPlanId
     val clientFilterId = ClientsPanelState.selectedClientId
     val planFilterId = PlansPanelState.selectedPlanId
     val studentFilterId = StudentsPanelState.selectedStudentId
     val people = StudentStore.forStudentsPanel(
-        customerGroupId,
+        soldPlanId,
         clientFilterId,
         planFilterId,
         studentFilterId,
     )
-    val customerGroupLabel = customerGroupId?.let { id ->
-        PeopleGroupStore.findById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
+    val soldPlanLabel = soldPlanId?.let { id ->
+        findSoldPlanById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
     }
     val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
@@ -145,8 +146,8 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
             if (!compact) {
                 Text(
                     text = when {
-                        customerGroupId != null -> {
-                            val label = customerGroupLabel ?: "this customer group"
+                        soldPlanId != null -> {
+                            val label = soldPlanLabel ?: "this sold plan"
                             "Showing students for $label. Use Show all to reset."
                         }
                         clientFilterId != null -> {
@@ -160,7 +161,7 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                         studentFilterId != null -> {
                             val label = StudentStore.findById(studentFilterId)?.name?.takeIf { it.isNotBlank() }
                                 ?: "this student"
-                            "Filtering clients and customer groups for $label. Use Clear filter to reset."
+                            "Filtering clients and sold plans for $label. Use Clear filter to reset."
                         }
                         else ->
                             "Edit students on customer plans. They appear here after a lead becomes a customer."
@@ -198,8 +199,8 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (customerGroupId != null) {
-                                GlideTextButton(onClick = { BillingPanelState.onCustomerGroupCleared() }) {
+                            if (soldPlanId != null) {
+                                GlideTextButton(onClick = { BillingPanelState.onSoldPlanCleared() }) {
                                     Text("Show all")
                                 }
                             }
@@ -226,8 +227,8 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                         ) {
                             Text(
                                 text = when {
-                                    customerGroupId != null ->
-                                        "No students in this customer group."
+                                    soldPlanId != null ->
+                                        "No students in this sold plan."
                                     clientFilterId != null ->
                                         "No students linked to this client."
                                     planFilterId != null ->

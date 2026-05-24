@@ -33,10 +33,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.LocationStore
-import glide.data.ScheduledClassStore
+import glide.data.ClassStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
-import glide.model.ClassLocation
+import glide.model.Location
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
@@ -75,7 +75,7 @@ private data class LocationFormState(
     fun toLocation(
         existingId: String? = null,
         createdAtMillis: Long = System.currentTimeMillis(),
-    ): ClassLocation = ClassLocation(
+    ): Location = Location(
         id = existingId ?: UUID.randomUUID().toString(),
         name = name.trim(),
         maxCapacity = parsedMaxCapacity(),
@@ -102,7 +102,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         termFilterId == null && locationFilterId == null
     }
     val locations = if (termFilterId != null) {
-        val locationIds = ScheduledClassStore.locationIdsForTerm(termFilterId)
+        val locationIds = ClassStore.locationIdsForTerm(termFilterId)
         allLocations.filter { it.id in locationIds }
     } else {
         allLocations
@@ -128,7 +128,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         SchedulePanelState.onLocationCleared()
     }
 
-    fun syncLocationIntoForm(location: ClassLocation) {
+    fun syncLocationIntoForm(location: Location) {
         selectedId = location.id
         isCreating = false
         form.load(
@@ -137,7 +137,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         formError = null
     }
 
-    fun loadIntoForm(location: ClassLocation) {
+    fun loadIntoForm(location: Location) {
         selectedId = location.id
         isCreating = false
         SchedulePanelState.onLocationSelected(location.id)
@@ -155,7 +155,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
 
     LaunchedEffect(classSyncId, allLocations) {
         val classId = classSyncId ?: return@LaunchedEffect
-        val locationId = ScheduledClassStore.findById(classId)?.locationId ?: return@LaunchedEffect
+        val locationId = ClassStore.findById(classId)?.locationId ?: return@LaunchedEffect
         allLocations.find { it.id == locationId }?.let { syncLocationIntoForm(it) }
     }
 
@@ -399,7 +399,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
 
 @Composable
 private fun LocationListItem(
-    location: ClassLocation,
+    location: Location,
     selected: Boolean,
     compact: Boolean,
     onClick: () -> Unit,
@@ -456,7 +456,7 @@ private fun LocationListItem(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        val classCount = ScheduledClassStore.countForLocation(location.id)
+        val classCount = ClassStore.countForLocation(location.id)
         if (classCount > 0) {
             Text(
                 text = "$classCount class${if (classCount == 1) "" else "es"}",
@@ -553,7 +553,7 @@ private fun LocationForm(
     }
 }
 
-private fun ClassLocation.toFormState(): LocationFormState = LocationFormState(
+private fun Location.toFormState(): LocationFormState = LocationFormState(
     name = name,
     maxCapacityText = maxCapacity?.toString() ?: "",
     addressLine1 = addressLine1,

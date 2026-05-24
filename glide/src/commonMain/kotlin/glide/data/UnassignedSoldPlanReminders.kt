@@ -1,17 +1,16 @@
 package glide.data
 
-import glide.model.PlanEnrollment
-import glide.model.PeopleGroupType
+import glide.model.SoldPlanEnrollment
 import glide.model.isOngoing
 
 data class UnassignedSoldPlan(
-    val peopleGroupId: String,
+    val soldPlanId: String,
     val customerLabel: String,
     val planName: String,
 )
 
 fun findSoldPlansNotAssignedToClass(): List<UnassignedSoldPlan> =
-    PlanEnrollmentStore.all
+    SoldPlanEnrollmentStore.all
         .asSequence()
         .filter { it.status.isOngoing() }
         .mapNotNull { it.toUnassignedSoldPlanOrNull() }
@@ -28,35 +27,34 @@ fun unassignedSoldPlansMessage(count: Int? = null): String {
 }
 
 fun openUnassignedSoldPlan(unassigned: UnassignedSoldPlan) {
-    openSoldPlanClassAssignment(unassigned.peopleGroupId)
+    openSoldPlanClassAssignment(unassigned.soldPlanId)
 }
 
-fun openSoldPlanClassAssignment(peopleGroupId: String) {
+fun openSoldPlanClassAssignment(soldPlanId: String) {
     AppViewState.switchTo(AppViewMode.SCHEDULING)
-    SchedulePanelState.onSoldPlanSelected(peopleGroupId)
+    SchedulePanelState.onSoldPlanSelected(soldPlanId)
 }
 
-fun isSoldPlanAssignedToClass(peopleGroupId: String): Boolean =
-    ScheduledClassStore.findClassContainingCustomerGroup(peopleGroupId) != null
+fun isSoldPlanAssignedToClass(soldPlanId: String): Boolean =
+    ClassStore.findClassContainingSoldPlan(soldPlanId) != null
 
-fun soldPlanBlocksBillIssuance(peopleGroupId: String): Boolean {
-    val enrollment = PlanEnrollmentStore.forPeopleGroup(peopleGroupId) ?: return false
+fun soldPlanBlocksBillIssuance(soldPlanId: String): Boolean {
+    val enrollment = SoldPlanEnrollmentStore.forSoldPlan(soldPlanId) ?: return false
     if (!enrollment.status.isOngoing()) return false
-    return !isSoldPlanAssignedToClass(peopleGroupId)
+    return !isSoldPlanAssignedToClass(soldPlanId)
 }
 
 fun soldPlanBlocksBillIssuanceMessage(): String =
     "Assign this sold plan to a class before issuing bills."
 
-private fun PlanEnrollment.toUnassignedSoldPlanOrNull(): UnassignedSoldPlan? {
-    val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
-    if (group.type != PeopleGroupType.CUSTOMER) return null
-    if (ScheduledClassStore.findClassContainingCustomerGroup(peopleGroupId) != null) return null
+private fun SoldPlanEnrollment.toUnassignedSoldPlanOrNull(): UnassignedSoldPlan? {
+    val group = findSoldPlanById(soldPlanId) ?: return null
+    if (ClassStore.findClassContainingSoldPlan(soldPlanId) != null) return null
     val main = group.resolveMainClient()
-    val customerLabel = main.name.ifBlank { "Customer" }
+    val customerLabel = main?.name?.ifBlank { "Customer" } ?: "Customer"
     val planName = planSnapshot.planName.takeIf { it.isNotBlank() } ?: "Plan"
     return UnassignedSoldPlan(
-        peopleGroupId = peopleGroupId,
+        soldPlanId = soldPlanId,
         customerLabel = customerLabel,
         planName = planName,
     )

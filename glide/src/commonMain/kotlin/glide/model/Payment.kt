@@ -13,7 +13,7 @@ data class Payment(
     val id: String = UUID.randomUUID().toString(),
     val billId: String,
     val enrollmentId: String,
-    val peopleGroupId: String,
+    val soldPlanId: String,
     val amountMinor: Long,
     val currencyCode: String,
     val method: PaymentMethod,

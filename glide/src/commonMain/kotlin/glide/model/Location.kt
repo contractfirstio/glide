@@ -2,7 +2,7 @@ package glide.model
 
 import java.util.UUID
 
-data class ClassLocation(
+data class Location(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     /** Maximum occupancy for this room; null means unset. */

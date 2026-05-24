@@ -2,11 +2,12 @@ package glide.billing
 
 import glide.data.AppSettingsStore
 import glide.data.BillStore
-import glide.data.BillingCreditStore
-import glide.data.PeopleGroupStore
+import glide.data.AttendanceCreditStore
+import glide.data.SoldPlanStore
 import glide.data.ensureLineItems
 import glide.data.grossAmountMinorResolved
 import glide.data.planLineDescription
+import glide.data.findSoldPlanById
 import glide.data.resolveMainClient
 import glide.model.Bill
 import glide.model.BillLineItemKind
@@ -70,7 +71,7 @@ fun Bill.toInvoiceContent(): InvoiceContent? {
 
 /** Builds invoice content from current stores without reconciling credits or reading a stored snapshot. */
 fun Bill.toLiveInvoiceContent(): InvoiceContent? {
-    val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
+    val group = findSoldPlanById(soldPlanId) ?: return null
     val main = group.resolveMainClient()
     val bill = ensureLineItems()
     val (debitLines, creditLines) = if (bill.lineItems.isNotEmpty()) {
@@ -81,7 +82,7 @@ fun Bill.toLiveInvoiceContent(): InvoiceContent? {
     } else {
         val gross = grossAmountMinorResolved()
         listOf(InvoiceDebitLine(planLineDescription(), gross)) to
-            BillingCreditStore.appliedToBill(id).map { credit ->
+            AttendanceCreditStore.appliedToBill(id).map { credit ->
                 InvoiceCreditLine(description = credit.description, amountMinor = credit.amountMinor)
             }
     }
@@ -93,9 +94,9 @@ fun Bill.toLiveInvoiceContent(): InvoiceContent? {
         invoiceNumber = id.replace("-", "").take(8).uppercase(Locale.UK),
         issuedAtMillis = displayDateMillis(),
         dueAtMillis = dueAtMillis ?: billPaymentDueAtMillis(displayDateMillis()),
-        billToName = main.name.ifBlank { "Customer" },
-        billToEmail = main.email,
-        billToPhone = main.phone,
+        billToName = main?.name?.ifBlank { "Customer" } ?: "Customer",
+        billToEmail = main?.email.orEmpty(),
+        billToPhone = main?.phone.orEmpty(),
         classSchedule = toInvoiceClassSchedule(),
         debitLines = debitLines,
         creditLines = creditLines,

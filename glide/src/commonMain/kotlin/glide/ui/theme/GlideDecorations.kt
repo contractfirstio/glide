@@ -18,11 +18,11 @@ object GlideAccents {
     val Plans = Color(0xFF9EB8C8)
     val Students = Color(0xFF9AAFD4)
     val Clients = Color(0xFF8EC4D4)
-    val Customers = Color(0xFFA8C0D0)
+    val SoldPlans = Color(0xFFA8C0D0)
     val Billing = Color(0xFFB8C8A0)
     val Schedule = Color(0xFF9BC4B8)
     val Terms = Color(0xFFB0A8D4)
-    val SchedulingCustomerGroups = Color(0xFFA8C0D0)
+    val SchedulingSoldPlans = Color(0xFFA8C0D0)
     val Locations = Color(0xFFC4B89C)
     val TermCalendar = Color(0xFFD4A8B8)
     val Attendance = Color(0xFFB8D4C8)
@@ -33,14 +33,14 @@ object GlideAccents {
             PanelSlots.PLANS -> Plans
             PanelSlots.STUDENTS -> Students
             PanelSlots.CLIENTS -> Clients
-            PanelSlots.CUSTOMERS -> Customers
+            PanelSlots.SOLD_PLANS -> SoldPlans
             PanelSlots.BILLING -> Billing
             else -> Leads
         }
         AppViewMode.SCHEDULING -> when (slot) {
             SchedulingPanelSlots.SCHEDULE -> Schedule
             SchedulingPanelSlots.TERMS -> Terms
-            SchedulingPanelSlots.CUSTOMER_GROUPS -> SchedulingCustomerGroups
+            SchedulingPanelSlots.SOLD_PLANS -> SchedulingSoldPlans
             SchedulingPanelSlots.LOCATIONS -> Locations
             SchedulingPanelSlots.CALENDAR -> TermCalendar
             SchedulingPanelSlots.ATTENDANCE -> Attendance

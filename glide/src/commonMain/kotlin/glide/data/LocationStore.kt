@@ -1,17 +1,17 @@
 package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
-import glide.model.ClassLocation
+import glide.model.Location
 
 object LocationStore {
-    private val _locations = mutableStateListOf<ClassLocation>()
-    val locations: List<ClassLocation> get() = _locations
+    private val _locations = mutableStateListOf<Location>()
+    val locations: List<Location> get() = _locations
 
-    fun create(location: ClassLocation) {
+    fun create(location: Location) {
         _locations.add(location)
     }
 
-    fun update(location: ClassLocation) {
+    fun update(location: Location) {
         val index = _locations.indexOfFirst { it.id == location.id }
         if (index >= 0) {
             _locations[index] = location
@@ -19,7 +19,7 @@ object LocationStore {
     }
 
     fun classCount(locationId: String): Int =
-        ScheduledClassStore.countForLocation(locationId)
+        ClassStore.countForLocation(locationId)
 
     fun canDelete(locationId: String): Boolean = classCount(locationId) == 0
 
@@ -29,8 +29,8 @@ object LocationStore {
         return true
     }
 
-    fun findById(id: String): ClassLocation? = _locations.find { it.id == id }
+    fun findById(id: String): Location? = _locations.find { it.id == id }
 
-    fun sortedForPanel(): List<ClassLocation> =
+    fun sortedForPanel(): List<Location> =
         _locations.sortedBy { it.name.lowercase() }
 }

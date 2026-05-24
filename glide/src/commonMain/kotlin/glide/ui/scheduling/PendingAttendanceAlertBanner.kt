@@ -18,9 +18,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import glide.data.ClassAttendanceStore
+import glide.data.AttendanceStore
 import glide.data.PendingAttendanceSession
-import glide.data.ScheduledClassStore
+import glide.data.ClassStore
 import glide.data.TermStore
 import glide.data.findPastSessionsNeedingAttendance
 import glide.data.millisUntilNextAttendanceReminderCheck
@@ -32,8 +32,8 @@ import kotlinx.coroutines.delay
 @Composable
 fun rememberPendingAttendanceSessions(): List<PendingAttendanceSession> {
     var refreshTick by remember { mutableIntStateOf(0) }
-    ClassAttendanceStore.records
-    ScheduledClassStore.classes
+    AttendanceStore.records
+    ClassStore.classes
     TermStore.terms
     LaunchedEffect(Unit) {
         while (true) {

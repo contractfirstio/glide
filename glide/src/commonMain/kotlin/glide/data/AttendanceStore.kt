@@ -2,47 +2,47 @@ package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
 import glide.model.AttendanceStatus
-import glide.model.ClassAttendanceRecord
-import glide.model.ClassSessionKey
+import glide.model.AttendanceRecord
+import glide.model.AttendanceSessionKey
 import glide.model.canTakeAttendance
 import glide.model.parseIsoLocalDate
 
-object ClassAttendanceStore {
-    private val _records = mutableStateListOf<ClassAttendanceRecord>()
-    val records: List<ClassAttendanceRecord> get() = _records
+object AttendanceStore {
+    private val _records = mutableStateListOf<AttendanceRecord>()
+    val records: List<AttendanceRecord> get() = _records
 
-    private val _submittedSessions = mutableStateListOf<ClassSessionKey>()
+    private val _submittedSessions = mutableStateListOf<AttendanceSessionKey>()
 
-    fun isSessionSubmitted(session: ClassSessionKey): Boolean =
+    fun isSessionSubmitted(session: AttendanceSessionKey): Boolean =
         _submittedSessions.any {
-            it.scheduledClassId == session.scheduledClassId && it.sessionDate == session.sessionDate
+            it.classId == session.classId && it.sessionDate == session.sessionDate
         }
 
-    fun markSessionSubmitted(session: ClassSessionKey) {
+    fun markSessionSubmitted(session: AttendanceSessionKey) {
         if (isSessionSubmitted(session)) return
         _submittedSessions.add(session)
     }
 
-    fun statusFor(session: ClassSessionKey, attendeeKey: String): AttendanceStatus? =
+    fun statusFor(session: AttendanceSessionKey, attendeeKey: String): AttendanceStatus? =
         _records.find {
-            it.scheduledClassId == session.scheduledClassId &&
+            it.classId == session.classId &&
                 it.sessionDate == session.sessionDate &&
                 it.attendeeKey == attendeeKey
         }?.status
 
     fun setStatus(
-        session: ClassSessionKey,
+        session: AttendanceSessionKey,
         attendeeKey: String,
         status: AttendanceStatus,
     ) {
         if (isSessionSubmitted(session)) return
         val index = _records.indexOfFirst {
-            it.scheduledClassId == session.scheduledClassId &&
+            it.classId == session.classId &&
                 it.sessionDate == session.sessionDate &&
                 it.attendeeKey == attendeeKey
         }
-        val record = ClassAttendanceRecord(
-            scheduledClassId = session.scheduledClassId,
+        val record = AttendanceRecord(
+            classId = session.classId,
             sessionDate = session.sessionDate,
             attendeeKey = attendeeKey,
             status = status,
@@ -54,28 +54,28 @@ object ClassAttendanceStore {
         }
     }
 
-    fun clearStatus(session: ClassSessionKey, attendeeKey: String) {
+    fun clearStatus(session: AttendanceSessionKey, attendeeKey: String) {
         if (isSessionSubmitted(session)) return
         _records.removeAll {
-            it.scheduledClassId == session.scheduledClassId &&
+            it.classId == session.classId &&
                 it.sessionDate == session.sessionDate &&
                 it.attendeeKey == attendeeKey
         }
     }
 
-    fun recordsForSession(session: ClassSessionKey): List<ClassAttendanceRecord> =
+    fun recordsForSession(session: AttendanceSessionKey): List<AttendanceRecord> =
         _records.filter {
-            it.scheduledClassId == session.scheduledClassId && it.sessionDate == session.sessionDate
+            it.classId == session.classId && it.sessionDate == session.sessionDate
         }
 
-    fun presentCount(session: ClassSessionKey): Int =
+    fun presentCount(session: AttendanceSessionKey): Int =
         recordsForSession(session).count { it.status == AttendanceStatus.PRESENT }
 
-    fun absentCount(session: ClassSessionKey): Int =
+    fun absentCount(session: AttendanceSessionKey): Int =
         recordsForSession(session).count { it.status == AttendanceStatus.ABSENT }
 
     fun draftForSession(
-        session: ClassSessionKey,
+        session: AttendanceSessionKey,
         attendeeKeys: List<String>,
     ): Map<String, AttendanceStatus?> =
         attendeeKeys.associateWith { key -> statusFor(session, key) }
@@ -90,14 +90,14 @@ object ClassAttendanceStore {
      * lack a present/absent mark.
      */
     fun saveSession(
-        session: ClassSessionKey,
+        session: AttendanceSessionKey,
         statusByAttendeeKey: Map<String, AttendanceStatus?>,
         requiredAttendeeKeys: List<String>,
     ): Boolean {
         if (isSessionSubmitted(session)) return false
-        val scheduledClass = ScheduledClassStore.findById(session.scheduledClassId) ?: return false
+        val cls = ClassStore.findById(session.classId) ?: return false
         val sessionDate = parseIsoLocalDate(session.sessionDate) ?: return false
-        if (!scheduledClass.canTakeAttendance(sessionDate)) return false
+        if (!cls.canTakeAttendance(sessionDate)) return false
         if (unmarkedAttendeeKeys(statusByAttendeeKey, requiredAttendeeKeys).isNotEmpty()) {
             return false
         }
@@ -105,12 +105,12 @@ object ClassAttendanceStore {
         requiredAttendeeKeys.forEach { attendeeKey ->
             val status = statusByAttendeeKey[attendeeKey] ?: return false
             val index = _records.indexOfFirst {
-                it.scheduledClassId == session.scheduledClassId &&
+                it.classId == session.classId &&
                     it.sessionDate == session.sessionDate &&
                     it.attendeeKey == attendeeKey
             }
-            val record = ClassAttendanceRecord(
-                scheduledClassId = session.scheduledClassId,
+            val record = AttendanceRecord(
+                classId = session.classId,
                 sessionDate = session.sessionDate,
                 attendeeKey = attendeeKey,
                 status = status,
@@ -126,8 +126,8 @@ object ClassAttendanceStore {
         return true
     }
 
-    fun clearForClass(scheduledClassId: String) {
-        _records.removeAll { it.scheduledClassId == scheduledClassId }
-        _submittedSessions.removeAll { it.scheduledClassId == scheduledClassId }
+    fun clearForClass(classId: String) {
+        _records.removeAll { it.classId == classId }
+        _submittedSessions.removeAll { it.classId == classId }
     }
 }

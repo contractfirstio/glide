@@ -20,7 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import glide.data.BillStore
 import glide.data.OverdueBillPayment
-import glide.data.PeopleGroupStore
+import glide.data.SoldPlanStore
 import glide.data.findOverdueBillPayments
 import glide.data.millisUntilNextOverduePaymentCheck
 import glide.data.openOverdueBillPayment
@@ -32,7 +32,7 @@ import kotlinx.coroutines.delay
 fun rememberOverdueBillPayments(): List<OverdueBillPayment> {
     var refreshTick by remember { mutableIntStateOf(0) }
     BillStore.all
-    PeopleGroupStore.all
+    SoldPlanStore.all
     LaunchedEffect(Unit) {
         while (true) {
             delay(millisUntilNextOverduePaymentCheck())

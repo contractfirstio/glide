@@ -3,7 +3,6 @@ package glide.data
 import glide.model.Bill
 import glide.model.BillStatus
 import glide.model.PAYMENT_OVERDUE_ALERT_DAYS
-import glide.model.PeopleGroupType
 import glide.model.daysPastPaymentDue
 import glide.model.effectivePaymentDueAtMillis
 import glide.model.formatMoney
@@ -16,7 +15,7 @@ import java.util.Locale
 
 data class OverdueBillPayment(
     val billId: String,
-    val peopleGroupId: String,
+    val soldPlanId: String,
     val customerLabel: String,
     val billDescription: String,
     val formattedAmount: String,
@@ -51,7 +50,7 @@ fun overdueBillPaymentsMessage(count: Int? = null): String {
 
 fun openOverdueBillPayment(overdue: OverdueBillPayment) {
     AppViewState.switchTo(AppViewMode.CUSTOMER_MANAGEMENT)
-    PeopleGroupNavigation.openCustomer(overdue.peopleGroupId)
+    LeadNavigation.openSoldPlan(overdue.soldPlanId)
 }
 
 /** Wake after local midnight so overdue thresholds update daily. */
@@ -65,14 +64,13 @@ private fun Bill.toOverdueBillPaymentOrNull(nowMillis: Long): OverdueBillPayment
     if (status != BillStatus.ISSUED) return null
     val daysPastDue = daysPastPaymentDue(nowMillis) ?: return null
     if (daysPastDue < PAYMENT_OVERDUE_ALERT_DAYS) return null
-    val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
-    if (group.type != PeopleGroupType.CUSTOMER) return null
+    val group = findSoldPlanById(soldPlanId) ?: return null
     val main = group.resolveMainClient()
     val dueMillis = effectivePaymentDueAtMillis() ?: return null
     return OverdueBillPayment(
         billId = id,
-        peopleGroupId = peopleGroupId,
-        customerLabel = main.name.ifBlank { "Customer" },
+        soldPlanId = soldPlanId,
+        customerLabel = main?.name?.ifBlank { "Customer" } ?: "Customer",
         billDescription = planLineDescription(),
         formattedAmount = formatMoney(amountMinor, currencyCode),
         daysPastDue = daysPastDue,

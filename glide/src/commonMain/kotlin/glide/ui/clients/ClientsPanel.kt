@@ -35,12 +35,13 @@ import androidx.compose.ui.unit.dp
 import glide.data.BillingPanelState
 import glide.data.ClientStore
 import glide.data.ClientsPanelState
-import glide.data.PeopleGroupStore
+import glide.data.SoldPlanStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
 import glide.data.StudentsPanelState
 import glide.data.StudentStore
 import glide.data.resolveMainClient
+import glide.data.findSoldPlanById
 import glide.model.Client
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
@@ -86,13 +87,13 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
-    val customerGroupId = BillingPanelState.peopleGroupId
+    val soldPlanId = BillingPanelState.soldPlanId
     val clientFilterId = ClientsPanelState.selectedClientId
     val planFilterId = PlansPanelState.selectedPlanId
     val studentFilterId = StudentsPanelState.selectedStudentId
-    val clients = ClientStore.forClientsPanel(customerGroupId, planFilterId, studentFilterId)
-    val customerGroupLabel = customerGroupId?.let { id ->
-        PeopleGroupStore.findById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
+    val clients = ClientStore.forClientsPanel(soldPlanId, planFilterId, studentFilterId)
+    val soldPlanLabel = soldPlanId?.let { id ->
+        findSoldPlanById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
     }
     val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
@@ -111,8 +112,8 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
         ClientsPanelState.clearClientFilter()
     }
 
-    LaunchedEffect(customerGroupId, planFilterId, studentFilterId) {
-        if ((customerGroupId != null || planFilterId != null || studentFilterId != null) && selectedId != null) {
+    LaunchedEffect(soldPlanId, planFilterId, studentFilterId) {
+        if ((soldPlanId != null || planFilterId != null || studentFilterId != null) && selectedId != null) {
             clearLocalSelection()
         }
     }
@@ -152,13 +153,13 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
             if (!compact) {
                 Text(
                     text = when {
-                        customerGroupId != null -> {
-                            val label = customerGroupLabel ?: "this customer group"
+                        soldPlanId != null -> {
+                            val label = soldPlanLabel ?: "this sold plan"
                             "Showing main client for $label. Use Show all to reset."
                         }
                         clientFilterId != null -> {
                             val label = clientFilterLabel ?: "this client"
-                            "Filtering customer groups for $label. Use Clear filter to reset."
+                            "Filtering sold plans for $label. Use Clear filter to reset."
                         }
                         planFilterId != null -> {
                             val label = planFilterLabel ?: "this plan"
@@ -204,8 +205,8 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (customerGroupId != null) {
-                                GlideTextButton(onClick = { BillingPanelState.onCustomerGroupCleared() }) {
+                            if (soldPlanId != null) {
+                                GlideTextButton(onClick = { BillingPanelState.onSoldPlanCleared() }) {
                                     Text("Show all")
                                 }
                             }
@@ -232,8 +233,8 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                         ) {
                             Text(
                                 text = when {
-                                    customerGroupId != null ->
-                                        "No main client for this customer group."
+                                    soldPlanId != null ->
+                                        "No main client for this sold plan."
                                     planFilterId != null ->
                                         "No clients on groups with this plan."
                                     studentFilterId != null ->

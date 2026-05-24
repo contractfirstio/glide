@@ -55,12 +55,14 @@ import glide.data.StudentsPanelState
 import glide.data.StudentStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
-import glide.data.PlanEnrollmentStore
-import glide.data.PeopleGroupNavigation
-import glide.data.PeopleGroupStore
+import glide.data.SoldPlanEnrollmentStore
+import glide.data.LeadNavigation
+import glide.data.LeadStore
+import glide.data.SoldPlanStore
+import glide.data.findSoldPlanById
 import glide.data.soldPlanDeletionBlockReason
 import glide.data.PlanStore
-import glide.data.ScheduledClassStore
+import glide.data.ClassStore
 import glide.model.formatMoney
 import glide.data.classAttendeeCount
 import glide.data.hasClassParticipant
@@ -68,9 +70,9 @@ import glide.data.hasResolvableMainClient
 import glide.data.memberCount
 import glide.data.resolveMainClient
 import glide.data.resolveStudents
-import glide.model.PeopleGroup
-import glide.model.PeopleGroupStatus
-import glide.model.PeopleGroupType
+import glide.model.Lead
+import glide.model.LeadStatus
+import glide.model.SoldPlan
 import glide.model.parseIsoLocalDate
 import glide.model.summaryLine
 import glide.ui.leads.formatIsoDateForDisplay
@@ -96,8 +98,8 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
-data class PeopleGroupPanelUi(
-    val type: PeopleGroupType,
+data class LeadsSoldPlansPanelUi(
+    val isLeadPanel: Boolean,
     val subtitle: String,
     val emptyListMessage: String,
     val newButtonLabel: String,
@@ -115,8 +117,8 @@ data class PeopleGroupPanelUi(
     val showClearSelection: Boolean = false,
 )
 
-private val LeadsPanelUi = PeopleGroupPanelUi(
-    type = PeopleGroupType.LEAD,
+private val LeadsPanelUi = LeadsSoldPlansPanelUi(
+    isLeadPanel = true,
     subtitle = "Manage leads, link existing clients, and search to add students.",
     emptyListMessage = "No leads yet.",
     newButtonLabel = "New lead",
@@ -134,20 +136,20 @@ private val LeadsPanelUi = PeopleGroupPanelUi(
     showClearSelection = true,
 )
 
-private val CustomersPanelUi = PeopleGroupPanelUi(
-    type = PeopleGroupType.CUSTOMER,
-    subtitle = "Customer groups are locked after creation. Clone one to a new lead to build another plan.",
-    emptyListMessage = "No customers yet. Use Make customer on a lead.",
+private val SoldPlansPanelUi = LeadsSoldPlansPanelUi(
+    isLeadPanel = false,
+    subtitle = "Sold plans are locked after creation. Clone one to a new lead to build another plan.",
+    emptyListMessage = "No sold plans yet. Mark a lead as sold.",
     newButtonLabel = "",
-    createFormTitle = "Customer group",
-    editFormTitle = "Customer group",
-    listCountLabel = { count -> "$count customer group${if (count == 1) "" else "s"}" },
+    createFormTitle = "Sold plan",
+    editFormTitle = "Sold plan",
+    listCountLabel = { count -> "$count sold plan${if (count == 1) "" else "s"}" },
     showPipelineStatus = false,
     showConvertToCustomer = false,
     showPlanPicker = false,
     allowCreate = false,
     readOnly = true,
-    noSelectionMessage = "Select a customer group to view.",
+    noSelectionMessage = "Select a sold plan to view.",
     deleteConfirmTitle = "Revert sold plan to lead?",
     deleteConfirmMessage = "Billing and class enrollment for this sold plan will be removed. " +
         "The household will become a lead again with the same client and plan selection.",
@@ -155,23 +157,23 @@ private val CustomersPanelUi = PeopleGroupPanelUi(
 )
 
 @Composable
-fun LeadsPeopleGroupPanel(modifier: Modifier = Modifier) {
+fun LeadsPanel(modifier: Modifier = Modifier) {
     PeopleGroupPanel(ui = LeadsPanelUi, modifier = modifier)
 }
 
 @Composable
-fun CustomersPeopleGroupPanel(modifier: Modifier = Modifier) {
-    PeopleGroupPanel(ui = CustomersPanelUi, modifier = modifier)
+fun SoldPlansPanel(modifier: Modifier = Modifier) {
+    PeopleGroupPanel(ui = SoldPlansPanelUi, modifier = modifier)
 }
 
-private data class PeopleGroupFormState(
+private data class LeadFormState(
     val mainClientId: String? = null,
     val clientName: String = "",
     val dateOfBirth: String = "",
     val email: String = "",
     val phone: String = "",
     val studentIds: List<String> = emptyList(),
-    val status: PeopleGroupStatus = PeopleGroupStatus.New,
+    val status: LeadStatus = LeadStatus.New,
     val planId: String? = null,
     val planStartDate: String = "",
     val mainClientAttendsClass: Boolean = true,
@@ -183,21 +185,18 @@ private data class PeopleGroupFormState(
 
     fun hasPlanSelected(): Boolean = !planId.isNullOrBlank()
 
-    fun toPeopleGroup(
-        type: PeopleGroupType,
+    fun toLead(
         existingId: String? = null,
         createdAtMillis: Long = System.currentTimeMillis(),
-    ): PeopleGroup {
-        val isCustomer = type == PeopleGroupType.CUSTOMER
-        val linkedClient = !isCustomer && mainClientId != null
-        return PeopleGroup(
+    ): Lead {
+        val linkedClient = mainClientId != null
+        return Lead(
             id = existingId ?: UUID.randomUUID().toString(),
-            type = type,
-            mainClientId = if (isCustomer || linkedClient) mainClientId else null,
-            clientName = if (isCustomer || linkedClient) "" else clientName.trim(),
-            dateOfBirth = if (isCustomer || linkedClient) "" else dateOfBirth.trim(),
-            email = if (isCustomer || linkedClient) "" else email.trim(),
-            phone = if (isCustomer || linkedClient) "" else phone.trim(),
+            mainClientId = if (linkedClient) mainClientId else null,
+            clientName = if (linkedClient) "" else clientName.trim(),
+            dateOfBirth = if (linkedClient) "" else dateOfBirth.trim(),
+            email = if (linkedClient) "" else email.trim(),
+            phone = if (linkedClient) "" else phone.trim(),
             studentIds = studentIds,
             status = status,
             planId = planId,
@@ -218,7 +217,7 @@ private fun soldDisabledReason(
         PlanStore.plans.isEmpty() -> "Create a plan in the Plans panel first."
         isDirty -> "Save changes before marking as sold."
         else -> {
-            val group = groupId?.let { PeopleGroupStore.findById(it) }
+            val group = groupId?.let { LeadStore.findById(it) }
             val main = group?.resolveMainClient()
             when {
                 main == null || main.name.isBlank() ->
@@ -227,7 +226,7 @@ private fun soldDisabledReason(
                     "Email and phone are required before marking as sold."
                 !hasPlanSelected -> "Select a plan above to enable Sold."
                 group?.planStartDate.isNullOrBlank() ||
-                    parseIsoLocalDate(group.planStartDate) == null ->
+                    parseIsoLocalDate(group!!.planStartDate) == null ->
                     "Plan start date is required before marking as sold."
                 group != null && !group.hasClassParticipant() ->
                     "At least one class participant is required before marking as sold."
@@ -244,33 +243,33 @@ private fun canMarkLeadSold(
 
 @Composable
 private fun PeopleGroupPanel(
-    ui: PeopleGroupPanelUi,
+    ui: LeadsSoldPlansPanelUi,
     modifier: Modifier = Modifier,
 ) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    val form = rememberFormDirtyTracker(PeopleGroupFormState(planStartDate = todayIsoDate()))
+    val form = rememberFormDirtyTracker(LeadFormState(planStartDate = todayIsoDate()))
     var isCreating by remember(ui.allowCreate) { mutableStateOf(ui.allowCreate) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
     var cloneMessage by remember { mutableStateOf<String?>(null) }
 
-    val clientFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
+    val clientFilterId = if (!ui.isLeadPanel) {
         ClientsPanelState.selectedClientId
     } else {
         null
     }
-    val planFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
+    val planFilterId = if (!ui.isLeadPanel) {
         PlansPanelState.selectedPlanId
     } else {
         null
     }
-    val studentFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
+    val studentFilterId = if (!ui.isLeadPanel) {
         StudentsPanelState.selectedStudentId
     } else {
         null
     }
     val schedulingSoldPlansPanel =
-        ui.type == PeopleGroupType.CUSTOMER && AppViewState.mode == AppViewMode.SCHEDULING
+        !ui.isLeadPanel && AppViewState.mode == AppViewMode.SCHEDULING
     val soldPlanFilterId = SchedulePanelState.selectedSoldPlanId
     val termFilterId = SchedulePanelState.selectedTermFilterId
     val locationFilterId = SchedulePanelState.selectedLocationFilterId
@@ -294,22 +293,24 @@ private fun PeopleGroupPanel(
     } else {
         null
     }
-    val groups = when {
-        schedulingSoldPlansPanel -> PeopleGroupStore.forSchedulingSoldPlans(
+    val leads = if (ui.isLeadPanel) LeadStore.all else emptyList()
+    val soldPlans = when {
+        ui.isLeadPanel -> emptyList()
+        schedulingSoldPlansPanel -> SoldPlanStore.forSchedulingSoldPlans(
             classId = classFilterId,
             termId = soldPlansTermFilterId,
             locationId = soldPlansLocationFilterId,
         )
-        ui.type == PeopleGroupType.LEAD -> PeopleGroupStore.leads
-        else -> PeopleGroupStore.forCustomersPanel(clientFilterId, studentFilterId, planFilterId)
+        else -> SoldPlanStore.forSoldPlansPanel(clientFilterId, studentFilterId, planFilterId)
     }
+    val groupCount = if (ui.isLeadPanel) leads.size else soldPlans.size
     val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val studentFilterLabel = studentFilterId?.let {
         StudentStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
     val classFilterLabel = classFilterId?.let {
-        ScheduledClassStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+        ClassStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
     val termFilterLabel = soldPlansTermFilterId?.let {
         TermStore.findById(it)?.name?.takeIf { it.isNotBlank() }
@@ -322,14 +323,14 @@ private fun PeopleGroupPanel(
     fun resetFormForCreate() {
         selectedId = null
         isCreating = ui.allowCreate
-        form.load(PeopleGroupFormState(planStartDate = todayIsoDate()))
+        form.load(LeadFormState(planStartDate = todayIsoDate()))
         formError = null
     }
 
     fun clearLocalSelection() {
         selectedId = null
         isCreating = false
-        form.load(PeopleGroupFormState(planStartDate = todayIsoDate()))
+        form.load(LeadFormState(planStartDate = todayIsoDate()))
         formError = null
     }
 
@@ -337,17 +338,26 @@ private fun PeopleGroupPanel(
         clearLocalSelection()
         if (schedulingSoldPlansPanel) {
             SchedulePanelState.onSoldPlanCleared()
-        } else if (ui.type == PeopleGroupType.CUSTOMER) {
-            BillingPanelState.onCustomerGroupCleared()
+        } else if (!ui.isLeadPanel) {
+            BillingPanelState.onSoldPlanCleared()
         }
     }
 
-    fun loadIntoForm(group: PeopleGroup) {
+    fun loadSoldPlanIntoForm(group: SoldPlan) {
+        selectedId = group.id
+        isCreating = false
+        formError = null
+        if (schedulingSoldPlansPanel) {
+            SchedulePanelState.onSoldPlanSelected(group.id)
+        }
+    }
+
+    fun loadLeadIntoForm(group: Lead) {
         selectedId = group.id
         isCreating = false
         val main = group.resolveMainClient()
         form.load(
-            PeopleGroupFormState(
+            LeadFormState(
                 mainClientId = group.mainClientId,
                 clientName = if (group.mainClientId != null) "" else main.name,
                 dateOfBirth = if (group.mainClientId != null) "" else main.dateOfBirth,
@@ -362,43 +372,40 @@ private fun PeopleGroupPanel(
             ),
         )
         formError = null
-        if (schedulingSoldPlansPanel) {
-            SchedulePanelState.onSoldPlanSelected(group.id)
+    }
+
+    val pendingLeadId = LeadNavigation.pendingLeadId
+    LaunchedEffect(pendingLeadId, ui.isLeadPanel) {
+        if (ui.isLeadPanel && pendingLeadId != null) {
+            LeadStore.findById(pendingLeadId)?.let { loadLeadIntoForm(it) }
+            LeadNavigation.clearPendingLead()
         }
     }
 
-    val pendingLeadId = PeopleGroupNavigation.pendingLeadId
-    LaunchedEffect(pendingLeadId, ui.type) {
-        if (ui.type == PeopleGroupType.LEAD && pendingLeadId != null) {
-            PeopleGroupStore.findById(pendingLeadId)?.let { loadIntoForm(it) }
-            PeopleGroupNavigation.clearPendingLead()
-        }
-    }
-
-    val pendingCustomerGroupId = PeopleGroupNavigation.pendingCustomerGroupId
-    LaunchedEffect(pendingCustomerGroupId, ui.type) {
-        if (ui.type == PeopleGroupType.CUSTOMER && pendingCustomerGroupId != null) {
-            PeopleGroupStore.findById(pendingCustomerGroupId)?.let { group ->
-                loadIntoForm(group)
-                BillingPanelState.onCustomerGroupSelected(group.id)
+    val pendingSoldPlanId = LeadNavigation.pendingSoldPlanId
+    LaunchedEffect(pendingSoldPlanId, ui.isLeadPanel) {
+        if (!ui.isLeadPanel && pendingSoldPlanId != null) {
+            findSoldPlanById(pendingSoldPlanId)?.let { group ->
+                loadSoldPlanIntoForm(group)
+                BillingPanelState.onSoldPlanSelected(group.id)
             }
-            PeopleGroupNavigation.clearPendingCustomerGroup()
+            LeadNavigation.clearPendingSoldPlan()
         }
     }
 
-    LaunchedEffect(BillingPanelState.peopleGroupId) {
-        if (ui.type != PeopleGroupType.CUSTOMER || schedulingSoldPlansPanel) return@LaunchedEffect
-        when (BillingPanelState.peopleGroupId) {
+    LaunchedEffect(BillingPanelState.soldPlanId) {
+        if (ui.isLeadPanel || schedulingSoldPlansPanel) return@LaunchedEffect
+        when (BillingPanelState.soldPlanId) {
             null -> if (selectedId != null) clearLocalSelection()
-            else -> if (selectedId != null && selectedId != BillingPanelState.peopleGroupId) {
+            else -> if (selectedId != null && selectedId != BillingPanelState.soldPlanId) {
                 clearLocalSelection()
             }
         }
     }
 
     LaunchedEffect(clientFilterId, planFilterId, studentFilterId, classFilterId, soldPlanFilterId, soldPlansTermFilterId, soldPlansLocationFilterId) {
-        if (ui.type == PeopleGroupType.CUSTOMER && soldPlanFilterId != null) return@LaunchedEffect
-        if (ui.type == PeopleGroupType.CUSTOMER &&
+        if (!ui.isLeadPanel && soldPlanFilterId != null) return@LaunchedEffect
+        if (!ui.isLeadPanel &&
             (clientFilterId != null || planFilterId != null || studentFilterId != null ||
                 classFilterId != null || soldPlansTermFilterId != null || soldPlansLocationFilterId != null) &&
             selectedId != null
@@ -415,12 +422,19 @@ private fun PeopleGroupPanel(
         soldPlanFilterId,
         soldPlansTermFilterId,
         soldPlansLocationFilterId,
-        groups,
+        soldPlans,
+        leads,
         selectedId,
     ) {
-        if (ui.type == PeopleGroupType.CUSTOMER &&
+        if (!ui.isLeadPanel &&
             selectedId != null &&
-            groups.none { it.id == selectedId }
+            soldPlans.none { it.id == selectedId }
+        ) {
+            clearSelection()
+        }
+        if (ui.isLeadPanel &&
+            selectedId != null &&
+            leads.none { it.id == selectedId }
         ) {
             clearSelection()
         }
@@ -457,17 +471,17 @@ private fun PeopleGroupPanel(
                             val label = locationFilterLabel ?: "this location"
                             "Showing sold plans at $label. Use Clear filter to reset."
                         }
-                        ui.type == PeopleGroupType.CUSTOMER && planFilterId != null -> {
+                        !ui.isLeadPanel && planFilterId != null -> {
                             val label = planFilterLabel ?: "this plan"
-                            "Showing customer groups on $label. Use Clear filter in Plans to reset."
+                            "Showing sold plans on $label. Use Clear filter in Plans to reset."
                         }
-                        ui.type == PeopleGroupType.CUSTOMER && studentFilterId != null -> {
+                        !ui.isLeadPanel && studentFilterId != null -> {
                             val label = studentFilterLabel ?: "this student"
-                            "Showing customer groups for $label. Use Clear filter in Students to reset."
+                            "Showing sold plans for $label. Use Clear filter in Students to reset."
                         }
-                        ui.type == PeopleGroupType.CUSTOMER && clientFilterId != null -> {
+                        !ui.isLeadPanel && clientFilterId != null -> {
                             val label = clientFilterLabel ?: "this client"
-                            "Showing customer groups for $label. Use Clear filter to reset."
+                            "Showing sold plans for $label. Use Clear filter to reset."
                         }
                         schedulingSoldPlansPanel ->
                             "Select a sold plan to see its students."
@@ -487,7 +501,7 @@ private fun PeopleGroupPanel(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = ui.listCountLabel(groups.size),
+                            text = ui.listCountLabel(groupCount),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -506,17 +520,17 @@ private fun PeopleGroupPanel(
                                     Text("Clear filter")
                                 }
                             }
-                            if (ui.type == PeopleGroupType.CUSTOMER && planFilterId != null) {
+                            if (!ui.isLeadPanel && planFilterId != null) {
                                 GlideTextButton(onClick = { PlansPanelState.clearPlanFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (ui.type == PeopleGroupType.CUSTOMER && studentFilterId != null) {
+                            if (!ui.isLeadPanel && studentFilterId != null) {
                                 GlideTextButton(onClick = { StudentsPanelState.clearStudentFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (ui.type == PeopleGroupType.CUSTOMER && clientFilterId != null) {
+                            if (!ui.isLeadPanel && clientFilterId != null) {
                                 GlideTextButton(onClick = { ClientsPanelState.clearClientFilter() }) {
                                     Text("Clear filter")
                                 }
@@ -535,7 +549,7 @@ private fun PeopleGroupPanel(
                     }
                     Spacer(modifier = Modifier.height(spacing.field))
 
-                    if (groups.isEmpty()) {
+                    if (groupCount == 0) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -554,12 +568,12 @@ private fun PeopleGroupPanel(
                         ) {
                             Text(
                                 text = when {
-                                    ui.type == PeopleGroupType.CUSTOMER && planFilterId != null ->
-                                        "No customer groups on this plan."
-                                    ui.type == PeopleGroupType.CUSTOMER && studentFilterId != null ->
-                                        "No customer groups for this student."
-                                    ui.type == PeopleGroupType.CUSTOMER && clientFilterId != null ->
-                                        "No customer groups for this client."
+                                    !ui.isLeadPanel && planFilterId != null ->
+                                        "No sold plans on this plan."
+                                    !ui.isLeadPanel && studentFilterId != null ->
+                                        "No sold plans for this student."
+                                    !ui.isLeadPanel && clientFilterId != null ->
+                                        "No sold plans for this client."
                                     schedulingSoldPlansPanel && classFilterId != null ->
                                         "No sold plans on this class."
                                     schedulingSoldPlansPanel && soldPlansTermFilterId != null ->
@@ -583,25 +597,43 @@ private fun PeopleGroupPanel(
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            items(groups, key = { it.id }) { group ->
-                                PeopleGroupListItem(
-                                    group = group,
-                                    dateFormat = dateFormat,
-                                    selected = group.id == selectedId,
-                                    compact = compact,
-                                    showPipelineStatus = ui.showPipelineStatus,
-                                    emphasizePlan = ui.type == PeopleGroupType.CUSTOMER,
-                                    onClick = {
-                                        if (group.id == selectedId) {
-                                            clearSelection()
-                                        } else {
-                                            loadIntoForm(group)
-                                            if (!schedulingSoldPlansPanel && ui.type == PeopleGroupType.CUSTOMER) {
-                                                BillingPanelState.onCustomerGroupSelected(group.id)
+                            if (ui.isLeadPanel) {
+                                items(leads, key = { it.id }) { group ->
+                                    LeadListItem(
+                                        group = group,
+                                        dateFormat = dateFormat,
+                                        selected = group.id == selectedId,
+                                        compact = compact,
+                                        showPipelineStatus = ui.showPipelineStatus,
+                                        onClick = {
+                                            if (group.id == selectedId) {
+                                                clearSelection()
+                                            } else {
+                                                loadLeadIntoForm(group)
                                             }
-                                        }
-                                    },
-                                )
+                                        },
+                                    )
+                                }
+                            } else {
+                                items(soldPlans, key = { it.id }) { group ->
+                                    SoldPlanListItem(
+                                        group = group,
+                                        dateFormat = dateFormat,
+                                        selected = group.id == selectedId,
+                                        compact = compact,
+                                        emphasizePlan = true,
+                                        onClick = {
+                                            if (group.id == selectedId) {
+                                                clearSelection()
+                                            } else {
+                                                loadSoldPlanIntoForm(group)
+                                                if (!schedulingSoldPlansPanel) {
+                                                    BillingPanelState.onSoldPlanSelected(group.id)
+                                                }
+                                            }
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -610,7 +642,7 @@ private fun PeopleGroupPanel(
 
             val formSection: @Composable (Modifier) -> Unit = { formModifier ->
                 val showForm = selectedId != null || (ui.allowCreate && isCreating)
-                val selectedGroup = selectedId?.let { PeopleGroupStore.findById(it) }
+                val selectedGroup = selectedId?.let { findSoldPlanById(it) }
 
                 Column(modifier = formModifier.fillMaxHeight()) {
                     Text(
@@ -658,7 +690,7 @@ private fun PeopleGroupPanel(
                                 .verticalScroll(rememberScrollState()),
                         ) {
                             if (ui.readOnly && selectedId != null) {
-                                val group = PeopleGroupStore.findById(selectedId!!)
+                                val group = findSoldPlanById(selectedId!!)
                                 if (group != null) {
                                     if (schedulingSoldPlansPanel) {
                                         SchedulingSoldPlanDetailView(
@@ -666,20 +698,20 @@ private fun PeopleGroupPanel(
                                             spacing = spacing,
                                         )
                                     } else {
-                                        CustomerGroupDetailView(
+                                        SoldPlanDetailView(
                                             group = group,
                                             spacing = spacing,
                                             onOpenBilling = {
-                                                BillingPanelState.reopenForCurrentGroup()
+                                                BillingPanelState.reopenForCurrentSoldPlan()
                                             },
                                             onDelete = { showDeleteConfirm = true },
                                             onCloneToLead = {
                                                 cloneMessage = null
-                                                val lead = PeopleGroupStore.cloneToLead(group.id)
+                                                val lead = SoldPlanStore.cloneToLead(group.id)
                                                 if (lead != null) {
-                                                    PeopleGroupNavigation.openLead(lead.id)
+                                                    LeadNavigation.openLead(lead.id)
                                                     cloneMessage =
-                                                        "Lead created from this customer group. Open the Leads panel to edit and convert."
+                                                        "Lead created from this sold plan. Open the Leads panel to edit and convert."
                                                 } else {
                                                     cloneMessage = "Could not create a lead from this group."
                                                 }
@@ -697,12 +729,12 @@ private fun PeopleGroupPanel(
                                     )
                                 }
                             } else {
-                                PeopleGroupForm(
+                                LeadForm(
                                     state = form.draft,
                                     onStateChange = { form.draft = it },
                                     spacing = spacing,
                                     notesHeight = notesHeight,
-                                    isCustomerGroup = ui.type == PeopleGroupType.CUSTOMER,
+                                    isSoldPlan = !ui.isLeadPanel,
                                     showPipelineStatus = ui.showPipelineStatus,
                                     showPlanPicker = ui.showPlanPicker,
                                 )
@@ -743,27 +775,26 @@ private fun PeopleGroupPanel(
                                 GlideButton(
                                     onClick = {
                                         formError = null
-                                        if (ui.type == PeopleGroupType.LEAD && !form.draft.isValidForLead()) {
+                                        if (ui.isLeadPanel && !form.draft.isValidForLead()) {
                                             formError = "Link a client or enter a new client name."
                                             return@GlideButton
                                         }
                                         if (isCreating && ui.allowCreate) {
-                                            val group = form.draft.toPeopleGroup(type = PeopleGroupType.LEAD)
-                                            PeopleGroupStore.create(group)
-                                            loadIntoForm(group)
+                                            val group = form.draft.toLead()
+                                            LeadStore.create(group)
+                                            loadLeadIntoForm(group)
                                         } else {
-                                            val existing = selectedId?.let { PeopleGroupStore.findById(it) }
+                                            val existing = selectedId?.let { LeadStore.findById(it) }
                                             if (existing != null) {
-                                                val updated = form.draft.toPeopleGroup(
-                                                    type = existing.type,
+                                                val updated = form.draft.toLead(
                                                     existingId = existing.id,
                                                     createdAtMillis = existing.createdAtMillis,
                                                 )
-                                                if (!PeopleGroupStore.update(updated)) {
+                                                if (!LeadStore.update(updated)) {
                                                     formError = "This record cannot be changed."
                                                     return@GlideButton
                                                 }
-                                                loadIntoForm(updated)
+                                                loadLeadIntoForm(updated)
                                             }
                                         }
                                     },
@@ -790,10 +821,9 @@ private fun PeopleGroupPanel(
                                                 formError = "Plan start date is required before marking as sold."
                                                 return@GlideOutlinedButton
                                             }
-                                            val existing = PeopleGroupStore.findById(selectedId!!)
+                                            val existing = LeadStore.findById(selectedId!!)
                                                 ?: return@GlideOutlinedButton
-                                            val updated = form.draft.toPeopleGroup(
-                                                type = existing.type,
+                                            val updated = form.draft.toLead(
                                                 existingId = existing.id,
                                                 createdAtMillis = existing.createdAtMillis,
                                             )
@@ -802,8 +832,8 @@ private fun PeopleGroupPanel(
                                                     "At least one class participant is required before marking as sold."
                                                 return@GlideOutlinedButton
                                             }
-                                            PeopleGroupStore.update(updated)
-                                            if (!PeopleGroupStore.convertToCustomer(selectedId!!)) {
+                                            LeadStore.update(updated)
+                                            if (!LeadStore.convertToSoldPlan(selectedId!!)) {
                                                 formError =
                                                     "Could not mark as sold. Check plan, start date, and class participants."
                                                 return@GlideOutlinedButton
@@ -849,8 +879,8 @@ private fun PeopleGroupPanel(
         }
     }
 
-    if (showDeleteConfirm && selectedId != null && (ui.type == PeopleGroupType.CUSTOMER || !ui.readOnly)) {
-        val soldPlanBlockReason = if (ui.type == PeopleGroupType.CUSTOMER) {
+    if (showDeleteConfirm && selectedId != null && (!ui.isLeadPanel || !ui.readOnly)) {
+        val soldPlanBlockReason = if (!ui.isLeadPanel) {
             soldPlanDeletionBlockReason(selectedId!!)
         } else {
             null
@@ -861,11 +891,16 @@ private fun PeopleGroupPanel(
             onDismiss = { showDeleteConfirm = false },
             onContinue = {
                 val groupId = selectedId!!
-                if (PeopleGroupStore.delete(groupId)) {
+                val deleted = if (ui.isLeadPanel) {
+                    LeadStore.delete(groupId)
+                } else {
+                    SoldPlanStore.delete(groupId)
+                }
+                if (deleted) {
                     showDeleteConfirm = false
                     when {
-                        ui.type == PeopleGroupType.CUSTOMER -> {
-                            PeopleGroupNavigation.openLead(groupId)
+                        !ui.isLeadPanel -> {
+                            LeadNavigation.openLead(groupId)
                             clearSelection()
                         }
                         ui.allowCreate -> resetFormForCreate()
@@ -883,12 +918,92 @@ private fun PeopleGroupPanel(
 }
 
 @Composable
-private fun PeopleGroupListItem(
-    group: PeopleGroup,
+private fun LeadListItem(
+    group: Lead,
     dateFormat: SimpleDateFormat,
     selected: Boolean,
     compact: Boolean,
     showPipelineStatus: Boolean,
+    onClick: () -> Unit,
+) {
+    val spacing = if (compact) GlideLayout.compact else GlideLayout.comfortable
+    val background = if (selected) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(background, MaterialTheme.shapes.small)
+            .clickable(onClick = onClick)
+            .padding(
+                horizontal = spacing.listItemHorizontal,
+                vertical = spacing.listItemVertical,
+            ),
+    ) {
+        val main = group.resolveMainClient()
+        Text(
+            text = formatPersonLabel(main.name, main.dateOfBirth),
+            style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = glideListItemTitleColor(selected),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (main.email.isNotBlank() && !compact) {
+            Text(
+                text = main.email,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        group.studentsSummary(compact)?.let { summary ->
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = if (compact) 1 else 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        planLabelForLead(group)?.let { planLabel ->
+            Text(
+                text = planLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            if (showPipelineStatus) {
+                Text(
+                    text = group.status.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Text(
+                text = dateFormat.format(Date(group.createdAtMillis)),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SoldPlanListItem(
+    group: SoldPlan,
+    dateFormat: SimpleDateFormat,
+    selected: Boolean,
+    compact: Boolean,
     emphasizePlan: Boolean,
     onClick: () -> Unit,
 ) {
@@ -909,121 +1024,73 @@ private fun PeopleGroupListItem(
             ),
     ) {
         val main = group.resolveMainClient()
-        if (emphasizePlan) {
-            Text(
-                text = main.name.ifBlank { "Unknown client" },
-                style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = glideListItemTitleColor(selected),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = planNameForGroup(group),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = planStartDateLabelForGroup(group),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        } else {
-            Text(
-                text = formatPersonLabel(main.name, main.dateOfBirth),
-                style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = glideListItemTitleColor(selected),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (main.email.isNotBlank() && !compact) {
-                Text(
-                    text = main.email,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            group.studentsSummary(compact)?.let { summary ->
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = if (compact) 1 else 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            planLabelForGroup(group)?.let { planLabel ->
-                Text(
-                    text = planLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                if (showPipelineStatus) {
-                    Text(
-                        text = group.status.label,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                } else {
-                    Text(
-                        text = "Customer",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                Text(
-                    text = dateFormat.format(Date(group.createdAtMillis)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        Text(
+            text = main?.name?.ifBlank { "Unknown client" } ?: "Unknown client",
+            style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = glideListItemTitleColor(selected),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = planNameForGroup(group),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = planStartDateLabelForGroup(group),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
-private fun planNameForGroup(group: PeopleGroup): String =
+private fun planLabelForLead(group: Lead): String? {
+    val planId = group.planId ?: return null
+    val plan = PlanStore.findById(planId) ?: return null
+    return "Plan: ${plan.name}"
+}
+
+private fun Lead.studentsSummary(compact: Boolean): String? {
+    val students = resolveStudents()
+    if (students.isEmpty()) return null
+    val labels = students.joinToString { formatPersonLabel(it.name, it.dateOfBirth) }
+    return if (compact) labels else "Students: $labels"
+}
+
+private fun planNameForGroup(group: SoldPlan): String =
     group.planId
         ?.let { PlanStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() } }
         ?: "No plan"
 
-private fun planStartDateLabelForGroup(group: PeopleGroup): String {
+private fun planStartDateLabelForGroup(group: SoldPlan): String {
     val fromGroup = group.planStartDate.takeIf { it.isNotBlank() }
         ?.let { formatIsoDateForDisplay(it) }
         ?.takeIf { it.isNotBlank() }
     if (fromGroup != null) return fromGroup
 
-    return PlanEnrollmentStore.forPeopleGroup(group.id)
+    return SoldPlanEnrollmentStore.forSoldPlan(group.id)
         ?.startedAtMillis
         ?.let { formatIsoDateForDisplay(millisToIsoDate(it)) }
         ?.takeIf { it.isNotBlank() }
         ?: "No start date"
 }
 
-private fun planLabelForGroup(group: PeopleGroup): String? {
+private fun planLabelForGroup(group: SoldPlan): String? {
     val planId = group.planId ?: return null
     val plan = PlanStore.findById(planId) ?: return null
     return "Plan: ${plan.name}"
 }
 
-private fun PeopleGroup.studentsSummary(compact: Boolean): String? {
+private fun SoldPlan.studentsSummary(compact: Boolean): String? {
     val students = resolveStudents()
     if (students.isEmpty()) return null
     val labels = students.joinToString { formatPersonLabel(it.name, it.dateOfBirth) }
@@ -1066,7 +1133,7 @@ private fun SoldPlanDeleteSection(
 
 @Composable
 private fun SchedulingSoldPlanDetailView(
-    group: PeopleGroup,
+    group: SoldPlan,
     spacing: GlideLayout.Spacing,
 ) {
     FormPanelSection(
@@ -1081,7 +1148,7 @@ private fun SchedulingSoldPlanDetailView(
 
 @Composable
 private fun SchedulingSoldPlanStudentsSection(
-    group: PeopleGroup,
+    group: SoldPlan,
     spacing: GlideLayout.Spacing,
 ) {
     val clientAttends = group.mainClientAttendsClass && group.hasResolvableMainClient()
@@ -1105,7 +1172,7 @@ private fun SchedulingSoldPlanStudentsSection(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = formatPersonLabel(main.name, main.dateOfBirth),
+                text = formatPersonLabel(main?.name.orEmpty(), main?.dateOfBirth.orEmpty()),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -1124,19 +1191,19 @@ private fun SchedulingSoldPlanStudentsSection(
 }
 
 @Composable
-private fun CustomerGroupDetailView(
-    group: PeopleGroup,
+private fun SoldPlanDetailView(
+    group: SoldPlan,
     spacing: GlideLayout.Spacing,
     onOpenBilling: () -> Unit,
     onDelete: () -> Unit,
     onCloneToLead: () -> Unit,
 ) {
-    val enrollment = PlanEnrollmentStore.forPeopleGroup(group.id)
+    val enrollment = SoldPlanEnrollmentStore.forSoldPlan(group.id)
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
 
     FormPanelSection(
         title = "Plan",
-        description = "The plan assigned to this customer group.",
+        description = "The plan assigned to this sold plan.",
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {
@@ -1228,7 +1295,7 @@ private fun CustomerGroupDetailView(
         }
         Spacer(modifier = Modifier.height(spacing.field))
         Text(
-            text = "This customer group is locked. Clone to a lead to create another plan with the same people.",
+            text = "This sold plan is locked. Clone to a lead to create another plan with the same people.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1284,18 +1351,18 @@ private fun LeadMainClientAttendsField(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PeopleGroupForm(
-    state: PeopleGroupFormState,
-    onStateChange: (PeopleGroupFormState) -> Unit,
+private fun LeadForm(
+    state: LeadFormState,
+    onStateChange: (LeadFormState) -> Unit,
     spacing: GlideLayout.Spacing,
     notesHeight: Dp,
-    isCustomerGroup: Boolean,
+    isSoldPlan: Boolean,
     showPipelineStatus: Boolean,
     showPlanPicker: Boolean,
 ) {
     var statusExpanded by remember { mutableStateOf(false) }
 
-    if (isCustomerGroup) {
+    if (isSoldPlan) {
         ReadOnlyMainClientSection(clientId = state.mainClientId)
     } else {
         LeadMainClientSection(
@@ -1318,13 +1385,13 @@ private fun PeopleGroupForm(
             spacing = spacing,
         )
     }
-    if (!isCustomerGroup) {
+    if (!isSoldPlan) {
         LeadPeopleSectionsDivider(spacing = spacing)
     } else {
         Spacer(modifier = Modifier.height(spacing.section * 2))
     }
 
-    if (isCustomerGroup) {
+    if (isSoldPlan) {
         StudentLinkSection(
             selectedIds = state.studentIds,
             onSelectionChange = { onStateChange(state.copy(studentIds = it)) },
@@ -1338,7 +1405,7 @@ private fun PeopleGroupForm(
         )
     }
 
-    if (!isCustomerGroup && (showPlanPicker || showPipelineStatus)) {
+    if (!isSoldPlan && (showPlanPicker || showPipelineStatus)) {
         FormPanelSectionsDivider(label = "Lead setup", spacing = spacing)
     }
 
@@ -1353,7 +1420,7 @@ private fun PeopleGroupForm(
                 selectedPlanId = state.planId,
                 onPlanSelected = { onStateChange(state.copy(planId = it)) },
             )
-            if (!isCustomerGroup) {
+            if (!isSoldPlan) {
                 Spacer(modifier = Modifier.height(spacing.field))
                 LeadMainClientAttendsField(
                     attends = state.mainClientAttendsClass,
@@ -1361,7 +1428,7 @@ private fun PeopleGroupForm(
                 )
             }
         }
-    } else if (!isCustomerGroup) {
+    } else if (!isSoldPlan) {
         Spacer(modifier = Modifier.height(spacing.field))
         LeadMainClientAttendsField(
             attends = state.mainClientAttendsClass,
@@ -1405,7 +1472,7 @@ private fun PeopleGroupForm(
                         expanded = statusExpanded,
                         onDismissRequest = { statusExpanded = false },
                     ) {
-                        PeopleGroupStatus.entries.forEach { status ->
+                        LeadStatus.entries.forEach { status ->
                             DropdownMenuItem(
                                 text = { Text(status.label, style = MaterialTheme.typography.bodySmall) },
                                 onClick = {

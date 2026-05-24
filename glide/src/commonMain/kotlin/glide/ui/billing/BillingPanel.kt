@@ -34,7 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import glide.data.BillStore
-import glide.data.BillingCreditStore
+import glide.data.AttendanceCreditStore
 import glide.data.attendanceBlocksBillIssuanceMessage
 import glide.data.creditAppliedMinor
 import glide.data.BillingService
@@ -46,18 +46,19 @@ import glide.data.openSoldPlanClassAssignment
 import glide.data.soldPlanBlocksBillIssuance
 import glide.data.soldPlanBlocksBillIssuanceMessage
 import glide.ui.scheduling.rememberPendingAttendanceSessions
-import glide.data.PlanEnrollmentStore
+import glide.data.SoldPlanEnrollmentStore
 import glide.data.RollingPlanBillingService
 import glide.data.RollingPlanCancellationService
-import glide.data.ScheduledClassStore
+import glide.data.ClassStore
 import glide.data.classAttendeeCount
 import glide.data.countScheduledPlanSessionsInPeriod
 import glide.data.countSubmittedPlanSessionsInPeriod
-import glide.model.PlanEnrollmentStatus
+import glide.model.SoldPlanEnrollmentStatus
 import glide.data.PaymentStore
-import glide.data.PeopleGroupStore
+import glide.data.SoldPlanStore
 import glide.data.PlanStore
 import glide.data.resolveMainClient
+import glide.data.findSoldPlanById
 import glide.model.Bill
 import glide.model.BillLineItem
 import glide.model.BillLineItemKind
@@ -65,13 +66,12 @@ import glide.model.BillStatus
 import glide.model.majorToMinor
 import glide.model.minorToMajorString
 import glide.model.parseMajorAmount
-import glide.model.PlanEnrollment
+import glide.model.SoldPlanEnrollment
 import glide.model.displayDateMillis
 import glide.model.canBeVoided
 import glide.model.isBillingEditable
 import glide.model.isIssuedToCustomer
 import glide.model.PaymentMethod
-import glide.model.PeopleGroupType
 import glide.model.formatMoney
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
@@ -89,48 +89,48 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-fun billingPanelTitle(peopleGroupId: String): String {
-    val group = PeopleGroupStore.findById(peopleGroupId) ?: return "Billing"
+fun billingPanelTitle(soldPlanId: String): String {
+    val group = findSoldPlanById(soldPlanId) ?: return "Billing"
     val main = group.resolveMainClient()
     val planName = group.planId?.let { PlanStore.findById(it)?.name }
     return when {
         planName != null -> "Billing — $planName"
-        main.name.isNotBlank() -> "Billing — ${main.name}"
+        main?.name?.isNotBlank() == true -> "Billing — ${main.name}"
         else -> "Billing"
     }
 }
 
 @Composable
 fun BillingPanel(
-    peopleGroupId: String,
+    soldPlanId: String,
     modifier: Modifier = Modifier,
 ) {
-    val group = PeopleGroupStore.findById(peopleGroupId)
-    val enrollment = PlanEnrollmentStore.displayForPeopleGroup(peopleGroupId)
-    val ongoingEnrollment = PlanEnrollmentStore.forPeopleGroup(peopleGroupId)
-    ScheduledClassStore.classes
+    val group = findSoldPlanById(soldPlanId)
+    val enrollment = SoldPlanEnrollmentStore.displayForSoldPlan(soldPlanId)
+    val ongoingEnrollment = SoldPlanEnrollmentStore.forSoldPlan(soldPlanId)
+    ClassStore.classes
     val bills = enrollment?.let { e ->
         BillStore.forEnrollment(e.id)
     } ?: emptyList()
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
-    var selectedBillId by remember(peopleGroupId) { mutableStateOf<String?>(null) }
-    var showPaymentDialog by remember(peopleGroupId) { mutableStateOf(false) }
-    var paymentError by remember(peopleGroupId) { mutableStateOf<String?>(null) }
-    var billingActionMessage by remember(peopleGroupId) { mutableStateOf<String?>(null) }
-    var showCancelPlanDialog by remember(peopleGroupId) { mutableStateOf(false) }
-    var showVoidBillConfirm by remember(peopleGroupId) { mutableStateOf(false) }
+    var selectedBillId by remember(soldPlanId) { mutableStateOf<String?>(null) }
+    var showPaymentDialog by remember(soldPlanId) { mutableStateOf(false) }
+    var paymentError by remember(soldPlanId) { mutableStateOf<String?>(null) }
+    var billingActionMessage by remember(soldPlanId) { mutableStateOf<String?>(null) }
+    var showCancelPlanDialog by remember(soldPlanId) { mutableStateOf(false) }
+    var showVoidBillConfirm by remember(soldPlanId) { mutableStateOf(false) }
 
     val pendingAttendance = rememberPendingAttendanceSessions()
     val billingBlockedByAttendance = pendingAttendance.isNotEmpty()
-    val billingBlockedByUnassignedClass = soldPlanBlocksBillIssuance(peopleGroupId)
+    val billingBlockedByUnassignedClass = soldPlanBlocksBillIssuance(soldPlanId)
     val billingBlocked = billingBlockedByAttendance || billingBlockedByUnassignedClass
 
     val spacing = GlideLayout.comfortable
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
 
     LaunchedEffect(ongoingEnrollment?.id, ongoingEnrollment?.status) {
-        ongoingEnrollment?.let { RollingPlanBillingService.syncRollingPlanBilling(it.peopleGroupId) }
+        ongoingEnrollment?.let { RollingPlanBillingService.syncRollingPlanBilling(it.soldPlanId) }
     }
 
     Column(
@@ -139,9 +139,9 @@ fun BillingPanel(
             .padding(spacing.outer)
             .verticalScroll(rememberScrollState()),
     ) {
-        if (group == null || group.type != PeopleGroupType.CUSTOMER) {
+        if (group == null) {
             Text(
-                text = "Select a customer group in the Customers panel.",
+                text = "Select a sold plan in the Sold Plans panel.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -151,7 +151,7 @@ fun BillingPanel(
         val main = group.resolveMainClient()
         Text(
             text = buildString {
-                append(main.name.ifBlank { "Customer group" })
+                append(main?.name?.ifBlank { "Sold plan" } ?: "Sold plan")
                 group.planId?.let { PlanStore.findById(it)?.name }?.let { append(" · $it") }
             },
             style = MaterialTheme.typography.labelLarge,
@@ -170,7 +170,7 @@ fun BillingPanel(
 
         FormPanelSection(
             title = "Plan enrollment",
-            description = "Agreed plan, pricing, and billing period for this customer group.",
+            description = "Agreed plan, pricing, and billing period for this sold plan.",
             spacing = spacing,
             role = FormPanelSectionRole.Primary,
         ) {
@@ -179,7 +179,7 @@ fun BillingPanel(
             if (
                 ongoingEnrollment != null &&
                 enrollment.planSnapshot.rolling &&
-                enrollment.status == PlanEnrollmentStatus.ACTIVE
+                enrollment.status == SoldPlanEnrollmentStatus.ACTIVE
             ) {
                 Spacer(modifier = Modifier.height(spacing.field))
                 GlideOutlinedButton(
@@ -209,7 +209,7 @@ fun BillingPanel(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
                 )
-                GlideTextButton(onClick = { openSoldPlanClassAssignment(peopleGroupId) }) {
+                GlideTextButton(onClick = { openSoldPlanClassAssignment(soldPlanId) }) {
                     Text("Assign to class")
                 }
             }
@@ -255,9 +255,9 @@ fun BillingPanel(
                 }
                 GlideOutlinedButton(
                     onClick = {
-                        if (!BillingService.addRenewalBill(peopleGroupId)) {
+                        if (!BillingService.addRenewalBill(soldPlanId)) {
                             billingActionMessage = when (ongoingEnrollment?.status) {
-                                PlanEnrollmentStatus.CANCELLING ->
+                                SoldPlanEnrollmentStatus.CANCELLING ->
                                     "Renewal is stopped while this plan finishes."
                                 else -> "Could not add a renewal bill."
                             }
@@ -266,7 +266,7 @@ fun BillingPanel(
                         }
                         selectedBillId = null
                     },
-                    enabled = ongoingEnrollment?.status == PlanEnrollmentStatus.ACTIVE,
+                    enabled = ongoingEnrollment?.status == SoldPlanEnrollmentStatus.ACTIVE,
                 ) {
                     Text("Add bill")
                 }
@@ -429,13 +429,13 @@ fun BillingPanel(
 
 @Composable
 private fun EnrollmentSummary(
-    enrollment: PlanEnrollment,
+    enrollment: SoldPlanEnrollment,
     dateFormat: SimpleDateFormat,
     showBackground: Boolean = true,
 ) {
     val snapshot = enrollment.planSnapshot
     val participantCount =
-        PeopleGroupStore.findById(enrollment.peopleGroupId)?.classAttendeeCount() ?: 0
+        findSoldPlanById(enrollment.soldPlanId)?.classAttendeeCount() ?: 0
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -489,7 +489,7 @@ private fun EnrollmentSummary(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        val pendingCredit = BillingCreditStore.unappliedTotalMinor(enrollment.id)
+        val pendingCredit = AttendanceCreditStore.unappliedTotalMinor(enrollment.id)
         if (pendingCredit > 0) {
             Text(
                 text = "Credit on next bill: ${formatMoney(pendingCredit, snapshot.currencyCode)}",
@@ -500,14 +500,14 @@ private fun EnrollmentSummary(
         if (snapshot.rolling) {
             val planSize = snapshot.lessonCount.coerceAtLeast(1)
             val submitted = countSubmittedPlanSessionsInPeriod(
-                peopleGroupId = enrollment.peopleGroupId,
+                soldPlanId = enrollment.soldPlanId,
                 periodStartedAtMillis = enrollment.planPeriodStartedAtMillis,
             )
             val remaining = (planSize - submitted).coerceAtLeast(0)
             val billingLine = when (enrollment.status) {
-                PlanEnrollmentStatus.CANCELLING ->
+                SoldPlanEnrollmentStatus.CANCELLING ->
                     "Finishing current plan: $submitted of $planSize classes with attendance · renewal stopped"
-                PlanEnrollmentStatus.CANCELLED ->
+                SoldPlanEnrollmentStatus.CANCELLED ->
                     "Plan completed: $submitted of $planSize classes with attendance in last period"
                 else ->
                     "Plan billing: $submitted of $planSize classes with attendance · $remaining until renewal bill"
@@ -516,7 +516,7 @@ private fun EnrollmentSummary(
                 text = billingLine,
                 style = MaterialTheme.typography.labelSmall,
                 color = when (enrollment.status) {
-                    PlanEnrollmentStatus.CANCELLING -> MaterialTheme.colorScheme.primary
+                    SoldPlanEnrollmentStatus.CANCELLING -> MaterialTheme.colorScheme.primary
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
@@ -1092,14 +1092,14 @@ private fun AddBillLineItemDialog(
 
 @Composable
 private fun CancelRollingPlanDialog(
-    enrollment: PlanEnrollment,
+    enrollment: SoldPlanEnrollment,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
     val snapshot = enrollment.planSnapshot
     val planSize = snapshot.lessonCount.coerceAtLeast(1)
     val scheduled = countScheduledPlanSessionsInPeriod(
-        peopleGroupId = enrollment.peopleGroupId,
+        soldPlanId = enrollment.soldPlanId,
         periodStartedAtMillis = enrollment.planPeriodStartedAtMillis,
     )
     val remaining = (planSize - scheduled).coerceAtLeast(0)

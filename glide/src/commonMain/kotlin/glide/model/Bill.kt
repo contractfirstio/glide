@@ -14,7 +14,7 @@ enum class BillStatus(val label: String) {
 data class Bill(
     val id: String = UUID.randomUUID().toString(),
     val enrollmentId: String,
-    val peopleGroupId: String,
+    val soldPlanId: String,
     val description: String,
     /** Plan total before attendance credits; null on older bills (inferred from credits). */
     val grossAmountMinor: Long? = null,

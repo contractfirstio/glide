@@ -1,29 +1,29 @@
 package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
-import glide.model.ScheduledClass
-import glide.model.compareScheduledClasses
-import glide.model.hasCustomerGroup
+import glide.model.Class
+import glide.model.compareClasses
+import glide.model.hasSoldPlan
 import glide.model.spansTerm
 import glide.model.usesLocation
 
-object ScheduledClassStore {
-    private val _classes = mutableStateListOf<ScheduledClass>()
-    val classes: List<ScheduledClass> get() = _classes
+object ClassStore {
+    private val _classes = mutableStateListOf<Class>()
+    val classes: List<Class> get() = _classes
 
-    fun create(scheduledClass: ScheduledClass) {
-        _classes.add(scheduledClass)
+    fun create(cls: Class) {
+        _classes.add(cls)
     }
 
-    fun update(scheduledClass: ScheduledClass) {
-        val index = _classes.indexOfFirst { it.id == scheduledClass.id }
+    fun update(cls: Class) {
+        val index = _classes.indexOfFirst { it.id == cls.id }
         if (index >= 0) {
-            _classes[index] = scheduledClass
+            _classes[index] = cls
         }
     }
 
     fun soldPlanCount(classId: String): Int =
-        findById(classId)?.customerGroupIds?.size ?: 0
+        findById(classId)?.soldPlanIds?.size ?: 0
 
     fun canEditTerms(classId: String): Boolean = soldPlanCount(classId) == 0
 
@@ -42,18 +42,18 @@ object ScheduledClassStore {
     fun delete(id: String): Boolean {
         if (!canDelete(id)) return false
         _classes.removeAll { it.id == id }
-        ClassAttendanceStore.clearForClass(id)
-        PlanClassScheduleStore.clearForClass(id)
+        AttendanceStore.clearForClass(id)
+        SoldPlanClassScheduleStore.clearForClass(id)
         return true
     }
 
-    fun findById(id: String): ScheduledClass? = _classes.find { it.id == id }
+    fun findById(id: String): Class? = _classes.find { it.id == id }
 
-    fun findClassContainingCustomerGroup(
-        groupId: String,
+    fun findClassContainingSoldPlan(
+        soldPlanId: String,
         excludeClassId: String? = null,
-    ): ScheduledClass? =
-        _classes.firstOrNull { groupId in it.customerGroupIds && it.id != excludeClassId }
+    ): Class? =
+        _classes.firstOrNull { soldPlanId in it.soldPlanIds && it.id != excludeClassId }
 
     fun clearTermReference(termId: String) {
         for (index in _classes.indices) {
@@ -73,51 +73,51 @@ object ScheduledClassStore {
         }
     }
 
-    fun clearCustomerGroupReference(groupId: String) {
+    fun clearSoldPlanReference(soldPlanId: String) {
         for (index in _classes.indices) {
             val item = _classes[index]
-            if (item.hasCustomerGroup(groupId)) {
-                _classes[index] = item.copy(customerGroupIds = item.customerGroupIds - groupId)
-                PlanClassScheduleStore.remove(groupId, item.id)
+            if (item.hasSoldPlan(soldPlanId)) {
+                _classes[index] = item.copy(soldPlanIds = item.soldPlanIds - soldPlanId)
+                SoldPlanClassScheduleStore.remove(soldPlanId, item.id)
             }
         }
     }
 
-    fun forSchedulePanel(termFilterId: String? = null): List<ScheduledClass> {
+    fun forSchedulePanel(termFilterId: String? = null): List<Class> {
         val filtered = if (termFilterId != null) {
             _classes.filter { it.spansTerm(termFilterId) }
         } else {
             _classes
         }
-        return filtered.sortedWith(compareScheduledClasses())
+        return filtered.sortedWith(compareClasses())
     }
 
     fun forSchedulingPanel(
         soldPlanId: String? = null,
         termId: String? = null,
         locationId: String? = null,
-    ): List<ScheduledClass> {
-        soldPlanId?.let { groupId ->
-            val scheduledClass = findClassContainingCustomerGroup(groupId)
-            return listOfNotNull(scheduledClass)
+    ): List<Class> {
+        soldPlanId?.let { id ->
+            val cls = findClassContainingSoldPlan(id)
+            return listOfNotNull(cls)
         }
-        var filtered: List<ScheduledClass> = _classes
+        var filtered: List<Class> = _classes
         termId?.let { id -> filtered = filtered.filter { it.spansTerm(id) } }
         locationId?.let { id -> filtered = filtered.filter { it.usesLocation(id) } }
-        return filtered.sortedWith(compareScheduledClasses())
+        return filtered.sortedWith(compareClasses())
     }
 
-    fun forSchedulePanelFromSoldPlan(soldPlanId: String?): List<ScheduledClass> =
+    fun forSchedulePanelFromSoldPlan(soldPlanId: String?): List<Class> =
         forSchedulingPanel(soldPlanId = soldPlanId)
 
-    fun customerGroupIdsForTerm(termId: String): Set<String> =
+    fun soldPlanIdsForTerm(termId: String): Set<String> =
         _classes.filter { it.spansTerm(termId) }
-            .flatMap { it.customerGroupIds }
+            .flatMap { it.soldPlanIds }
             .toSet()
 
-    fun customerGroupIdsForLocation(locationId: String): Set<String> =
+    fun soldPlanIdsForLocation(locationId: String): Set<String> =
         _classes.filter { it.usesLocation(locationId) }
-            .flatMap { it.customerGroupIds }
+            .flatMap { it.soldPlanIds }
             .toSet()
 
     fun termIdsForLocation(locationId: String): Set<String> =

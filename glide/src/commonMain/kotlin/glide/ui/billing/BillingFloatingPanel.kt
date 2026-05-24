@@ -9,13 +9,13 @@ import glide.ui.layout.PanelSlots
 
 @Composable
 fun BillingFloatingPanel(
-    peopleGroupId: String,
+    soldPlanId: String,
     windowWidthPx: Int,
     windowHeightPx: Int,
 ) {
-    if (!BillingPanelState.visible || BillingPanelState.peopleGroupId != peopleGroupId) return
+    if (!BillingPanelState.visible || BillingPanelState.soldPlanId != soldPlanId) return
 
-    val title = billingPanelTitle(peopleGroupId)
+    val title = billingPanelTitle(soldPlanId)
 
     FloatingPanelShell(
         title = title,
@@ -25,7 +25,7 @@ fun BillingFloatingPanel(
         onClose = { BillingPanelState.close() },
     ) {
         BillingPanel(
-            peopleGroupId = peopleGroupId,
+            soldPlanId = soldPlanId,
             modifier = Modifier.fillMaxSize(),
         )
     }

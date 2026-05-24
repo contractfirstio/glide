@@ -23,8 +23,8 @@ object AppViewState {
             AppViewMode.CUSTOMER_MANAGEMENT -> {
                 AttendancePanelState.clear()
                 SchedulePanelState.clear()
-                if (BillingPanelState.peopleGroupId != null) {
-                    BillingPanelState.reopenForCurrentGroup()
+                if (BillingPanelState.soldPlanId != null) {
+                    BillingPanelState.reopenForCurrentSoldPlan()
                 }
             }
         }

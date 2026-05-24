@@ -34,11 +34,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.LocationStore
-import glide.data.ScheduledClassStore
+import glide.data.ClassStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
 import glide.data.validateTermDisablingRollingPlans
-import glide.model.AcademicTerm
+import glide.model.Term
 import glide.model.findOverlappingTerm
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
@@ -74,7 +74,7 @@ private data class TermFormState(
     fun toTerm(
         existingId: String? = null,
         createdAtMillis: Long = System.currentTimeMillis(),
-    ): AcademicTerm = AcademicTerm(
+    ): Term = Term(
         id = existingId ?: UUID.randomUUID().toString(),
         name = name.trim(),
         startDate = startDate,
@@ -85,7 +85,7 @@ private data class TermFormState(
     )
 }
 
-private fun overlapErrorMessage(overlapping: AcademicTerm): String {
+private fun overlapErrorMessage(overlapping: Term): String {
     val range = buildString {
         if (overlapping.startDate.isNotBlank()) append(formatIsoDateForDisplay(overlapping.startDate))
         if (overlapping.startDate.isNotBlank() && overlapping.endDate.isNotBlank()) append(" – ")
@@ -109,7 +109,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         termFilterId == null && locationFilterId == null
     }
     val terms = if (locationFilterId != null) {
-        val termIds = ScheduledClassStore.termIdsForLocation(locationFilterId)
+        val termIds = ClassStore.termIdsForLocation(locationFilterId)
         allTerms.filter { it.id in termIds }
     } else {
         allTerms
@@ -136,7 +136,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         SchedulePanelState.onTermCleared()
     }
 
-    fun syncTermIntoForm(term: AcademicTerm) {
+    fun syncTermIntoForm(term: Term) {
         selectedId = term.id
         isCreating = false
         form.load(
@@ -151,7 +151,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         formError = null
     }
 
-    fun loadIntoForm(term: AcademicTerm) {
+    fun loadIntoForm(term: Term) {
         selectedId = term.id
         isCreating = false
         SchedulePanelState.onTermSelected(term.id)
@@ -175,7 +175,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
 
     LaunchedEffect(classSyncId, allTerms) {
         val classId = classSyncId ?: return@LaunchedEffect
-        val scheduledClass = ScheduledClassStore.findById(classId) ?: return@LaunchedEffect
+        val scheduledClass = ClassStore.findById(classId) ?: return@LaunchedEffect
         val resolvedTermId = termIdForClassSelection(scheduledClass, allTerms) ?: return@LaunchedEffect
         allTerms.find { it.id == resolvedTermId }?.let { syncTermIntoForm(it) }
     }
@@ -448,7 +448,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
 
 @Composable
 private fun TermListItem(
-    term: AcademicTerm,
+    term: Term,
     selected: Boolean,
     compact: Boolean,
     onClick: () -> Unit,

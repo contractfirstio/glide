@@ -12,8 +12,8 @@ object PaymentStore {
 
     fun forBill(billId: String): Payment? = _payments.find { it.billId == billId }
 
-    fun removeAllForPeopleGroup(peopleGroupId: String) {
-        _payments.removeAll { it.peopleGroupId == peopleGroupId }
+    fun removeAllForSoldPlan(soldPlanId: String) {
+        _payments.removeAll { it.soldPlanId == soldPlanId }
     }
 
     fun recordFullPayment(
@@ -28,7 +28,7 @@ object PaymentStore {
             Payment(
                 billId = bill.id,
                 enrollmentId = bill.enrollmentId,
-                peopleGroupId = bill.peopleGroupId,
+                soldPlanId = bill.soldPlanId,
                 amountMinor = bill.amountMinor,
                 currencyCode = bill.currencyCode,
                 method = method,

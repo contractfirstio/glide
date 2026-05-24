@@ -11,7 +11,7 @@ import glide.model.BillLineItem
 import glide.model.BillLineItemKind
 import glide.model.BillLineItemSource
 import glide.model.BillStatus
-import glide.model.PlanEnrollment
+import glide.model.SoldPlanEnrollment
 import glide.model.billPaymentDueAtMillis
 import glide.model.canBeVoided
 import glide.model.isBillingEditable
@@ -25,11 +25,11 @@ object BillStore {
     fun forEnrollment(enrollmentId: String): List<Bill> =
         _bills.filter { it.enrollmentId == enrollmentId }.sortedByDescending { it.createdAtMillis }
 
-    fun forPeopleGroup(peopleGroupId: String): List<Bill> =
-        _bills.filter { it.peopleGroupId == peopleGroupId }.sortedByDescending { it.createdAtMillis }
+    fun forSoldPlan(soldPlanId: String): List<Bill> =
+        _bills.filter { it.soldPlanId == soldPlanId }.sortedByDescending { it.createdAtMillis }
 
-    fun removeAllForPeopleGroup(peopleGroupId: String) {
-        _bills.removeAll { it.peopleGroupId == peopleGroupId && it.canBeVoided() }
+    fun removeAllForSoldPlan(soldPlanId: String) {
+        _bills.removeAll { it.soldPlanId == soldPlanId && it.canBeVoided() }
     }
 
     fun billVoidBlockReason(billId: String): String? {
@@ -45,23 +45,23 @@ object BillStore {
 
     fun findById(id: String): Bill? = _bills.find { it.id == id }
 
-    fun createInitialPlanBill(enrollment: PlanEnrollment): Bill =
+    fun createInitialPlanBill(enrollment: SoldPlanEnrollment): Bill =
         addPlanBill(enrollment = enrollment, description = enrollment.planSnapshot.planName)
 
-    fun createRenewalBill(enrollment: PlanEnrollment): Bill =
+    fun createRenewalBill(enrollment: SoldPlanEnrollment): Bill =
         addPlanBill(
             enrollment = enrollment,
             description = "${enrollment.planSnapshot.planName} (renewal)",
         )
 
-    private fun addPlanBill(enrollment: PlanEnrollment, description: String): Bill {
+    private fun addPlanBill(enrollment: SoldPlanEnrollment, description: String): Bill {
         val snapshot = enrollment.planSnapshot
         val participantCount =
-            PeopleGroupStore.findById(enrollment.peopleGroupId)?.classAttendeeCount() ?: 0
+            findSoldPlanById(enrollment.soldPlanId)?.classAttendeeCount() ?: 0
         val grossMinor = snapshot.totalAmountMinor(participantCount)
         val bill = Bill(
             enrollmentId = enrollment.id,
-            peopleGroupId = enrollment.peopleGroupId,
+            soldPlanId = enrollment.soldPlanId,
             description = description,
             grossAmountMinor = grossMinor,
             amountMinor = grossMinor,
@@ -89,13 +89,13 @@ object BillStore {
 
         val subtotal = bill.subtotalBeforeAttendanceCreditsMinor()
         if (subtotal > 0) {
-            BillingCreditStore.consumeForBill(
+            AttendanceCreditStore.consumeForBill(
                 enrollmentId = bill.enrollmentId,
                 billId = billId,
                 maxToApplyMinor = subtotal,
             )
         }
-        val applied = BillingCreditStore.appliedToBill(billId)
+        val applied = AttendanceCreditStore.appliedToBill(billId)
         val updated = bill.recomputeFromLineItems(applied)
         if (updated != _bills[index]) {
             _bills[index] = updated
@@ -168,7 +168,7 @@ object BillStore {
         if (index < 0) return false
         val bill = _bills[index]
         if (hasOutstandingAttendanceSubmissions()) return false
-        if (soldPlanBlocksBillIssuance(bill.peopleGroupId)) return false
+        if (soldPlanBlocksBillIssuance(bill.soldPlanId)) return false
         if (bill.status != BillStatus.SCHEDULED) return false
         val reconciled = reconcileBillCredits(billId) ?: return false
         val issuedBill = reconciled.copy(
@@ -186,7 +186,7 @@ object BillStore {
         if (!AppSettingsStore.isConfigured) return "Company settings are not configured."
         val bill = findById(billId) ?: return "Bill not found."
         if (hasOutstandingAttendanceSubmissions()) return "Could not generate invoice."
-        if (soldPlanBlocksBillIssuance(bill.peopleGroupId)) return "Could not generate invoice."
+        if (soldPlanBlocksBillIssuance(bill.soldPlanId)) return "Could not generate invoice."
         val exportBill = if (bill.issuedInvoiceSnapshot != null) {
             bill
         } else {

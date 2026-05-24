@@ -15,7 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import glide.data.BillStore
 import glide.data.PendingBillIssuance
-import glide.data.PeopleGroupStore
+import glide.data.SoldPlanStore
 import glide.data.billsNeedingIssuanceMessage
 import glide.data.findBillsNeedingIssuance
 import glide.data.openPendingBillIssuance
@@ -24,7 +24,7 @@ import glide.ui.theme.GlideTextButton
 @Composable
 fun rememberPendingBillsToIssue(): List<PendingBillIssuance> {
     BillStore.all
-    PeopleGroupStore.all
+    SoldPlanStore.all
     return findBillsNeedingIssuance()
 }
 

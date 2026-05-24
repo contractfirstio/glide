@@ -1,12 +1,12 @@
 package glide.data
 
 import glide.model.AttendanceStatus
-import glide.model.ClassAttendee
-import glide.model.ClassSessionKey
+import glide.model.AttendanceAttendee
+import glide.model.AttendanceSessionKey
 import glide.model.formatMoney
 
 data class AbsentCreditPreview(
-    val attendee: ClassAttendee,
+    val attendee: AttendanceAttendee,
     val amountMinor: Long,
     val currencyCode: String,
     val eligible: Boolean,
@@ -22,20 +22,20 @@ data class AttendanceCreditResult(
 
 object AttendanceCreditService {
     fun absentAttendees(
-        attendees: List<ClassAttendee>,
+        attendees: List<AttendanceAttendee>,
         statusByAttendeeKey: Map<String, AttendanceStatus?>,
-    ): List<ClassAttendee> = attendees.filter { statusByAttendeeKey[it.key] == AttendanceStatus.ABSENT }
+    ): List<AttendanceAttendee> = attendees.filter { statusByAttendeeKey[it.key] == AttendanceStatus.ABSENT }
 
     fun previewCredits(
-        session: ClassSessionKey,
-        absentAttendees: List<ClassAttendee>,
+        session: AttendanceSessionKey,
+        absentAttendees: List<AttendanceAttendee>,
     ): List<AbsentCreditPreview> = absentAttendees.map { attendee ->
-        val enrollment = PlanEnrollmentStore.forPeopleGroup(attendee.peopleGroupId)
+        val enrollment = SoldPlanEnrollmentStore.forSoldPlan(attendee.soldPlanId)
         val snapshot = enrollment?.planSnapshot
         val amountMinor = snapshot?.perSessionCreditPerPersonMinor() ?: 0L
         val currencyCode = snapshot?.currencyCode ?: DEFAULT_CURRENCY_FALLBACK
-        val alreadyCredited = BillingCreditStore.hasCreditForAbsentSession(
-            session.scheduledClassId,
+        val alreadyCredited = AttendanceCreditStore.hasCreditForAbsentSession(
+            session.classId,
             session.sessionDate,
             attendee.key,
         )
@@ -49,9 +49,9 @@ object AttendanceCreditService {
     }
 
     fun applyCreditsForAbsentAttendees(
-        session: ClassSessionKey,
+        session: AttendanceSessionKey,
         className: String,
-        absentAttendees: List<ClassAttendee>,
+        absentAttendees: List<AttendanceAttendee>,
     ): AttendanceCreditResult {
         var creditsAdded = 0
         var creditsSkipped = 0
@@ -59,7 +59,7 @@ object AttendanceCreditService {
         var currencyCode = DEFAULT_CURRENCY_FALLBACK
 
         absentAttendees.forEach { attendee ->
-            val enrollment = PlanEnrollmentStore.forPeopleGroup(attendee.peopleGroupId)
+            val enrollment = SoldPlanEnrollmentStore.forSoldPlan(attendee.soldPlanId)
             if (enrollment == null) {
                 creditsSkipped++
                 return@forEach
@@ -71,8 +71,8 @@ object AttendanceCreditService {
                 creditsSkipped++
                 return@forEach
             }
-            if (BillingCreditStore.hasCreditForAbsentSession(
-                    session.scheduledClassId,
+            if (AttendanceCreditStore.hasCreditForAbsentSession(
+                    session.classId,
                     session.sessionDate,
                     attendee.key,
                 )
@@ -80,14 +80,14 @@ object AttendanceCreditService {
                 creditsSkipped++
                 return@forEach
             }
-            BillingCreditStore.add(
-                glide.model.BillingCredit(
+            AttendanceCreditStore.add(
+                glide.model.AttendanceCredit(
                     enrollmentId = enrollment.id,
-                    peopleGroupId = attendee.peopleGroupId,
+                    soldPlanId = attendee.soldPlanId,
                     amountMinor = amountMinor,
                     currencyCode = snapshot.currencyCode,
                     description = "Absent: ${attendee.displayName} · $className · ${session.sessionDate}",
-                    scheduledClassId = session.scheduledClassId,
+                    classId = session.classId,
                     sessionDate = session.sessionDate,
                     attendeeKey = attendee.key,
                 ),
@@ -118,7 +118,7 @@ object AttendanceCreditService {
                 }
             }
         }
-        val firstEnrollment = PlanEnrollmentStore.forPeopleGroup(eligible.first().attendee.peopleGroupId)
+        val firstEnrollment = SoldPlanEnrollmentStore.forSoldPlan(eligible.first().attendee.soldPlanId)
         val perPerson = eligible.first().amountMinor
         val currency = eligible.first().currencyCode
         val perSessionLabel = formatMoney(perPerson, currency)

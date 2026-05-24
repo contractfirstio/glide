@@ -1,7 +1,7 @@
 package glide.data
 
-import glide.model.ClassSessionKey
-import glide.model.ScheduledClass
+import glide.model.AttendanceSessionKey
+import glide.model.Class
 import glide.model.dateRange
 import glide.model.isValidTime24h
 import glide.model.occursOn
@@ -10,7 +10,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 
 data class PendingAttendanceSession(
-    val session: ClassSessionKey,
+    val session: AttendanceSessionKey,
     val className: String,
     val sessionDate: LocalDate,
     val unmarkedCount: Int,
@@ -37,15 +37,15 @@ fun findPastSessionsNeedingAttendance(
 ): List<PendingAttendanceSession> {
     if (TermStore.terms.isEmpty()) return emptyList()
     val pending = mutableListOf<PendingAttendanceSession>()
-    for (scheduledClass in ScheduledClassStore.classes) {
-        if (scheduledClass.customerGroupIds.isEmpty()) continue
+    for (scheduledClass in ClassStore.classes) {
+        if (scheduledClass.soldPlanIds.isEmpty()) continue
         collectPastSessionsNeedingAttendance(scheduledClass, today, now, pending)
     }
     return pending.sortedWith(compareBy({ it.sessionDate }, { it.className.lowercase() }))
 }
 
 private fun collectPastSessionsNeedingAttendance(
-    scheduledClass: ScheduledClass,
+    scheduledClass: Class,
     today: LocalDate,
     now: LocalTime,
     pending: MutableList<PendingAttendanceSession>,
@@ -72,18 +72,18 @@ private fun collectPastSessionsNeedingAttendance(
 }
 
 private fun pendingAttendanceForSession(
-    scheduledClass: ScheduledClass,
+    scheduledClass: Class,
     sessionDate: LocalDate,
 ): PendingAttendanceSession? {
     val attendees = attendeesForClass(scheduledClass, sessionDate)
     if (attendees.isEmpty()) return null
     val attendeeKeys = attendees.map { it.key }
-    val session = ClassSessionKey(
-        scheduledClassId = scheduledClass.id,
+    val session = AttendanceSessionKey(
+        classId = scheduledClass.id,
         sessionDate = sessionDate.toString(),
     )
-    val statusByKey = ClassAttendanceStore.draftForSession(session, attendeeKeys)
-    val unmarked = ClassAttendanceStore.unmarkedAttendeeKeys(statusByKey, attendeeKeys)
+    val statusByKey = AttendanceStore.draftForSession(session, attendeeKeys)
+    val unmarked = AttendanceStore.unmarkedAttendeeKeys(statusByKey, attendeeKeys)
     if (unmarked.isEmpty()) return null
     return PendingAttendanceSession(
         session = session,
@@ -96,7 +96,7 @@ private fun pendingAttendanceForSession(
 
 fun openPendingAttendanceSession(pending: PendingAttendanceSession) {
     AppViewState.switchTo(AppViewMode.SCHEDULING)
-    AttendancePanelState.openForReminder(pending.session.scheduledClassId, pending.sessionDate)
+    AttendancePanelState.openForReminder(pending.session.classId, pending.sessionDate)
 }
 
 private const val ATTENDANCE_REMINDER_POLL_MS = 30_000L
@@ -109,8 +109,8 @@ fun millisUntilNextAttendanceReminderCheck(
     if (TermStore.terms.isEmpty()) return ATTENDANCE_REMINDER_POLL_MS
     var nextWakeMs = ATTENDANCE_REMINDER_POLL_MS
     val nowMs = now.toSecondOfDay() * 1000L + now.nano / 1_000_000
-    for (scheduledClass in ScheduledClassStore.classes) {
-        if (scheduledClass.customerGroupIds.isEmpty()) continue
+    for (scheduledClass in ClassStore.classes) {
+        if (scheduledClass.soldPlanIds.isEmpty()) continue
         if (!scheduledClass.occursOn(today)) continue
         if (!isValidTime24h(scheduledClass.endTime)) continue
         val parts = scheduledClass.endTime.split(":")

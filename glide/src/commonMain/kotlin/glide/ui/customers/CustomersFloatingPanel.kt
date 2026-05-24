@@ -5,7 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import glide.ui.components.FloatingPanelShell
 import glide.ui.layout.PanelSlots
-import glide.ui.peoplegroup.CustomersPeopleGroupPanel
+import glide.ui.peoplegroup.SoldPlansPanel
 
 @Composable
 fun CustomersFloatingPanel(
@@ -14,10 +14,10 @@ fun CustomersFloatingPanel(
 ) {
     FloatingPanelShell(
         title = "Sold Plans",
-        slot = PanelSlots.CUSTOMERS,
+        slot = PanelSlots.SOLD_PLANS,
         windowWidthPx = windowWidthPx,
         windowHeightPx = windowHeightPx,
     ) {
-        CustomersPeopleGroupPanel(modifier = Modifier.fillMaxSize())
+        SoldPlansPanel(modifier = Modifier.fillMaxSize())
     }
 }

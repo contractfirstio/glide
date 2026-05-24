@@ -1,70 +1,68 @@
 package glide.data
 
-import glide.model.PeopleGroupType
-import glide.model.ScheduledClass
+import glide.model.Class
 
-sealed class AddCustomerGroupResult {
-    data object Success : AddCustomerGroupResult()
-    data object AlreadyAssigned : AddCustomerGroupResult()
-    data object GroupNotFound : AddCustomerGroupResult()
-    data object NotACustomerGroup : AddCustomerGroupResult()
-    data class AlreadyOnAnotherClass(val className: String) : AddCustomerGroupResult()
+sealed class AddSoldPlanResult {
+    data object Success : AddSoldPlanResult()
+    data object AlreadyAssigned : AddSoldPlanResult()
+    data object GroupNotFound : AddSoldPlanResult()
+    data object NotASoldPlan : AddSoldPlanResult()
+    data class AlreadyOnAnotherClass(val className: String) : AddSoldPlanResult()
     data class PlanCannotBeFullyScheduled(
         val planSessions: Int,
         val availableSessions: Int,
-    ) : AddCustomerGroupResult()
+    ) : AddSoldPlanResult()
     data class CapacityExceeded(
         val currentHeadcount: Int,
         val groupHeadcount: Int,
         val maxCapacity: Int,
-    ) : AddCustomerGroupResult()
-    data class RollingPlanNotAllowedOnClass(val message: String) : AddCustomerGroupResult()
+    ) : AddSoldPlanResult()
+    data class RollingPlanNotAllowedOnClass(val message: String) : AddSoldPlanResult()
 }
 
-fun headcountForCustomerGroups(customerGroupIds: List<String>): Int =
-    customerGroupIds.sumOf { groupId ->
-        PeopleGroupStore.findById(groupId)?.classAttendeeCount() ?: 0
+fun headcountForSoldPlans(soldPlanIds: List<String>): Int =
+    soldPlanIds.sumOf { groupId ->
+        findSoldPlanById(groupId)?.classAttendeeCount() ?: 0
     }
 
-fun ScheduledClass.enrolledHeadcount(): Int = headcountForCustomerGroups(customerGroupIds)
+fun Class.enrolledHeadcount(): Int = headcountForSoldPlans(soldPlanIds)
 
-fun isCustomerGroupAvailableForClass(groupId: String, classId: String?): Boolean =
-    ScheduledClassStore.findClassContainingCustomerGroup(groupId, excludeClassId = classId) == null
+fun isSoldPlanAvailableForClass(groupId: String, classId: String?): Boolean =
+    ClassStore.findClassContainingSoldPlan(groupId, excludeClassId = classId) == null
 
-fun validateCustomerGroupsForClass(customerGroupIds: List<String>, classId: String?): String? {
-    for (groupId in customerGroupIds) {
-        val other = ScheduledClassStore.findClassContainingCustomerGroup(groupId, excludeClassId = classId)
+fun validateSoldPlansForClass(soldPlanIds: List<String>, classId: String?): String? {
+    for (groupId in soldPlanIds) {
+        val other = ClassStore.findClassContainingSoldPlan(groupId, excludeClassId = classId)
             ?: continue
-        val label = PeopleGroupStore.findById(groupId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
+        val label = findSoldPlanById(groupId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
             ?: "This group"
-        return "$label is already on \"${other.name}\". Each customer group can only be on one class."
+        return "$label is already on \"${other.name}\". Each sold plan can only be on one class."
     }
     return null
 }
 
-fun tryAddCustomerGroup(
+fun tryAddSoldPlan(
     currentGroupIds: List<String>,
     groupId: String,
     locationId: String?,
     classId: String? = null,
-    scheduledClass: ScheduledClass? = null,
-): AddCustomerGroupResult {
-    if (groupId in currentGroupIds) return AddCustomerGroupResult.AlreadyAssigned
-    val group = PeopleGroupStore.findById(groupId) ?: return AddCustomerGroupResult.GroupNotFound
-    if (group.type != PeopleGroupType.CUSTOMER) return AddCustomerGroupResult.NotACustomerGroup
+    scheduledClass: Class? = null,
+): AddSoldPlanResult {
+    if (groupId in currentGroupIds) return AddSoldPlanResult.AlreadyAssigned
+    val group = findSoldPlanById(groupId) ?: return AddSoldPlanResult.GroupNotFound
 
-    ScheduledClassStore.findClassContainingCustomerGroup(groupId, excludeClassId = classId)?.let { other ->
-        return AddCustomerGroupResult.AlreadyOnAnotherClass(other.name)
+    ClassStore.findClassContainingSoldPlan(groupId, excludeClassId = classId)?.let { other ->
+        return AddSoldPlanResult.AlreadyOnAnotherClass(other.name)
     }
 
-    val cls = scheduledClass ?: classId?.let { ScheduledClassStore.findById(it) }
+    val cls = scheduledClass ?: classId?.let { ClassStore.findById(it) }
     if (cls != null) {
-        validateRollingPlanEnrollmentForClass(groupId, cls)?.let { message ->
-            return AddCustomerGroupResult.RollingPlanNotAllowedOnClass(message)
+        validateRollingSoldPlanEnrollmentForClass(groupId, cls)?.let { message ->
+            return AddSoldPlanResult.RollingPlanNotAllowedOnClass(message)
         }
         planScheduleCheckForClass(groupId, cls)?.let { check ->
             if (!check.canFullySchedule) {
-                return AddCustomerGroupResult.PlanCannotBeFullyScheduled(
+                return AddSoldPlanResult.PlanCannotBeFullyScheduled(
                     planSessions = check.requiredSessions,
                     availableSessions = check.availableSessions,
                 )
@@ -74,29 +72,29 @@ fun tryAddCustomerGroup(
 
     val maxCapacity = locationId?.let { LocationStore.findById(it)?.maxCapacity }
     if (maxCapacity != null) {
-        val current = headcountForCustomerGroups(currentGroupIds)
+        val current = headcountForSoldPlans(currentGroupIds)
         val adding = group.classAttendeeCount()
         if (current + adding > maxCapacity) {
-            return AddCustomerGroupResult.CapacityExceeded(
+            return AddSoldPlanResult.CapacityExceeded(
                 currentHeadcount = current,
                 groupHeadcount = adding,
                 maxCapacity = maxCapacity,
             )
         }
     }
-    return AddCustomerGroupResult.Success
+    return AddSoldPlanResult.Success
 }
 
-fun AddCustomerGroupResult.toUserMessage(): String = when (this) {
-    AddCustomerGroupResult.Success -> "Customer group added to class."
-    AddCustomerGroupResult.AlreadyAssigned -> "This group is already on the class."
-    AddCustomerGroupResult.GroupNotFound -> "Customer group not found."
-    AddCustomerGroupResult.NotACustomerGroup -> "Only customer groups can be assigned to classes."
-    is AddCustomerGroupResult.AlreadyOnAnotherClass ->
-        "This group is already assigned to \"$className\". A customer group can only be on one class."
-    is AddCustomerGroupResult.PlanCannotBeFullyScheduled ->
+fun AddSoldPlanResult.toUserMessage(): String = when (this) {
+    AddSoldPlanResult.Success -> "Sold plan added to class."
+    AddSoldPlanResult.AlreadyAssigned -> "This group is already on the class."
+    AddSoldPlanResult.GroupNotFound -> "Sold plan not found."
+    AddSoldPlanResult.NotASoldPlan -> "Only sold plans can be assigned to classes."
+    is AddSoldPlanResult.AlreadyOnAnotherClass ->
+        "This group is already assigned to \"$className\". A sold plan can only be on one class."
+    is AddSoldPlanResult.PlanCannotBeFullyScheduled ->
         planCannotFullyScheduleMessage(planSessions, availableSessions)
-    is AddCustomerGroupResult.CapacityExceeded ->
+    is AddSoldPlanResult.CapacityExceeded ->
         "Room capacity exceeded ($currentHeadcount + $groupHeadcount > $maxCapacity)."
-    is AddCustomerGroupResult.RollingPlanNotAllowedOnClass -> message
+    is AddSoldPlanResult.RollingPlanNotAllowedOnClass -> message
 }

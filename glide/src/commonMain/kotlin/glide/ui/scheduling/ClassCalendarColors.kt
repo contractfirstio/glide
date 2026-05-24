@@ -1,7 +1,7 @@
 package glide.ui.scheduling
 
 import androidx.compose.ui.graphics.Color
-import glide.model.ScheduledClass
+import glide.model.Class
 import kotlin.math.absoluteValue
 
 /** Palette tuned for the dark Glide canvas. */
@@ -25,10 +25,10 @@ fun defaultCalendarColorArgb(classId: String): Int {
     return ClassCalendarPalette[index]
 }
 
-fun ScheduledClass.resolvedCalendarColorArgb(): Int =
+fun Class.resolvedCalendarColorArgb(): Int =
     calendarColorArgb ?: defaultCalendarColorArgb(id)
 
-fun ScheduledClass.resolvedCalendarColor(): Color =
+fun Class.resolvedCalendarColor(): Color =
     Color(resolvedCalendarColorArgb())
 
 fun Int.toCalendarColor(): Color = Color(this)

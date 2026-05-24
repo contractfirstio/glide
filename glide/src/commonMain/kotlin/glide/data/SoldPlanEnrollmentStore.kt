@@ -1,42 +1,41 @@
 package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
-import glide.model.PlanEnrollment
-import glide.model.PlanEnrollmentStatus
+import glide.model.SoldPlanEnrollment
+import glide.model.SoldPlanEnrollmentStatus
 import glide.model.isOngoing
 import glide.model.PlanSnapshot
 import glide.model.parseIsoLocalDate
-import glide.model.PeopleGroup
-import glide.model.PeopleGroupType
+import glide.model.SoldPlan
 import java.time.ZoneId
 
-object PlanEnrollmentStore {
-    private val _enrollments = mutableStateListOf<PlanEnrollment>()
+object SoldPlanEnrollmentStore {
+    private val _enrollments = mutableStateListOf<SoldPlanEnrollment>()
 
-    val all: List<PlanEnrollment> get() = _enrollments
+    val all: List<SoldPlanEnrollment> get() = _enrollments
 
-    fun findById(id: String): PlanEnrollment? = _enrollments.find { it.id == id }
+    fun findById(id: String): SoldPlanEnrollment? = _enrollments.find { it.id == id }
 
-    fun forPeopleGroup(peopleGroupId: String): PlanEnrollment? =
-        _enrollments.find { it.peopleGroupId == peopleGroupId && it.status.isOngoing() }
+    fun forSoldPlan(soldPlanId: String): SoldPlanEnrollment? =
+        _enrollments.find { it.soldPlanId == soldPlanId && it.status.isOngoing() }
 
     /** Ongoing enrollment, or the most recent one when the plan has finished or been cancelled. */
-    fun displayForPeopleGroup(peopleGroupId: String): PlanEnrollment? =
-        forPeopleGroup(peopleGroupId)
+    fun displayForSoldPlan(soldPlanId: String): SoldPlanEnrollment? =
+        forSoldPlan(soldPlanId)
             ?: _enrollments
-                .filter { it.peopleGroupId == peopleGroupId }
+                .filter { it.soldPlanId == soldPlanId }
                 .maxByOrNull { it.startedAtMillis }
 
-    fun create(enrollment: PlanEnrollment) {
-        require(forPeopleGroup(enrollment.peopleGroupId) == null) {
-            "This customer plan already has an ongoing enrollment."
+    fun create(enrollment: SoldPlanEnrollment) {
+        require(forSoldPlan(enrollment.soldPlanId) == null) {
+            "This sold plan already has an ongoing enrollment."
         }
         _enrollments.add(enrollment)
     }
 
     fun setStatus(
         enrollmentId: String,
-        status: PlanEnrollmentStatus,
+        status: SoldPlanEnrollmentStatus,
         renewalStoppedAtMillis: Long? = null,
     ): Boolean {
         val index = _enrollments.indexOfFirst { it.id == enrollmentId }
@@ -49,16 +48,15 @@ object PlanEnrollmentStore {
         return true
     }
 
-    fun createForCustomerGroup(group: PeopleGroup, planSnapshot: PlanSnapshot): PlanEnrollment? {
-        if (group.type != PeopleGroupType.CUSTOMER) return null
-        if (forPeopleGroup(group.id) != null) return forPeopleGroup(group.id)
-        val startMillis = parseIsoLocalDate(group.planStartDate)
+    fun createForSoldPlan(soldPlan: SoldPlan, planSnapshot: PlanSnapshot): SoldPlanEnrollment? {
+        if (forSoldPlan(soldPlan.id) != null) return forSoldPlan(soldPlan.id)
+        val startMillis = parseIsoLocalDate(soldPlan.planStartDate)
             ?.atStartOfDay(ZoneId.systemDefault())
             ?.toInstant()
             ?.toEpochMilli()
             ?: System.currentTimeMillis()
-        val enrollment = PlanEnrollment(
-            peopleGroupId = group.id,
+        val enrollment = SoldPlanEnrollment(
+            soldPlanId = soldPlan.id,
             planSnapshot = planSnapshot,
             startedAtMillis = startMillis,
             planPeriodStartedAtMillis = startMillis,
@@ -73,7 +71,7 @@ object PlanEnrollmentStore {
         _enrollments[index] = _enrollments[index].copy(planPeriodStartedAtMillis = startMillis)
     }
 
-    fun removeAllForPeopleGroup(peopleGroupId: String) {
-        _enrollments.removeAll { it.peopleGroupId == peopleGroupId }
+    fun removeAllForSoldPlan(soldPlanId: String) {
+        _enrollments.removeAll { it.soldPlanId == soldPlanId }
     }
 }
