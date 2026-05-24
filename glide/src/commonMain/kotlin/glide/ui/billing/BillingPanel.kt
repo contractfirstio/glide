@@ -50,12 +50,13 @@ import glide.data.PlanEnrollmentStore
 import glide.data.RollingPlanBillingService
 import glide.data.RollingPlanCancellationService
 import glide.data.ScheduledClassStore
+import glide.data.classAttendeeCount
 import glide.data.countScheduledPlanSessionsInPeriod
+import glide.data.countSubmittedPlanSessionsInPeriod
 import glide.model.PlanEnrollmentStatus
 import glide.data.PaymentStore
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
-import glide.data.memberCount
 import glide.data.resolveMainClient
 import glide.model.Bill
 import glide.model.BillLineItem
@@ -433,7 +434,8 @@ private fun EnrollmentSummary(
     showBackground: Boolean = true,
 ) {
     val snapshot = enrollment.planSnapshot
-    val householdSize = PeopleGroupStore.findById(enrollment.peopleGroupId)?.memberCount() ?: 1
+    val participantCount =
+        PeopleGroupStore.findById(enrollment.peopleGroupId)?.classAttendeeCount()?.coerceAtLeast(1) ?: 1
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -477,8 +479,8 @@ private fun EnrollmentSummary(
             style = MaterialTheme.typography.bodySmall,
         )
         Text(
-            text = "Plan total: ${formatMoney(snapshot.totalAmountMinor(householdSize), snapshot.currencyCode)} " +
-                "($householdSize ${if (householdSize == 1) "person" else "people"})",
+            text = "Plan total: ${formatMoney(snapshot.totalAmountMinor(participantCount), snapshot.currencyCode)} " +
+                "($participantCount class ${if (participantCount == 1) "participant" else "participants"})",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -497,18 +499,18 @@ private fun EnrollmentSummary(
         }
         if (snapshot.rolling) {
             val planSize = snapshot.lessonCount.coerceAtLeast(1)
-            val scheduled = countScheduledPlanSessionsInPeriod(
+            val submitted = countSubmittedPlanSessionsInPeriod(
                 peopleGroupId = enrollment.peopleGroupId,
                 periodStartedAtMillis = enrollment.planPeriodStartedAtMillis,
             )
-            val remaining = (planSize - scheduled).coerceAtLeast(0)
+            val remaining = (planSize - submitted).coerceAtLeast(0)
             val billingLine = when (enrollment.status) {
                 PlanEnrollmentStatus.CANCELLING ->
-                    "Finishing current plan: $scheduled of $planSize scheduled classes · renewal stopped"
+                    "Finishing current plan: $submitted of $planSize classes with attendance · renewal stopped"
                 PlanEnrollmentStatus.CANCELLED ->
-                    "Plan completed: $scheduled of $planSize scheduled classes in last period"
+                    "Plan completed: $submitted of $planSize classes with attendance in last period"
                 else ->
-                    "Plan billing: $scheduled of $planSize scheduled classes · $remaining until renewal"
+                    "Plan billing: $submitted of $planSize classes with attendance · $remaining until renewal bill"
             }
             Text(
                 text = billingLine,

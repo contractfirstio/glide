@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import glide.data.AbsentCreditPreview
 import glide.data.AttendanceCreditService
 import glide.data.ClassAttendanceStore
+import glide.data.RollingPlanBillingService
 import glide.data.LocationStore
 import glide.data.ScheduledClassStore
 import glide.data.attendeesForClass
@@ -143,6 +144,9 @@ fun AttendancePanel(
             highlightUnmarked = false
             saveMessageIsError = false
             saveMessage = "Attendance submitted."
+        }
+        attendees.map { it.peopleGroupId }.distinct().forEach { groupId ->
+            RollingPlanBillingService.syncRollingPlanBilling(groupId)
         }
         showCreditDialog = false
     }

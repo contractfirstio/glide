@@ -7,8 +7,8 @@ import glide.model.PlanEnrollmentStatus
 
 object RollingPlanBillingService {
     /**
-     * Schedules a renewal bill when the plan is down to the last scheduled class in the period.
-     * Based on calendar class count (plan lesson count), not attendance.
+     * Schedules a renewal bill after attendance for the final class in the current plan period
+     * has been submitted.
      */
     fun ensureRenewalBillIfPlanEnding(peopleGroupId: String): Boolean {
         val enrollment = PlanEnrollmentStore.forPeopleGroup(peopleGroupId) ?: return false
@@ -20,12 +20,11 @@ object RollingPlanBillingService {
         if (enrollment.status != PlanEnrollmentStatus.ACTIVE) return false
         if (!enrollment.planSnapshot.rolling) return false
         val planSize = enrollment.planSnapshot.lessonCount.coerceAtLeast(1)
-        val elapsed = countScheduledPlanSessionsInPeriod(
+        val submitted = countSubmittedPlanSessionsInPeriod(
             peopleGroupId = enrollment.peopleGroupId,
             periodStartedAtMillis = enrollment.planPeriodStartedAtMillis,
         )
-        val remaining = planSize - elapsed
-        if (remaining > 1) return false
+        if (submitted < planSize) return false
         if (BillStore.hasScheduledRenewalBill(enrollment.id)) return false
         BillStore.createRenewalBill(enrollment)
         return true
