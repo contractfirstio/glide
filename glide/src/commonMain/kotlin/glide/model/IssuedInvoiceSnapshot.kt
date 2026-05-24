@@ -1,6 +1,11 @@
 package glide.model
 
 /** Frozen invoice fields captured when a bill is issued — survives later edits to contacts, classes, and settings. */
+data class IssuedInvoiceDebitLine(
+    val description: String,
+    val amountMinor: Long,
+)
+
 data class IssuedInvoiceCreditLine(
     val description: String,
     val amountMinor: Long,
@@ -26,9 +31,8 @@ data class IssuedInvoiceSnapshot(
     val billToName: String,
     val billToEmail: String,
     val billToPhone: String,
-    val packLineDescription: String,
     val classSchedule: IssuedInvoiceClassSchedule?,
-    val grossAmountMinor: Long,
+    val debitLines: List<IssuedInvoiceDebitLine>,
     val creditLines: List<IssuedInvoiceCreditLine>,
     val totalAmountMinor: Long,
     val currencyCode: String,

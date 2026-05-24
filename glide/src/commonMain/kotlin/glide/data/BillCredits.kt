@@ -1,6 +1,8 @@
 package glide.data
 
 import glide.model.Bill
+import glide.model.BillLineItemKind
+import glide.model.isIssuedToCustomer
 
 fun Bill.grossAmountMinorResolved(): Long =
     grossAmountMinor ?: (amountMinor + BillingCreditStore.appliedTotalMinorForBill(id))
@@ -16,4 +18,15 @@ fun Bill.packLineDescription(): String {
 }
 
 fun Bill.creditAppliedMinor(): Long =
-    (grossAmountMinorResolved() - amountMinor).coerceAtLeast(0)
+    if (isIssuedToCustomer()) {
+        issuedInvoiceSnapshot?.creditLines?.sumOf { it.amountMinor }
+            ?: if (lineItems.isNotEmpty()) {
+                lineItems.filter { it.kind == BillLineItemKind.CREDIT }.sumOf { it.amountMinor }
+            } else {
+                (grossAmountMinorResolved() - amountMinor).coerceAtLeast(0)
+            }
+    } else if (lineItems.isNotEmpty()) {
+        lineItems.filter { it.kind == BillLineItemKind.CREDIT }.sumOf { it.amountMinor }
+    } else {
+        (grossAmountMinorResolved() - amountMinor).coerceAtLeast(0)
+    }

@@ -5,8 +5,13 @@ import glide.billing.InvoiceExporter
 import glide.billing.toIssuedInvoiceSnapshot
 import glide.billing.toLiveInvoiceContent
 import glide.model.Bill
+import glide.model.BillLineItem
+import glide.model.BillLineItemKind
+import glide.model.BillLineItemSource
 import glide.model.BillStatus
 import glide.model.PackEnrollment
+import glide.model.billPaymentDueAtMillis
+import glide.model.isBillingEditable
 
 object BillStore {
     private val _bills = mutableStateListOf<Bill>()
@@ -42,73 +47,118 @@ object BillStore {
             amountMinor = grossMinor,
             currencyCode = snapshot.currencyCode,
             status = BillStatus.SCHEDULED,
+            lineItems = listOf(
+                BillLineItem(
+                    description = description,
+                    amountMinor = grossMinor,
+                    kind = BillLineItemKind.DEBIT,
+                    source = BillLineItemSource.PACK,
+                ),
+            ),
         )
         _bills.add(bill)
         return reconcileBillCredits(bill.id) ?: bill
     }
 
-    /** Applies any unallocated credits to an open bill and updates the net amount due. */
+    /** Applies any unallocated credits to a scheduled bill and updates the net amount due. */
     fun reconcileBillCredits(billId: String): Bill? {
         val index = _bills.indexOfFirst { it.id == billId }
         if (index < 0) return null
-        val bill = _bills[index]
-        if (bill.status == BillStatus.PAID || bill.status == BillStatus.VOID) return bill
+        val bill = _bills[index].ensureLineItems()
+        if (!bill.isBillingEditable()) return bill
 
-        val gross = bill.grossAmountMinorResolved()
-        val remainingDue = bill.amountMinor
-        val extraApplied = if (remainingDue > 0) {
+        val subtotal = bill.subtotalBeforeAttendanceCreditsMinor()
+        if (subtotal > 0) {
             BillingCreditStore.consumeForBill(
                 enrollmentId = bill.enrollmentId,
                 billId = billId,
-                maxToApplyMinor = remainingDue,
+                maxToApplyMinor = subtotal,
             )
-        } else {
-            0L
         }
-
-        val updated = bill.copy(
-            grossAmountMinor = bill.grossAmountMinor ?: gross,
-            amountMinor = (remainingDue - extraApplied).coerceAtLeast(0),
-        )
-        if (updated != bill) {
+        val applied = BillingCreditStore.appliedToBill(billId)
+        val updated = bill.recomputeFromLineItems(applied)
+        if (updated != _bills[index]) {
             _bills[index] = updated
         }
         return _bills[index]
     }
 
+    fun addLineItem(
+        billId: String,
+        description: String,
+        amountMinor: Long,
+        kind: BillLineItemKind,
+    ): Boolean = mutateLineItems(billId) { bill, items ->
+        items + BillLineItem(
+            description = description.trim(),
+            amountMinor = amountMinor,
+            kind = kind,
+            source = BillLineItemSource.MANUAL,
+        )
+    }
+
+    fun updateLineItem(
+        billId: String,
+        lineItemId: String,
+        description: String,
+        amountMinor: Long,
+        kind: BillLineItemKind,
+    ): Boolean = mutateLineItems(billId) { bill, items ->
+        items.map { item ->
+            if (item.id != lineItemId || !item.isEditableBeforeIssue()) item
+            else item.copy(
+                description = description.trim(),
+                amountMinor = amountMinor,
+                kind = kind,
+            )
+        }
+    }
+
+    fun removeLineItem(billId: String, lineItemId: String): Boolean = mutateLineItems(billId) { _, items ->
+        if (items.none { it.id == lineItemId && it.isEditableBeforeIssue() }) null
+        else items.filterNot { it.id == lineItemId && it.isEditableBeforeIssue() }
+    }
+
+    private inline fun mutateLineItems(
+        billId: String,
+        transform: (Bill, List<BillLineItem>) -> List<BillLineItem>?,
+    ): Boolean {
+        val index = _bills.indexOfFirst { it.id == billId }
+        if (index < 0) return false
+        val bill = _bills[index]
+        if (!bill.isBillingEditable()) return false
+        val ensured = bill.ensureLineItems()
+        val baseItems = ensured.lineItems.filter { it.source != BillLineItemSource.ATTENDANCE_CREDIT }
+        val nextBaseItems = transform(ensured, baseItems) ?: return false
+        if (nextBaseItems.isEmpty()) return false
+        _bills[index] = ensured.copy(lineItems = nextBaseItems)
+        reconcileBillCredits(billId)
+        return true
+    }
+
     fun applyPendingCreditsToOpenBills(enrollmentId: String) {
         forEnrollment(enrollmentId)
-            .filter { it.status == BillStatus.SCHEDULED || it.status == BillStatus.ISSUED }
+            .filter { it.isBillingEditable() }
             .forEach { reconcileBillCredits(it.id) }
     }
 
     fun setIssued(billId: String, issued: Boolean, issuedAtMillis: Long = System.currentTimeMillis()): Boolean {
+        if (!issued) return false
         val index = _bills.indexOfFirst { it.id == billId }
         if (index < 0) return false
         val bill = _bills[index]
-        return if (issued) {
-            if (hasOutstandingAttendanceSubmissions()) return false
-            if (soldPackBlocksBillIssuance(bill.peopleGroupId)) return false
-            if (bill.status != BillStatus.SCHEDULED) return false
-            val reconciled = reconcileBillCredits(billId) ?: return false
-            val issuedBill = reconciled.copy(
-                status = BillStatus.ISSUED,
-                issuedAtMillis = issuedAtMillis,
-                dueAtMillis = reconciled.dueAtMillis ?: issuedAtMillis,
-            )
-            val snapshot = issuedBill.toLiveInvoiceContent()?.toIssuedInvoiceSnapshot()
-            _bills[index] = issuedBill.copy(issuedInvoiceSnapshot = snapshot)
-            true
-        } else {
-            if (bill.status != BillStatus.ISSUED) return false
-            _bills[index] = bill.copy(
-                status = BillStatus.SCHEDULED,
-                issuedAtMillis = null,
-                dueAtMillis = null,
-                issuedInvoiceSnapshot = null,
-            )
-            true
-        }
+        if (hasOutstandingAttendanceSubmissions()) return false
+        if (soldPackBlocksBillIssuance(bill.peopleGroupId)) return false
+        if (bill.status != BillStatus.SCHEDULED) return false
+        val reconciled = reconcileBillCredits(billId) ?: return false
+        val issuedBill = reconciled.copy(
+            status = BillStatus.ISSUED,
+            issuedAtMillis = issuedAtMillis,
+            dueAtMillis = billPaymentDueAtMillis(issuedAtMillis),
+        )
+        val snapshot = issuedBill.toLiveInvoiceContent()?.toIssuedInvoiceSnapshot()
+        _bills[index] = issuedBill.copy(issuedInvoiceSnapshot = snapshot)
+        return true
     }
 
     fun generateInvoice(billId: String): Boolean {

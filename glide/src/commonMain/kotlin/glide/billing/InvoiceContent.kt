@@ -4,13 +4,17 @@ import glide.data.AppSettingsStore
 import glide.data.BillStore
 import glide.data.BillingCreditStore
 import glide.data.PeopleGroupStore
+import glide.data.ensureLineItems
 import glide.data.grossAmountMinorResolved
 import glide.data.packLineDescription
 import glide.data.resolveMainContact
 import glide.model.Bill
+import glide.model.BillLineItemKind
 import glide.model.IssuedInvoiceClassSchedule
 import glide.model.IssuedInvoiceCreditLine
+import glide.model.IssuedInvoiceDebitLine
 import glide.model.IssuedInvoiceSnapshot
+import glide.model.billPaymentDueAtMillis
 import glide.model.displayDateMillis
 import glide.model.formatMoney
 import java.text.SimpleDateFormat
@@ -24,6 +28,13 @@ data class InvoiceCreditLine(
     fun formattedAmount(currencyCode: String): String = "-${formatMoney(amountMinor, currencyCode)}"
 }
 
+data class InvoiceDebitLine(
+    val description: String,
+    val amountMinor: Long,
+) {
+    fun formattedAmount(currencyCode: String): String = formatMoney(amountMinor, currencyCode)
+}
+
 data class InvoiceContent(
     val fromName: String,
     val fromEmail: String,
@@ -35,15 +46,12 @@ data class InvoiceContent(
     val billToName: String,
     val billToEmail: String,
     val billToPhone: String,
-    val packLineDescription: String,
     val classSchedule: InvoiceClassSchedule?,
-    val grossAmountMinor: Long,
+    val debitLines: List<InvoiceDebitLine>,
     val creditLines: List<InvoiceCreditLine>,
     val totalAmountMinor: Long,
     val currencyCode: String,
 ) {
-    val formattedGross: String get() = formatMoney(grossAmountMinor, currencyCode)
-
     val formattedTotal: String get() = formatMoney(totalAmountMinor, currencyCode)
 
     val issuedDateLabel: String get() = invoiceDateFormat.format(Date(issuedAtMillis))
@@ -64,12 +72,18 @@ fun Bill.toInvoiceContent(): InvoiceContent? {
 fun Bill.toLiveInvoiceContent(): InvoiceContent? {
     val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
     val main = group.resolveMainContact()
-    val gross = grossAmountMinorResolved()
-    val creditLines = BillingCreditStore.appliedToBill(id).map { credit ->
-        InvoiceCreditLine(
-            description = credit.description,
-            amountMinor = credit.amountMinor,
-        )
+    val bill = ensureLineItems()
+    val (debitLines, creditLines) = if (bill.lineItems.isNotEmpty()) {
+        bill.lineItems.partition { it.kind == BillLineItemKind.DEBIT }.let { (debits, credits) ->
+            debits.map { InvoiceDebitLine(it.description, it.amountMinor) } to
+                credits.map { InvoiceCreditLine(it.description, it.amountMinor) }
+        }
+    } else {
+        val gross = grossAmountMinorResolved()
+        listOf(InvoiceDebitLine(packLineDescription(), gross)) to
+            BillingCreditStore.appliedToBill(id).map { credit ->
+                InvoiceCreditLine(description = credit.description, amountMinor = credit.amountMinor)
+            }
     }
     return InvoiceContent(
         fromName = AppSettingsStore.legalCompanyName,
@@ -78,13 +92,12 @@ fun Bill.toLiveInvoiceContent(): InvoiceContent? {
         fpsNumber = AppSettingsStore.fpsNumber,
         invoiceNumber = id.replace("-", "").take(8).uppercase(Locale.UK),
         issuedAtMillis = displayDateMillis(),
-        dueAtMillis = dueAtMillis,
+        dueAtMillis = dueAtMillis ?: billPaymentDueAtMillis(displayDateMillis()),
         billToName = main.name.ifBlank { "Customer" },
         billToEmail = main.email,
         billToPhone = main.phone,
-        packLineDescription = packLineDescription(),
         classSchedule = toInvoiceClassSchedule(),
-        grossAmountMinor = gross,
+        debitLines = debitLines,
         creditLines = creditLines,
         totalAmountMinor = amountMinor,
         currencyCode = currencyCode,
@@ -102,9 +115,8 @@ fun InvoiceContent.toIssuedInvoiceSnapshot(): IssuedInvoiceSnapshot = IssuedInvo
     billToName = billToName,
     billToEmail = billToEmail,
     billToPhone = billToPhone,
-    packLineDescription = packLineDescription,
     classSchedule = classSchedule?.toIssuedInvoiceClassSchedule(),
-    grossAmountMinor = grossAmountMinor,
+    debitLines = debitLines.map { it.toIssuedInvoiceDebitLine() },
     creditLines = creditLines.map { it.toIssuedInvoiceCreditLine() },
     totalAmountMinor = totalAmountMinor,
     currencyCode = currencyCode,
@@ -121,9 +133,8 @@ fun IssuedInvoiceSnapshot.toInvoiceContent(): InvoiceContent = InvoiceContent(
     billToName = billToName,
     billToEmail = billToEmail,
     billToPhone = billToPhone,
-    packLineDescription = packLineDescription,
     classSchedule = classSchedule?.toInvoiceClassSchedule(),
-    grossAmountMinor = grossAmountMinor,
+    debitLines = debitLines.map { it.toInvoiceDebitLine() },
     creditLines = creditLines.map { it.toInvoiceCreditLine() },
     totalAmountMinor = totalAmountMinor,
     currencyCode = currencyCode,
@@ -148,6 +159,12 @@ private fun IssuedInvoiceClassSchedule.toInvoiceClassSchedule(): InvoiceClassSch
         billingWindowStartLabel = billingWindowStartLabel,
         scheduledSessionLabels = scheduledSessionLabels,
     )
+
+private fun InvoiceDebitLine.toIssuedInvoiceDebitLine(): IssuedInvoiceDebitLine =
+    IssuedInvoiceDebitLine(description = description, amountMinor = amountMinor)
+
+private fun IssuedInvoiceDebitLine.toInvoiceDebitLine(): InvoiceDebitLine =
+    InvoiceDebitLine(description = description, amountMinor = amountMinor)
 
 private fun InvoiceCreditLine.toIssuedInvoiceCreditLine(): IssuedInvoiceCreditLine =
     IssuedInvoiceCreditLine(description = description, amountMinor = amountMinor)

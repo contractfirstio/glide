@@ -38,6 +38,9 @@ import glide.data.BillingCreditStore
 import glide.data.attendanceBlocksBillIssuanceMessage
 import glide.data.creditAppliedMinor
 import glide.data.BillingService
+import glide.data.isEditableBeforeIssue
+import glide.data.displayBillingLineItems
+import glide.data.displayBillingTotalMinor
 import glide.data.openPendingAttendanceSession
 import glide.data.openSoldPackClassAssignment
 import glide.data.soldPackBlocksBillIssuance
@@ -55,9 +58,15 @@ import glide.data.PlanStore
 import glide.data.memberCount
 import glide.data.resolveMainContact
 import glide.model.Bill
+import glide.model.BillLineItem
+import glide.model.BillLineItemKind
 import glide.model.BillStatus
+import glide.model.majorToMinor
+import glide.model.minorToMajorString
+import glide.model.parseMajorAmount
 import glide.model.PackEnrollment
 import glide.model.displayDateMillis
+import glide.model.isBillingEditable
 import glide.model.isIssuedToCustomer
 import glide.model.PaymentMethod
 import glide.model.PeopleGroupType
@@ -292,7 +301,7 @@ fun BillingPanel(
                                 billingActionMessage = soldPackBlocksBillIssuanceMessage()
                                 return@BillRow
                             }
-                            if (!BillStore.setIssued(bill.id, issued)) {
+                            if (!BillStore.setIssued(bill.id, issued = true)) {
                                 if (issued && billingBlockedByAttendance) {
                                     billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
                                 } else if (issued && billingBlockedByUnassignedClass) {
@@ -543,7 +552,7 @@ private fun BillRow(
                 color = glideListItemTitleColor(selected),
             )
             Text(
-                text = formatMoney(bill.amountMinor, bill.currencyCode),
+                text = formatMoney(bill.displayBillingTotalMinor(), bill.currencyCode),
                 style = MaterialTheme.typography.bodyMedium,
                 color = glideListItemTitleColor(selected),
             )
@@ -581,8 +590,12 @@ private fun BillRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = bill.isIssuedToCustomer(),
-                        onCheckedChange = onIssuedChange,
-                        enabled = (bill.status == BillStatus.SCHEDULED || bill.status == BillStatus.ISSUED) && canIssue,
+                        onCheckedChange = { issued ->
+                            if (issued && bill.status == BillStatus.SCHEDULED) {
+                                onIssuedChange(true)
+                            }
+                        },
+                        enabled = bill.status == BillStatus.SCHEDULED && canIssue,
                     )
                     Text(
                         text = "Issued",
@@ -627,11 +640,13 @@ private fun BillDetailActions(
         when (bill.status) {
             BillStatus.SCHEDULED -> {
                 Text(
-                    text = "Scheduled billing line — mark Issued when sent to the customer, then record payment.",
+                    text = "Scheduled billing line — edit charges below, then mark Issued when sent to the customer.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                BillLineItemsSection(bill = bill)
+                Spacer(modifier = Modifier.height(8.dp))
                 GlideOutlinedButton(
                     onClick = onGenerateInvoice,
                     modifier = Modifier.fillMaxWidth(),
@@ -648,6 +663,14 @@ private fun BillDetailActions(
                 }
             }
             BillStatus.ISSUED -> {
+                Text(
+                    text = "Issued to customer — billing details are locked.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                BillLineItemsSection(bill = bill)
+                Spacer(modifier = Modifier.height(8.dp))
                 GlideButton(
                     onClick = onRecordPayment,
                     modifier = Modifier.fillMaxWidth(),
@@ -671,6 +694,8 @@ private fun BillDetailActions(
                 }
             }
             BillStatus.PAID -> {
+                BillLineItemsSection(bill = bill)
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "This bill is paid.",
                     style = MaterialTheme.typography.bodySmall,
@@ -686,6 +711,345 @@ private fun BillDetailActions(
             }
         }
     }
+}
+
+@Composable
+private fun BillLineItemsSection(
+    bill: Bill,
+) {
+    val editable = bill.isBillingEditable()
+    val lineItems = bill.displayBillingLineItems()
+    val totalMinor = bill.displayBillingTotalMinor()
+    var lineItemError by remember(bill.id, bill.status) { mutableStateOf<String?>(null) }
+    var editingLineItemId by remember(bill.id, bill.status) { mutableStateOf<String?>(null) }
+    var showAddDialog by remember(bill.id, bill.status) { mutableStateOf(false) }
+    var addKind by remember(bill.id, bill.status) { mutableStateOf(BillLineItemKind.DEBIT) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = if (editable) "Bill items" else "Issued bill items",
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        lineItems.forEach { item ->
+            if (editable && editingLineItemId == item.id && item.isEditableBeforeIssue()) {
+                BillLineItemEditor(
+                    item = item,
+                    currencyCode = bill.currencyCode,
+                    onSave = { description, amountMajor, kind ->
+                        val amountMinor = parseMajorAmount(amountMajor)?.let { majorToMinor(it) }
+                        if (description.isBlank() || amountMinor == null || amountMinor <= 0) {
+                            lineItemError = "Enter a description and amount greater than zero."
+                            return@BillLineItemEditor
+                        }
+                        if (!BillStore.updateLineItem(bill.id, item.id, description, amountMinor, kind)) {
+                            lineItemError = "Could not update line item."
+                            return@BillLineItemEditor
+                        }
+                        lineItemError = null
+                        editingLineItemId = null
+                    },
+                    onCancel = { editingLineItemId = null },
+                )
+            } else {
+                BillLineItemRow(
+                    item = item,
+                    currencyCode = bill.currencyCode,
+                    editable = editable && item.isEditableBeforeIssue(),
+                    onEdit = { editingLineItemId = item.id },
+                    onDelete = {
+                        if (!BillStore.removeLineItem(bill.id, item.id)) {
+                            lineItemError = "Could not remove line item."
+                        } else {
+                            lineItemError = null
+                            if (editingLineItemId == item.id) editingLineItemId = null
+                        }
+                    },
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Total due",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = formatMoney(totalMinor, bill.currencyCode),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+        if (editable) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                GlideOutlinedButton(
+                    onClick = {
+                        addKind = BillLineItemKind.DEBIT
+                        showAddDialog = true
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Add debit")
+                }
+                GlideOutlinedButton(
+                    onClick = {
+                        addKind = BillLineItemKind.CREDIT
+                        showAddDialog = true
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Add credit")
+                }
+            }
+        }
+        lineItemError?.let { error ->
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = error,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+
+    if (showAddDialog) {
+        AddBillLineItemDialog(
+            kind = addKind,
+            currencyCode = bill.currencyCode,
+            onDismiss = { showAddDialog = false },
+            onConfirm = { description, amountMajor, kind ->
+                val amountMinor = parseMajorAmount(amountMajor)?.let { majorToMinor(it) }
+                if (description.isBlank() || amountMinor == null || amountMinor <= 0) {
+                    lineItemError = "Enter a description and amount greater than zero."
+                    return@AddBillLineItemDialog
+                }
+                if (!BillStore.addLineItem(bill.id, description, amountMinor, kind)) {
+                    lineItemError = "Could not add line item."
+                    return@AddBillLineItemDialog
+                }
+                lineItemError = null
+                showAddDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun BillLineItemRow(
+    item: BillLineItem,
+    currencyCode: String,
+    editable: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val amountPrefix = if (item.kind == BillLineItemKind.CREDIT) "−" else ""
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.description,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = buildString {
+                    append(item.kind.label)
+                    when (item.source) {
+                        glide.model.BillLineItemSource.ATTENDANCE_CREDIT -> append(" · attendance")
+                        glide.model.BillLineItemSource.LOCKED -> append(" · issued")
+                        else -> Unit
+                    }
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "$amountPrefix${formatMoney(item.amountMinor, currencyCode)}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (editable) {
+                Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+                GlideTextButton(onClick = onEdit) { Text("Edit") }
+                GlideTextButton(onClick = onDelete) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BillLineItemEditor(
+    item: BillLineItem,
+    currencyCode: String,
+    onSave: (description: String, amountMajor: String, kind: BillLineItemKind) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var description by remember(item.id) { mutableStateOf(item.description) }
+    var amountMajor by remember(item.id) { mutableStateOf(minorToMajorString(item.amountMinor)) }
+    var kind by remember(item.id) { mutableStateOf(item.kind) }
+    var kindExpanded by remember(item.id) { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        GlideOutlinedField(
+            value = description,
+            onValueChange = { description = it },
+            label = "Description",
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        GlideOutlinedField(
+            value = amountMajor,
+            onValueChange = { amountMajor = it },
+            label = "Amount ($currencyCode)",
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        GlideFieldLabel("Type")
+        Spacer(modifier = Modifier.height(2.dp))
+        ExposedDropdownMenuBox(
+            expanded = kindExpanded,
+            onExpandedChange = { kindExpanded = it },
+        ) {
+            OutlinedTextField(
+                value = kind.label,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = kindExpanded) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(),
+                textStyle = MaterialTheme.typography.bodySmall,
+                colors = OutlinedTextFieldDefaults.colors(),
+            )
+            ExposedDropdownMenu(
+                expanded = kindExpanded,
+                onDismissRequest = { kindExpanded = false },
+            ) {
+                BillLineItemKind.entries.forEach { entry ->
+                    DropdownMenuItem(
+                        text = { Text(entry.label) },
+                        onClick = {
+                            kind = entry
+                            kindExpanded = false
+                        },
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            GlideButton(
+                onClick = { onSave(description, amountMajor, kind) },
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Save")
+            }
+            GlideOutlinedButton(
+                onClick = onCancel,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Cancel")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddBillLineItemDialog(
+    kind: BillLineItemKind,
+    currencyCode: String,
+    onDismiss: () -> Unit,
+    onConfirm: (description: String, amountMajor: String, kind: BillLineItemKind) -> Unit,
+) {
+    var description by remember(kind) { mutableStateOf("") }
+    var amountMajor by remember(kind) { mutableStateOf("") }
+    var selectedKind by remember(kind) { mutableStateOf(kind) }
+    var kindExpanded by remember(kind) { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add ${selectedKind.label.lowercase()}") },
+        text = {
+            Column {
+                GlideOutlinedField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = "Description",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                GlideOutlinedField(
+                    value = amountMajor,
+                    onValueChange = { amountMajor = it },
+                    label = "Amount ($currencyCode)",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                GlideFieldLabel("Type")
+                Spacer(modifier = Modifier.height(2.dp))
+                ExposedDropdownMenuBox(
+                    expanded = kindExpanded,
+                    onExpandedChange = { kindExpanded = it },
+                ) {
+                    OutlinedTextField(
+                        value = selectedKind.label,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = kindExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        colors = OutlinedTextFieldDefaults.colors(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded = kindExpanded,
+                        onDismissRequest = { kindExpanded = false },
+                    ) {
+                        BillLineItemKind.entries.forEach { entry ->
+                            DropdownMenuItem(
+                                text = { Text(entry.label) },
+                                onClick = {
+                                    selectedKind = entry
+                                    kindExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            GlideTextButton(onClick = { onConfirm(description, amountMajor, selectedKind) }) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            GlideTextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
 }
 
 @Composable
