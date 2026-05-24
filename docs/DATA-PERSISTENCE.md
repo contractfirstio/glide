@@ -48,6 +48,7 @@ On first launch, `settings.properties` is migrated from the legacy path
 
 ```
 ~/Documents/Glide/
+  backups/          # timestamped zip archives from Email data backup
   invoices/
   receipts/
 ```

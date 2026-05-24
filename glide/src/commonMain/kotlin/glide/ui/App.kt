@@ -21,6 +21,8 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import glide.backup.DataBackupResult
+import glide.backup.DataBackupService
 import glide.data.AppSettingsStore
 import glide.data.AppViewMode
 import glide.data.AppViewState
@@ -43,6 +45,7 @@ fun App() {
     GlideTheme {
         val appSettings by AppSettingsStore.settingsState
         var showCompanySettings by remember { mutableStateOf(false) }
+        var backupErrorMessage by remember { mutableStateOf<String?>(null) }
         val focusRequester = remember { FocusRequester() }
         val viewMode = AppViewState.mode
         val pendingAttendance = rememberPendingAttendanceSessions()
@@ -81,7 +84,14 @@ fun App() {
                 AppChrome(
                     modifier = Modifier.fillMaxWidth(),
                     companySettingsNeedSetup = !appSettings.isConfigured,
+                    companySettingsConfigured = appSettings.isConfigured,
                     onOpenCompanySettings = { showCompanySettings = true },
+                    onEmailDataBackup = {
+                        when (val result = DataBackupService.backupAndEmail()) {
+                            is DataBackupResult.Success -> Unit
+                            is DataBackupResult.Failure -> backupErrorMessage = result.message
+                        }
+                    },
                 )
                 if (viewMode != AppViewMode.SCHEDULING) {
                     PendingAttendanceAlertBanner(pending = pendingAttendance)
@@ -91,6 +101,13 @@ fun App() {
                 UnassignedSoldPlanAlertBanner(unassigned = unassignedSoldPlans)
                 FloatingPanelsHost(modifier = Modifier.weight(1f))
             }
+        }
+
+        backupErrorMessage?.let { message ->
+            BackupResultDialog(
+                message = message,
+                onDismiss = { backupErrorMessage = null },
+            )
         }
 
         if (!appSettings.isConfigured || showCompanySettings) {

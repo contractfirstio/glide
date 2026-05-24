@@ -35,7 +35,9 @@ import org.jetbrains.compose.resources.painterResource
 fun AppChrome(
     modifier: Modifier = Modifier,
     companySettingsNeedSetup: Boolean = false,
+    companySettingsConfigured: Boolean = true,
     onOpenCompanySettings: () -> Unit = {},
+    onEmailDataBackup: () -> Unit = {},
 ) {
     val mode = AppViewState.mode
     Row(
@@ -75,7 +77,9 @@ fun AppChrome(
             )
             AppMenu(
                 companySettingsNeedSetup = companySettingsNeedSetup,
+                companySettingsConfigured = companySettingsConfigured,
                 onOpenCompanySettings = onOpenCompanySettings,
+                onEmailDataBackup = onEmailDataBackup,
             )
         }
     }
@@ -84,7 +88,9 @@ fun AppChrome(
 @Composable
 private fun AppMenu(
     companySettingsNeedSetup: Boolean,
+    companySettingsConfigured: Boolean,
     onOpenCompanySettings: () -> Unit,
+    onEmailDataBackup: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -115,6 +121,14 @@ private fun AppMenu(
                 onClick = {
                     menuExpanded = false
                     onOpenCompanySettings()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Email data backup…") },
+                enabled = companySettingsConfigured,
+                onClick = {
+                    menuExpanded = false
+                    onEmailDataBackup()
                 },
             )
         }
