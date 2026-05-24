@@ -11,27 +11,51 @@ object PlanStore {
         _plans.add(plan)
     }
 
-    fun update(plan: Plan) {
+    fun update(plan: Plan): Boolean {
+        if (!canEdit(plan.id)) return false
         val index = _plans.indexOfFirst { it.id == plan.id }
-        if (index >= 0) {
-            _plans[index] = plan
+        if (index < 0) return false
+        _plans[index] = plan
+        return true
+    }
+
+    fun soldPlanCount(planId: String): Int =
+        PeopleGroupStore.customers.count { it.planId == planId }
+
+    fun canEdit(planId: String): Boolean = soldPlanCount(planId) == 0
+
+    fun canDelete(planId: String): Boolean = canEdit(planId)
+
+    private fun planSoldBlockReason(planId: String, action: String): String? {
+        val soldCount = soldPlanCount(planId)
+        return if (soldCount == 0) {
+            null
+        } else {
+            "This plan has been sold on $soldCount sold plan${if (soldCount == 1) "" else "s"} " +
+                "and cannot be $action."
         }
     }
 
-    fun delete(id: String) {
+    fun planEditBlockReason(planId: String): String? = planSoldBlockReason(planId, "edited")
+
+    fun planDeletionBlockReason(planId: String): String? = planSoldBlockReason(planId, "deleted")
+
+    fun delete(id: String): Boolean {
+        if (!canDelete(id)) return false
         _plans.removeAll { it.id == id }
+        return true
     }
 
     fun findById(id: String): Plan? = _plans.find { it.id == id }
 
     /**
      * Plans for the Plans panel — all plans, the plan on [customerGroupId], or plans used on
-     * groups linked to [contactId] or [relatedPersonId].
+     * groups linked to [clientId] or [studentId].
      */
     fun forPlansPanel(
         customerGroupId: String? = null,
-        contactId: String? = null,
-        relatedPersonId: String? = null,
+        clientId: String? = null,
+        studentId: String? = null,
     ): List<Plan> {
         val planIds = when {
             customerGroupId != null ->
@@ -39,14 +63,14 @@ object PlanStore {
                     ?.planId
                     ?.let { listOf(it) }
                     ?: emptyList()
-            contactId != null ->
+            clientId != null ->
                 PeopleGroupStore.all
-                    .filter { it.mainContactId == contactId }
+                    .filter { it.mainClientId == clientId }
                     .mapNotNull { it.planId }
                     .distinct()
-            relatedPersonId != null ->
+            studentId != null ->
                 PeopleGroupStore.all
-                    .filter { relatedPersonId in it.relatedPersonIds }
+                    .filter { studentId in it.studentIds }
                     .mapNotNull { it.planId }
                     .distinct()
             else -> return plans

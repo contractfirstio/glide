@@ -9,8 +9,8 @@ sealed class AddCustomerGroupResult {
     data object GroupNotFound : AddCustomerGroupResult()
     data object NotACustomerGroup : AddCustomerGroupResult()
     data class AlreadyOnAnotherClass(val className: String) : AddCustomerGroupResult()
-    data class PackCannotBeFullyScheduled(
-        val packSessions: Int,
+    data class PlanCannotBeFullyScheduled(
+        val planSessions: Int,
         val availableSessions: Int,
     ) : AddCustomerGroupResult()
     data class CapacityExceeded(
@@ -18,6 +18,7 @@ sealed class AddCustomerGroupResult {
         val groupHeadcount: Int,
         val maxCapacity: Int,
     ) : AddCustomerGroupResult()
+    data class RollingPlanNotAllowedOnClass(val message: String) : AddCustomerGroupResult()
 }
 
 fun headcountForCustomerGroups(customerGroupIds: List<String>): Int =
@@ -34,7 +35,7 @@ fun validateCustomerGroupsForClass(customerGroupIds: List<String>, classId: Stri
     for (groupId in customerGroupIds) {
         val other = ScheduledClassStore.findClassContainingCustomerGroup(groupId, excludeClassId = classId)
             ?: continue
-        val label = PeopleGroupStore.findById(groupId)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+        val label = PeopleGroupStore.findById(groupId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
             ?: "This group"
         return "$label is already on \"${other.name}\". Each customer group can only be on one class."
     }
@@ -58,10 +59,13 @@ fun tryAddCustomerGroup(
 
     val cls = scheduledClass ?: classId?.let { ScheduledClassStore.findById(it) }
     if (cls != null) {
-        packScheduleCheckForClass(groupId, cls)?.let { check ->
+        validateRollingPlanEnrollmentForClass(groupId, cls)?.let { message ->
+            return AddCustomerGroupResult.RollingPlanNotAllowedOnClass(message)
+        }
+        planScheduleCheckForClass(groupId, cls)?.let { check ->
             if (!check.canFullySchedule) {
-                return AddCustomerGroupResult.PackCannotBeFullyScheduled(
-                    packSessions = check.requiredSessions,
+                return AddCustomerGroupResult.PlanCannotBeFullyScheduled(
+                    planSessions = check.requiredSessions,
                     availableSessions = check.availableSessions,
                 )
             }
@@ -90,8 +94,9 @@ fun AddCustomerGroupResult.toUserMessage(): String = when (this) {
     AddCustomerGroupResult.NotACustomerGroup -> "Only customer groups can be assigned to classes."
     is AddCustomerGroupResult.AlreadyOnAnotherClass ->
         "This group is already assigned to \"$className\". A customer group can only be on one class."
-    is AddCustomerGroupResult.PackCannotBeFullyScheduled ->
-        packCannotFullyScheduleMessage(packSessions, availableSessions)
+    is AddCustomerGroupResult.PlanCannotBeFullyScheduled ->
+        planCannotFullyScheduleMessage(planSessions, availableSessions)
     is AddCustomerGroupResult.CapacityExceeded ->
         "Room capacity exceeded ($currentHeadcount + $groupHeadcount > $maxCapacity)."
+    is AddCustomerGroupResult.RollingPlanNotAllowedOnClass -> message
 }

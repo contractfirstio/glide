@@ -11,6 +11,12 @@ fun parseMajorAmount(input: String): Double? {
     return trimmed.toDoubleOrNull()?.takeIf { it >= 0 }
 }
 
+fun minorToMajorString(amountMinor: Long): String {
+    val major = amountMinor / 100
+    val minor = amountMinor % 100
+    return if (minor == 0L) major.toString() else "$major.${minor.toString().padStart(2, '0')}"
+}
+
 fun formatMoney(amountMinor: Long, currencyCode: String = DEFAULT_CURRENCY_CODE): String {
     val major = amountMinor / 100
     val minor = kotlin.math.abs(amountMinor % 100)

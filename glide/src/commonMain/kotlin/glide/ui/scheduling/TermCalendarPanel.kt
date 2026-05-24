@@ -11,10 +11,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -28,6 +31,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,23 +41,26 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import glide.data.AppViewMode
+import glide.data.AppViewState
 import glide.data.AttendancePanelState
 import glide.data.LocationStore
+import glide.data.SchedulePanelState
 import glide.data.ScheduledClassStore
 import glide.data.TermStore
 import glide.data.millisUntilNextAttendanceReminderCheck
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import glide.model.AcademicTerm
+import glide.model.ClassSessionKey
 import glide.model.ScheduledClass
-import glide.model.canTakeAttendance
 import glide.model.compareScheduledClasses
-import glide.model.scheduleLine
+import glide.model.parseIsoLocalDate
 import glide.model.timeRangeLine
 import glide.ui.layout.GlideLayout
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.theme.GlideOutlinedButton
-import glide.ui.theme.GlideTextButton
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -61,11 +68,46 @@ import java.util.Locale
 private val MonthTitleFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault())
 private val WeekdayLabels = listOf("M", "T", "W", "T", "F", "S", "S")
 
+private suspend fun LazyListState.scrollToShowDate(months: List<YearMonth>, date: LocalDate) {
+    val monthIndex = indexOfMonthContaining(months, date)
+    if (monthIndex < 0) return
+
+    snapshotFlow { layoutInfo }
+        .first { info ->
+            info.totalItemsCount > monthIndex && info.viewportSize.height > 0
+        }
+
+    scrollToItem(monthIndex)
+
+    snapshotFlow { layoutInfo }
+        .first { info ->
+            info.visibleItemsInfo.any { it.index == monthIndex && it.size > 0 }
+        }
+
+    val info = layoutInfo
+    val monthItem = info.visibleItemsInfo.first { it.index == monthIndex }
+    val scrollOffset = scrollOffsetToShowDateInMonthItem(
+        monthItemHeightPx = monthItem.size,
+        date = date,
+        viewportHeightPx = info.viewportSize.height,
+    )
+    if (scrollOffset > 0) {
+        scrollToItem(monthIndex, scrollOffset)
+    }
+}
+
 @Composable
 fun TermCalendarPanel(modifier: Modifier = Modifier) {
     val termsChronological = TermStore.sortedChronologically()
     val allClasses = ScheduledClassStore.classes
-    val colorPicker = rememberClassColorPickerState()
+    val today = remember { LocalDate.now() }
+    val viewMode = AppViewState.mode
+    val attendanceVisible = AttendancePanelState.visible
+    val activeAttendanceSession = if (attendanceVisible) AttendancePanelState.sessionKey else null
+    val classSyncId = SchedulePanelState.selectedClassId
+    val termFilterId = SchedulePanelState.selectedTermFilterId
+    val locationFilterId = SchedulePanelState.selectedLocationFilterId
+    val listState = rememberLazyListState()
     var attendanceRefreshTick by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
@@ -76,17 +118,15 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
     }
     attendanceRefreshTick
 
-    var selectedTermId by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(termsChronological.map { it.id }) {
-        if (termsChronological.isEmpty()) {
-            selectedTermId = null
-            return@LaunchedEffect
-        }
-        if (selectedTermId == null || termsChronological.none { it.id == selectedTermId }) {
-            selectedTermId = defaultTermSelectionId(termsChronological)
-        }
-    }
+    val displayTermId = resolveCalendarTermId(
+        termsChronological = termsChronological,
+        allClasses = allClasses,
+        termFilterId = termFilterId,
+        locationFilterId = locationFilterId,
+        classSyncId = classSyncId,
+        attendanceSessionDate = activeAttendanceSession?.sessionDate,
+        attendanceVisible = attendanceVisible,
+    )
 
     val spacing = GlideLayout.comfortable
 
@@ -114,7 +154,7 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
             return
         }
 
-        val selectedTerm = selectedTermId?.let { id ->
+        val selectedTerm = displayTermId?.let { id ->
             termsChronological.find { it.id == id }
         } ?: return@Column
         val termIndex = termsChronological.indexOfFirst { it.id == selectedTerm.id }
@@ -124,16 +164,29 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
         }
         val months = remember(selectedTerm) { monthsInTerm(selectedTerm) }
 
+        LaunchedEffect(attendanceVisible, activeAttendanceSession, selectedTerm.id, months) {
+            if (!attendanceVisible) return@LaunchedEffect
+            val date = activeAttendanceSession?.sessionDate?.let { parseIsoLocalDate(it) } ?: return@LaunchedEffect
+            listState.scrollToShowDate(months, date)
+        }
+
+        LaunchedEffect(viewMode, selectedTerm.id, months, attendanceVisible) {
+            if (viewMode != AppViewMode.SCHEDULING || months.isEmpty() || attendanceVisible) return@LaunchedEffect
+            listState.scrollToShowDate(months, today)
+        }
+
         TermCalendarHeader(
             term = selectedTerm,
             canGoPrevious = termIndex > 0,
             canGoNext = termIndex < termsChronological.lastIndex,
             onPrevious = {
-                if (termIndex > 0) selectedTermId = termsChronological[termIndex - 1].id
+                if (termIndex > 0) {
+                    SchedulePanelState.onTermSelected(termsChronological[termIndex - 1].id)
+                }
             },
             onNext = {
                 if (termIndex < termsChronological.lastIndex) {
-                    selectedTermId = termsChronological[termIndex + 1].id
+                    SchedulePanelState.onTermSelected(termsChronological[termIndex + 1].id)
                 }
             },
         )
@@ -141,22 +194,14 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.height(spacing.section))
 
         if (termClasses.isNotEmpty()) {
-            TermCalendarLegend(
-                classes = termClasses,
-                onPickColor = { scheduledClass ->
-                    colorPicker.show(scheduledClass.resolvedCalendarColorArgb()) { newArgb ->
-                        ScheduledClassStore.update(
-                            scheduledClass.copy(calendarColorArgb = newArgb),
-                        )
-                    }
-                },
-            )
-            Spacer(modifier = Modifier.height(spacing.section))
+            TermCalendarLegend(classes = termClasses)
+            Spacer(modifier = Modifier.height(4.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            Spacer(modifier = Modifier.height(spacing.section))
+            Spacer(modifier = Modifier.height(4.dp))
         }
 
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(spacing.section),
         ) {
@@ -165,12 +210,12 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
                     yearMonth = yearMonth,
                     term = selectedTerm,
                     classes = allClasses,
+                    today = today,
+                    activeAttendanceSession = activeAttendanceSession,
                 )
             }
         }
     }
-
-    colorPicker.dialog()
 }
 
 @Composable
@@ -223,47 +268,32 @@ private fun TermCalendarHeader(
 }
 
 @Composable
-private fun TermCalendarLegend(
-    classes: List<ScheduledClass>,
-    onPickColor: (ScheduledClass) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = "Classes",
-            style = MaterialTheme.typography.labelLarge,
-        )
+private fun TermCalendarLegend(classes: List<ScheduledClass>) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         classes.forEach { scheduledClass ->
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(MaterialTheme.shapes.small)
-                    .clickable { onPickColor(scheduledClass) }
-                    .padding(vertical = 2.dp),
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .padding(start = 3.dp, end = 5.dp, top = 1.dp, bottom = 1.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 ClassCalendarColorSwatch(
                     colorArgb = scheduledClass.resolvedCalendarColorArgb(),
-                    onClick = { onPickColor(scheduledClass) },
+                    size = 8.dp,
                 )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = scheduledClass.name,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = scheduledClass.scheduleLine(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                GlideTextButton(onClick = { onPickColor(scheduledClass) }) {
-                    Text("Color")
-                }
+                Text(
+                    text = scheduledClass.name,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -274,6 +304,8 @@ private fun TermCalendarMonthSection(
     yearMonth: YearMonth,
     term: AcademicTerm,
     classes: List<ScheduledClass>,
+    today: LocalDate,
+    activeAttendanceSession: ClassSessionKey?,
 ) {
     val cells = remember(yearMonth, term.id, classes) {
         buildMonthGrid(yearMonth, term, classes)
@@ -317,6 +349,8 @@ private fun TermCalendarMonthSection(
                     week.forEach { cell ->
                         TermCalendarDayCellView(
                             cell = cell,
+                            today = today,
+                            activeAttendanceSession = activeAttendanceSession,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -329,31 +363,57 @@ private fun TermCalendarMonthSection(
 @Composable
 private fun TermCalendarDayCellView(
     cell: TermCalendarDayCell,
+    today: LocalDate,
+    activeAttendanceSession: ClassSessionKey?,
     modifier: Modifier = Modifier,
 ) {
     val date = cell.date
     val showGrey = date == null || !cell.inTerm
+    val isToday = date == today && cell.inTerm
+    val isAttendanceDay = activeAttendanceSession != null && date != null &&
+        activeAttendanceSession.sessionDate == date.toString()
     val backgroundColor = when {
         date == null -> Color.Transparent
+        isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+        isAttendanceDay -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.9f)
         showGrey -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
         else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+    }
+    val dayBorderColor = when {
+        isToday -> MaterialTheme.colorScheme.primary
+        isAttendanceDay -> MaterialTheme.colorScheme.tertiary
+        else -> null
     }
 
     Box(
         modifier = modifier
             .aspectRatio(1f)
+            .then(
+                if (dayBorderColor != null) {
+                    Modifier.border(
+                        width = 1.5.dp,
+                        color = dayBorderColor,
+                        shape = RoundedCornerShape(2.dp),
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .background(backgroundColor)
-            .padding(3.dp),
+            .padding(2.dp),
     ) {
         if (date != null) {
+            val dayNumberEmphasis = isToday || isAttendanceDay
             Text(
                 text = date.dayOfMonth.toString(),
                 style = MaterialTheme.typography.labelSmall,
                 fontSize = 9.sp,
-                color = if (showGrey) {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                } else {
-                    MaterialTheme.colorScheme.onSurface
+                fontWeight = if (dayNumberEmphasis) FontWeight.Bold else FontWeight.Normal,
+                color = when {
+                    isToday -> MaterialTheme.colorScheme.onPrimaryContainer
+                    isAttendanceDay -> MaterialTheme.colorScheme.onTertiaryContainer
+                    showGrey -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                    else -> MaterialTheme.colorScheme.onSurface
                 },
                 modifier = Modifier.align(Alignment.TopStart),
             )
@@ -361,14 +421,18 @@ private fun TermCalendarDayCellView(
                 Column(
                     modifier = Modifier
                         .matchParentSize()
-                        .padding(top = 11.dp, start = 1.dp, end = 1.dp, bottom = 1.dp)
+                        .padding(top = 9.dp, start = 1.dp, end = 1.dp, bottom = 0.dp)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
                 ) {
                     cell.classes.forEach { scheduledClass ->
                         TermCalendarClassBlock(
                             scheduledClass = scheduledClass,
                             sessionDate = date,
+                            isActiveAttendance = activeAttendanceSession?.let { session ->
+                                session.scheduledClassId == scheduledClass.id &&
+                                    session.sessionDate == date.toString()
+                            } == true,
                             onOpenAttendance = { classId, sessionDate ->
                                 AttendancePanelState.open(classId, sessionDate)
                             },
@@ -384,65 +448,64 @@ private fun TermCalendarDayCellView(
 private fun TermCalendarClassBlock(
     scheduledClass: ScheduledClass,
     sessionDate: LocalDate,
+    isActiveAttendance: Boolean,
     onOpenAttendance: (scheduledClassId: String, sessionDate: LocalDate) -> Unit,
 ) {
     val locationName = scheduledClass.locationId?.let { LocationStore.findById(it)?.name }
-    val rosterLines = rosterLinesForClass(scheduledClass, sessionDate)
+    val rosterSummary = rosterLinesForClass(scheduledClass, sessionDate)
+        .joinToString(", ")
+        .takeIf { it.isNotBlank() }
     val blockTextColor = Color(0xFF0A1018)
-    val canTakeAttendance = scheduledClass.canTakeAttendance(sessionDate)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(2.dp))
-            .clickable(
-                enabled = canTakeAttendance,
-                onClick = { onOpenAttendance(scheduledClass.id, sessionDate) },
+            .clip(RoundedCornerShape(1.dp))
+            .then(
+                if (isActiveAttendance) {
+                    Modifier.border(
+                        width = 2.dp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        shape = RoundedCornerShape(1.dp),
+                    )
+                } else {
+                    Modifier
+                },
             )
+            .clickable { onOpenAttendance(scheduledClass.id, sessionDate) }
             .background(scheduledClass.resolvedCalendarColor())
-            .padding(horizontal = 3.dp, vertical = 3.dp),
+            .padding(horizontal = 2.dp, vertical = 1.dp),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+            Text(
+                text = buildString {
+                    append(scheduledClass.timeRangeLine())
+                    if (!locationName.isNullOrBlank()) {
+                        append(" · ")
+                        append(locationName)
+                    }
+                },
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 6.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = blockTextColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 7.sp,
+            )
+            if (rosterSummary != null) {
                 Text(
-                    text = scheduledClass.timeRangeLine(),
+                    text = rosterSummary,
                     style = MaterialTheme.typography.labelSmall,
-                    fontSize = 7.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = blockTextColor,
-                    maxLines = 1,
-                )
-                if (!locationName.isNullOrBlank()) {
-                    Text(
-                        text = locationName,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 7.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = blockTextColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.End,
-                    )
-                }
-            }
-            rosterLines.forEach { line ->
-                Text(
-                    text = line,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 7.sp,
+                    fontSize = 6.sp,
                     fontWeight = FontWeight.Medium,
                     color = blockTextColor.copy(alpha = 0.92f),
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    lineHeight = 8.sp,
+                    lineHeight = 7.sp,
                 )
             }
         }

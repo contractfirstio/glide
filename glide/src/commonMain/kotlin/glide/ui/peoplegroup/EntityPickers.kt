@@ -20,10 +20,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import glide.data.ContactStore
+import glide.data.ClientStore
 import glide.data.PlanStore
-import glide.data.RelatedPersonStore
-import glide.model.RelatedPerson
+import glide.data.StudentStore
+import glide.model.Student
 import glide.model.summaryLine
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.formatPersonLabel
@@ -31,41 +31,41 @@ import glide.ui.theme.GlideFieldLabel
 import glide.ui.theme.GlideTextButton
 
 @Composable
-fun ReadOnlyMainContactSection(
-    contactId: String?,
+fun ReadOnlyMainClientSection(
+    clientId: String?,
     modifier: Modifier = Modifier,
     showLabel: Boolean = true,
 ) {
-    val contact = contactId?.let { ContactStore.findById(it) }
+    val client = clientId?.let { ClientStore.findById(it) }
     Column(modifier = modifier) {
         if (showLabel) {
-            GlideFieldLabel("Main contact")
+            GlideFieldLabel("Main client")
             Spacer(modifier = Modifier.height(2.dp))
         }
-        if (contact == null) {
+        if (client == null) {
             Text(
-                text = "No main contact linked.",
+                text = "No main client linked.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
             Text(
-                text = formatPersonLabel(contact.name, contact.dateOfBirth),
+                text = formatPersonLabel(client.name, client.dateOfBirth),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
             )
-            if (contact.email.isNotBlank()) {
+            if (client.email.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = contact.email,
+                    text = client.email,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (contact.phone.isNotBlank()) {
+            if (client.phone.isNotBlank()) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = contact.phone,
+                    text = client.phone,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -73,7 +73,7 @@ fun ReadOnlyMainContactSection(
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Edit this person's details in the People panel.",
+            text = "Edit this client's details in the Clients panel.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -81,14 +81,19 @@ fun ReadOnlyMainContactSection(
 }
 
 @Composable
-fun ReadOnlyRelatedPeopleSection(relatedPersonIds: List<String>) {
-    val people = relatedPersonIds.mapNotNull { RelatedPersonStore.findById(it) }
-    Text(
-        text = "Related people",
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.Medium,
-    )
-    Spacer(modifier = Modifier.height(4.dp))
+fun ReadOnlyStudentsSection(
+    studentIds: List<String>,
+    showLabel: Boolean = true,
+) {
+    val people = studentIds.mapNotNull { StudentStore.findById(it) }
+    if (showLabel) {
+        Text(
+            text = "Students",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+    }
     if (people.isEmpty()) {
         Text(
             text = "None linked.",
@@ -107,7 +112,7 @@ fun ReadOnlyRelatedPeopleSection(relatedPersonIds: List<String>) {
 }
 
 @Composable
-fun ReadOnlyPackSection(
+fun ReadOnlyPlanSection(
     planId: String?,
     prominent: Boolean = false,
 ) {
@@ -154,7 +159,7 @@ fun ReadOnlyPackSection(
                 )
             } else {
                 Text(
-                    text = "No pack assigned",
+                    text = "No plan assigned",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -162,7 +167,7 @@ fun ReadOnlyPackSection(
             }
         }
     } else {
-        GlideFieldLabel("Pack")
+        GlideFieldLabel("Plan")
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = plan?.let { "${it.name} (${it.summaryLine()})" } ?: "—",
@@ -173,18 +178,25 @@ fun ReadOnlyPackSection(
 }
 
 @Composable
-internal fun LeadRelatedPersonLinkedRow(
-    person: RelatedPerson,
+internal fun LeadStudentLinkedRow(
+    person: Student,
     onRemove: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
+                MaterialTheme.shapes.small,
+            )
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = formatPersonLabel(person.name, person.dateOfBirth),
             style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f),
         )
         GlideTextButton(onClick = onRemove) {
@@ -194,19 +206,19 @@ internal fun LeadRelatedPersonLinkedRow(
 }
 
 @Composable
-fun RelatedPersonLinkSection(
+fun StudentLinkSection(
     selectedIds: List<String>,
     onSelectionChange: (List<String>) -> Unit,
     spacing: GlideLayout.Spacing,
 ) {
-    var relatedSearchQuery by remember { mutableStateOf("") }
-    val linked = selectedIds.mapNotNull { RelatedPersonStore.findById(it) }
-    val relatedSearchResults = remember(relatedSearchQuery, selectedIds, RelatedPersonStore.all) {
-        val query = relatedSearchQuery.trim()
+    var studentSearchQuery by remember { mutableStateOf("") }
+    val linked = selectedIds.mapNotNull { StudentStore.findById(it) }
+    val studentSearchResults = remember(studentSearchQuery, selectedIds, StudentStore.all) {
+        val query = studentSearchQuery.trim()
         if (query.isEmpty()) {
             emptyList()
         } else {
-            RelatedPersonStore.all
+            StudentStore.all
                 .filter { it.id !in selectedIds }
                 .filter { person ->
                     listOf(person.name, person.dateOfBirth, person.notes)
@@ -223,14 +235,14 @@ fun RelatedPersonLinkSection(
     }
 
     Text(
-        text = "Related people",
+        text = "Students",
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Medium,
     )
     Spacer(modifier = Modifier.height(spacing.field))
 
     linked.forEach { person ->
-        LeadRelatedPersonLinkedRow(
+        LeadStudentLinkedRow(
             person = person,
             onRemove = { onSelectionChange(selectedIds.filter { it != person.id }) },
         )
@@ -238,18 +250,18 @@ fun RelatedPersonLinkSection(
     }
 
     EntitySearchPicker(
-        label = "Search related people",
+        label = "Search students",
         placeholder = "Name or date of birth",
-        query = relatedSearchQuery,
-        onQueryChange = { relatedSearchQuery = it },
-        results = relatedSearchResults,
+        query = studentSearchQuery,
+        onQueryChange = { studentSearchQuery = it },
+        results = studentSearchResults,
         onSelect = { id -> onSelectionChange(selectedIds + id) },
-        noResultsText = "No matches. Add related people on a lead first.",
+        noResultsText = "No matches. Add students on a lead first.",
     )
 
     Spacer(modifier = Modifier.height(4.dp))
     Text(
-        text = "Edit details in the Related panel once they are on a customer pack.",
+        text = "Edit details in the Students panel once they are on a customer plan.",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

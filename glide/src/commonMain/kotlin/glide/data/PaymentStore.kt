@@ -12,6 +12,10 @@ object PaymentStore {
 
     fun forBill(billId: String): Payment? = _payments.find { it.billId == billId }
 
+    fun removeAllForPeopleGroup(peopleGroupId: String) {
+        _payments.removeAll { it.peopleGroupId == peopleGroupId }
+    }
+
     fun recordFullPayment(
         bill: Bill,
         method: PaymentMethod,

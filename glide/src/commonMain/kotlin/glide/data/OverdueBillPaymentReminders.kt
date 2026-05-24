@@ -67,13 +67,13 @@ private fun Bill.toOverdueBillPaymentOrNull(nowMillis: Long): OverdueBillPayment
     if (daysPastDue < PAYMENT_OVERDUE_ALERT_DAYS) return null
     val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
     if (group.type != PeopleGroupType.CUSTOMER) return null
-    val main = group.resolveMainContact()
+    val main = group.resolveMainClient()
     val dueMillis = effectivePaymentDueAtMillis() ?: return null
     return OverdueBillPayment(
         billId = id,
         peopleGroupId = peopleGroupId,
         customerLabel = main.name.ifBlank { "Customer" },
-        billDescription = packLineDescription(),
+        billDescription = planLineDescription(),
         formattedAmount = formatMoney(amountMinor, currencyCode),
         daysPastDue = daysPastDue,
         dueDateLabel = dueDateFormat.format(Date(dueMillis)),

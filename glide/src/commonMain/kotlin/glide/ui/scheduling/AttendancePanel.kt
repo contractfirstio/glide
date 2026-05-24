@@ -16,7 +16,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import glide.data.AbsentCreditPreview
 import glide.data.AttendanceCreditService
 import glide.data.ClassAttendanceStore
+import glide.data.RollingPlanBillingService
 import glide.data.LocationStore
 import glide.data.ScheduledClassStore
 import glide.data.attendeesForClass
@@ -43,7 +43,12 @@ import glide.model.ClassSessionKey
 import glide.model.ScheduledClass
 import glide.model.canTakeAttendance
 import glide.model.scheduleLine
+import java.time.LocalDate
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.FormPanelLinkedBox
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideOutlinedButton
@@ -75,6 +80,8 @@ fun AttendancePanel(
         else attendeesForClass(scheduledClass, sessionDate)
     }
     val attendeeKeys = remember(attendees) { attendees.map { it.key } }
+    val today = remember { LocalDate.now() }
+    val isFutureSession = sessionDate != null && sessionDate.isAfter(today)
     val canTakeAttendance = scheduledClass != null && sessionDate != null &&
         scheduledClass.canTakeAttendance(sessionDate)
     ClassAttendanceStore.records
@@ -124,7 +131,7 @@ fun AttendancePanel(
             saveMessage = when {
                 result.creditsAdded > 0 -> {
                     val creditLabel = formatMoney(result.totalCreditMinor, result.currencyCode)
-                    "Attendance submitted. $creditLabel credited toward next pack bill."
+                    "Attendance submitted. $creditLabel credited toward next plan bill."
                 }
                 result.creditsSkipped > 0 ->
                     "Attendance submitted. No billing credits were added (enrollment missing or already credited)."
@@ -140,6 +147,9 @@ fun AttendancePanel(
             highlightUnmarked = false
             saveMessageIsError = false
             saveMessage = "Attendance submitted."
+        }
+        attendees.map { it.peopleGroupId }.distinct().forEach { groupId ->
+            RollingPlanBillingService.syncRollingPlanBilling(groupId)
         }
         showCreditDialog = false
     }
@@ -190,14 +200,13 @@ fun AttendancePanel(
             }
 
             val locationName = scheduledClass.locationId?.let { LocationStore.findById(it)?.name }
-            Text(
-                text = scheduledClass.name,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = buildString {
+            val present = draftByAttendeeKey.values.count { it == AttendanceStatus.PRESENT }
+            val absent = draftByAttendeeKey.values.count { it == AttendanceStatus.ABSENT }
+            val unmarked = (attendees.size - present - absent).coerceAtLeast(0)
+
+            FormPanelSection(
+                title = scheduledClass.name,
+                description = buildString {
                     append(formatIsoDateForDisplay(session.sessionDate))
                     append(" · ")
                     append(scheduledClass.scheduleLine())
@@ -206,52 +215,59 @@ fun AttendancePanel(
                         append(locationName)
                     }
                 },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            val present = draftByAttendeeKey.values.count { it == AttendanceStatus.PRESENT }
-            val absent = draftByAttendeeKey.values.count { it == AttendanceStatus.ABSENT }
-            val unmarked = (attendees.size - present - absent).coerceAtLeast(0)
-            Spacer(modifier = Modifier.height(spacing.section))
-            Text(
-                text = "$present present · $absent absent · $unmarked unmarked",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            if (!canTakeAttendance) {
-                Spacer(modifier = Modifier.height(spacing.field))
+                spacing = spacing,
+                role = FormPanelSectionRole.Primary,
+            ) {
                 Text(
-                    text = "Attendance opens after this class ends (${scheduledClass.endTime}).",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else if (isSubmitted) {
-                Spacer(modifier = Modifier.height(spacing.field))
-                Text(
-                    text = "Attendance submitted — cannot be changed.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            saveMessage?.let { message ->
-                Spacer(modifier = Modifier.height(spacing.field))
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (saveMessageIsError) {
-                        MaterialTheme.colorScheme.error
+                    text = if (canTakeAttendance || isSubmitted) {
+                        "$present present · $absent absent · $unmarked unmarked"
                     } else {
-                        MaterialTheme.colorScheme.primary
+                        val enrolledLabel = if (attendees.size == 1) "student" else "students"
+                        "${attendees.size} enrolled $enrolledLabel"
                     },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                if (!canTakeAttendance) {
+                    Spacer(modifier = Modifier.height(spacing.field))
+                    Text(
+                        text = if (isFutureSession) {
+                            "Preview only — mark attendance after this class ends on " +
+                                formatIsoDateForDisplay(session.sessionDate) + "."
+                        } else {
+                            "Attendance opens after this class ends (${scheduledClass.endTime})."
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else if (isSubmitted) {
+                    Spacer(modifier = Modifier.height(spacing.field))
+                    Text(
+                        text = "Attendance submitted — cannot be changed.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                saveMessage?.let { message ->
+                    Spacer(modifier = Modifier.height(spacing.field))
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (saveMessageIsError) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(spacing.section))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            Spacer(modifier = Modifier.height(spacing.section))
+            FormPanelSectionsDivider(
+                label = if (canEditAttendance) "Mark attendance" else "Expected attendees",
+                spacing = spacing,
+            )
 
             if (attendees.isEmpty()) {
                 Text(
@@ -259,79 +275,105 @@ fun AttendancePanel(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                return@Column
-            }
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+            } else {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
                 ) {
-                    GlideOutlinedButton(
-                        onClick = {
-                            draftByAttendeeKey = markAllDraft(draftByAttendeeKey, attendees, AttendanceStatus.PRESENT)
-                            saveMessage = null
-                            saveMessageIsError = false
-                            highlightUnmarked = false
+                    FormPanelSection(
+                        title = "Students",
+                        description = if (canEditAttendance) {
+                            "Mark each attendee present or absent, grouped by household."
+                        } else {
+                            "Students enrolled for this session, grouped by household."
                         },
-                        modifier = Modifier.weight(1f),
-                        enabled = canEditAttendance,
+                        spacing = spacing,
+                        role = FormPanelSectionRole.Secondary,
                     ) {
-                        Text("All present")
-                    }
-                    GlideOutlinedButton(
-                        onClick = {
-                            draftByAttendeeKey = markAllDraft(draftByAttendeeKey, attendees, AttendanceStatus.ABSENT)
-                            saveMessage = null
-                            saveMessageIsError = false
-                            highlightUnmarked = false
-                        },
-                        modifier = Modifier.weight(1f),
-                        enabled = canEditAttendance,
-                    ) {
-                        Text("All absent")
-                    }
-                }
-                Spacer(modifier = Modifier.height(spacing.section))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            GlideOutlinedButton(
+                                onClick = {
+                                    draftByAttendeeKey = markAllDraft(
+                                        draftByAttendeeKey,
+                                        attendees,
+                                        AttendanceStatus.PRESENT,
+                                    )
+                                    saveMessage = null
+                                    saveMessageIsError = false
+                                    highlightUnmarked = false
+                                },
+                                modifier = Modifier.weight(1f),
+                                enabled = canEditAttendance,
+                            ) {
+                                Text("All present")
+                            }
+                            GlideOutlinedButton(
+                                onClick = {
+                                    draftByAttendeeKey = markAllDraft(
+                                        draftByAttendeeKey,
+                                        attendees,
+                                        AttendanceStatus.ABSENT,
+                                    )
+                                    saveMessage = null
+                                    saveMessageIsError = false
+                                    highlightUnmarked = false
+                                },
+                                modifier = Modifier.weight(1f),
+                                enabled = canEditAttendance,
+                            ) {
+                                Text("All absent")
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(spacing.section))
 
-                val grouped = attendees.groupBy { it.peopleGroupId }
-                grouped.forEach { (_, groupAttendees) ->
-                    val household = groupAttendees.first().householdLabel
-                    Text(
-                        text = household,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 4.dp),
-                    )
-                    groupAttendees.forEach { attendee ->
-                        AttendanceRow(
-                            attendee = attendee,
-                            status = draftByAttendeeKey[attendee.key],
-                            needsMark = highlightUnmarked && draftByAttendeeKey[attendee.key] == null,
-                            enabled = canEditAttendance,
-                            onPresent = {
-                                draftByAttendeeKey = draftByAttendeeKey + (attendee.key to AttendanceStatus.PRESENT)
-                                saveMessage = null
-                                saveMessageIsError = false
-                            },
-                            onAbsent = {
-                                draftByAttendeeKey = draftByAttendeeKey + (attendee.key to AttendanceStatus.ABSENT)
-                                saveMessage = null
-                                saveMessageIsError = false
-                            },
-                            onClear = {
-                                draftByAttendeeKey = draftByAttendeeKey + (attendee.key to null)
-                                saveMessage = null
-                                saveMessageIsError = false
-                            },
-                        )
-                        Spacer(modifier = Modifier.height(spacing.field))
+                        val grouped = attendees.groupBy { it.peopleGroupId }
+                        grouped.forEach { (_, groupAttendees) ->
+                            val household = groupAttendees.first().householdLabel
+                            FormPanelLinkedBox(role = FormPanelSectionRole.Secondary) {
+                                Text(
+                                    text = household,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(bottom = spacing.field),
+                                )
+                                groupAttendees.forEachIndexed { index, attendee ->
+                                    AttendanceRow(
+                                        attendee = attendee,
+                                        status = draftByAttendeeKey[attendee.key],
+                                        needsMark = highlightUnmarked && draftByAttendeeKey[attendee.key] == null,
+                                        previewMode = !canEditAttendance,
+                                        enabled = canEditAttendance,
+                                        onPresent = {
+                                            draftByAttendeeKey = draftByAttendeeKey +
+                                                (attendee.key to AttendanceStatus.PRESENT)
+                                            saveMessage = null
+                                            saveMessageIsError = false
+                                        },
+                                        onAbsent = {
+                                            draftByAttendeeKey = draftByAttendeeKey +
+                                                (attendee.key to AttendanceStatus.ABSENT)
+                                            saveMessage = null
+                                            saveMessageIsError = false
+                                        },
+                                        onClear = {
+                                            draftByAttendeeKey = draftByAttendeeKey + (attendee.key to null)
+                                            saveMessage = null
+                                            saveMessageIsError = false
+                                        },
+                                    )
+                                    if (index < groupAttendees.lastIndex) {
+                                        Spacer(modifier = Modifier.height(spacing.field))
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(spacing.section))
+                        }
                     }
-                    Spacer(modifier = Modifier.height(spacing.section))
                 }
             }
 
@@ -393,6 +435,7 @@ private fun AttendanceRow(
     attendee: ClassAttendee,
     status: AttendanceStatus?,
     needsMark: Boolean,
+    previewMode: Boolean,
     enabled: Boolean,
     onPresent: () -> Unit,
     onAbsent: () -> Unit,
@@ -421,7 +464,11 @@ private fun AttendanceRow(
                 text = when (status) {
                     AttendanceStatus.PRESENT -> "Present"
                     AttendanceStatus.ABSENT -> "Absent"
-                    null -> if (needsMark) "Not marked" else "Unmarked"
+                    null -> when {
+                        needsMark -> "Not marked"
+                        previewMode -> "Expected"
+                        else -> "Unmarked"
+                    }
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = when (status) {

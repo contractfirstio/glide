@@ -2,6 +2,8 @@ package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
 import glide.model.AcademicTerm
+import glide.model.compareAcademicTermsChronological
+import glide.model.compareAcademicTermsReverseChronological
 import glide.model.findOverlappingTerm
 
 object TermStore {
@@ -19,6 +21,7 @@ object TermStore {
     }
 
     fun update(term: AcademicTerm): Boolean {
+        if (!canEdit(term.id)) return false
         if (overlappingTerm(term, excludeTermId = term.id) != null) return false
         val index = _terms.indexOfFirst { it.id == term.id }
         if (index >= 0) {
@@ -28,17 +31,36 @@ object TermStore {
         return false
     }
 
-    fun delete(id: String) {
+    fun classCount(termId: String): Int =
+        ScheduledClassStore.countForTerm(termId)
+
+    fun canEdit(termId: String): Boolean = classCount(termId) == 0
+
+    fun canDelete(termId: String): Boolean = canEdit(termId)
+
+    fun termEditBlockReason(termId: String): String? {
+        val linkedClasses = classCount(termId)
+        return if (linkedClasses == 0) {
+            null
+        } else {
+            "This term is used by $linkedClasses class${if (linkedClasses == 1) "" else "es"} " +
+                "and cannot be edited."
+        }
+    }
+
+    fun delete(id: String): Boolean {
+        if (!canDelete(id)) return false
         _terms.removeAll { it.id == id }
-        ScheduledClassStore.clearTermReference(id)
+        return true
     }
 
     fun findById(id: String): AcademicTerm? = _terms.find { it.id == id }
 
+    /** Reverse chronological order for the Terms panel (latest term first). */
     fun sortedForPanel(): List<AcademicTerm> =
-        _terms.sortedWith(compareByDescending<AcademicTerm> { it.startDate }.thenBy { it.name })
+        _terms.sortedWith(compareAcademicTermsReverseChronological())
 
     /** Chronological order for term calendar navigation (earliest first). */
     fun sortedChronologically(): List<AcademicTerm> =
-        _terms.sortedWith(compareBy<AcademicTerm> { it.startDate }.thenBy { it.name })
+        _terms.sortedWith(compareAcademicTermsChronological())
 }

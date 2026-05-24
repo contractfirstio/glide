@@ -13,7 +13,7 @@ fun SchedulingCustomerGroupsFloatingPanel(
     windowHeightPx: Int,
 ) {
     FloatingPanelShell(
-        title = "Customer groups",
+        title = "Sold Plans",
         slot = SchedulingPanelSlots.CUSTOMER_GROUPS,
         windowWidthPx = windowWidthPx,
         windowHeightPx = windowHeightPx,

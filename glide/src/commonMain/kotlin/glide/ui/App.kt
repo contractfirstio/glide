@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -18,9 +19,10 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import glide.data.AppSettingsStore
 import glide.data.AppViewMode
 import glide.data.AppViewState
-import glide.data.RollingPackBillingService
+import glide.data.RollingPlanBillingService
 import glide.ui.components.AppChrome
 import glide.ui.components.FloatingPanelsHost
 import glide.ui.billing.OverdueBillPaymentAlertBanner
@@ -28,21 +30,25 @@ import glide.ui.billing.PendingBillIssuanceAlertBanner
 import glide.ui.billing.rememberOverdueBillPayments
 import glide.ui.billing.rememberPendingBillsToIssue
 import glide.ui.scheduling.PendingAttendanceAlertBanner
+import glide.ui.scheduling.UnassignedSoldPlanAlertBanner
 import glide.ui.scheduling.rememberPendingAttendanceSessions
+import glide.ui.scheduling.rememberUnassignedSoldPlans
 import glide.ui.theme.GlideCanvasBackground
 import glide.ui.theme.GlideTheme
 
 @Composable
 fun App() {
     GlideTheme {
+        val appSettings by AppSettingsStore.settingsState
         val focusRequester = remember { FocusRequester() }
         val viewMode = AppViewState.mode
         val pendingAttendance = rememberPendingAttendanceSessions()
         val pendingBillsToIssue = rememberPendingBillsToIssue()
         val overdueBillPayments = rememberOverdueBillPayments()
+        val unassignedSoldPlans = rememberUnassignedSoldPlans()
         LaunchedEffect(Unit) {
             focusRequester.requestFocus()
-            RollingPackBillingService.syncAllActiveRollingPackBilling()
+            RollingPlanBillingService.syncAllActiveRollingPlanBilling()
         }
 
         Box(
@@ -75,8 +81,16 @@ fun App() {
                 }
                 PendingBillIssuanceAlertBanner(pending = pendingBillsToIssue)
                 OverdueBillPaymentAlertBanner(overdue = overdueBillPayments)
+                UnassignedSoldPlanAlertBanner(unassigned = unassignedSoldPlans)
                 FloatingPanelsHost(modifier = Modifier.weight(1f))
             }
+        }
+
+        if (!appSettings.isConfigured) {
+            CompanySetupDialog(
+                initial = appSettings,
+                onConfirm = AppSettingsStore::save,
+            )
         }
     }
 }

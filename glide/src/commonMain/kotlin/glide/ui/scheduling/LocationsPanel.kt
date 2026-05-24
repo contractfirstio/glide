@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,8 +34,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.LocationStore
 import glide.data.ScheduledClassStore
+import glide.data.SchedulePanelState
+import glide.data.TermStore
 import glide.model.ClassLocation
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.DeleteConfirmDialog
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideOutlinedButton
@@ -48,6 +54,9 @@ import java.util.UUID
 private data class LocationFormState(
     val name: String = "",
     val maxCapacityText: String = "",
+    val addressLine1: String = "",
+    val addressLine2: String = "",
+    val city: String = "",
     val notes: String = "",
 ) {
     fun parsedMaxCapacity(): Int? {
@@ -70,6 +79,9 @@ private data class LocationFormState(
         id = existingId ?: UUID.randomUUID().toString(),
         name = name.trim(),
         maxCapacity = parsedMaxCapacity(),
+        addressLine1 = addressLine1.trim(),
+        addressLine2 = addressLine2.trim(),
+        city = city.trim(),
         notes = notes.trim(),
         createdAtMillis = createdAtMillis,
     )
@@ -78,42 +90,73 @@ private data class LocationFormState(
 @Composable
 fun LocationsPanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var formState by remember { mutableStateOf(LocationFormState()) }
+    val form = rememberFormDirtyTracker(LocationFormState())
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
-    val locations = LocationStore.sortedForPanel()
+    val allLocations = LocationStore.sortedForPanel()
+    val termFilterId = SchedulePanelState.selectedTermFilterId
+    val locationFilterId = SchedulePanelState.selectedLocationFilterId
+    val classSyncId = SchedulePanelState.selectedClassId.takeIf {
+        termFilterId == null && locationFilterId == null
+    }
+    val locations = if (termFilterId != null) {
+        val locationIds = ScheduledClassStore.locationIdsForTerm(termFilterId)
+        allLocations.filter { it.id in locationIds }
+    } else {
+        allLocations
+    }
+    val termFilterLabel = termFilterId?.let {
+        TermStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() }
+    }
 
-    fun clearSelection() {
+    fun clearLocalSelection() {
         selectedId = null
         isCreating = true
-        formState = LocationFormState()
+        form.load(LocationFormState())
         formError = null
     }
 
+    fun clearSelection() {
+        clearLocalSelection()
+        SchedulePanelState.onLocationCleared()
+    }
+
     fun resetFormForCreate() {
-        selectedId = null
-        isCreating = true
-        formState = LocationFormState()
+        clearLocalSelection()
+        SchedulePanelState.onLocationCleared()
+    }
+
+    fun syncLocationIntoForm(location: ClassLocation) {
+        selectedId = location.id
+        isCreating = false
+        form.load(
+            location.toFormState(),
+        )
         formError = null
     }
 
     fun loadIntoForm(location: ClassLocation) {
         selectedId = location.id
         isCreating = false
-        formState = LocationFormState(
-            name = location.name,
-            maxCapacityText = location.maxCapacity?.toString() ?: "",
-            notes = location.notes,
+        SchedulePanelState.onLocationSelected(location.id)
+        form.load(
+            location.toFormState(),
         )
         formError = null
     }
 
-    LaunchedEffect(locations, selectedId) {
-        if (selectedId != null && locations.none { it.id == selectedId }) {
+    LaunchedEffect(allLocations, selectedId, termFilterId) {
+        if (selectedId != null && allLocations.none { it.id == selectedId }) {
             clearSelection()
         }
+    }
+
+    LaunchedEffect(classSyncId, allLocations) {
+        val classId = classSyncId ?: return@LaunchedEffect
+        val locationId = ScheduledClassStore.findById(classId)?.locationId ?: return@LaunchedEffect
+        allLocations.find { it.id == locationId }?.let { syncLocationIntoForm(it) }
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -133,7 +176,14 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         ) {
             if (!compact) {
                 Text(
-                    text = "Define rooms, studios, and capacity, then assign locations to classes in the Schedule panel.",
+                    text = when {
+                        termFilterId != null -> {
+                            val label = termFilterLabel ?: "this term"
+                            "Showing locations used in $label. Use Clear filter in Terms to reset."
+                        }
+                        else ->
+                            "Define rooms, studios, and capacity, then assign locations to classes in the Schedule panel."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -151,8 +201,15 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                             text = "${locations.size} location${if (locations.size == 1) "" else "s"}",
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        GlideButton(onClick = { resetFormForCreate() }) {
-                            Text(if (compact) "New" else "New location")
+                        Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (termFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearTermFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            GlideButton(onClick = { resetFormForCreate() }) {
+                                Text(if (compact) "New" else "New location")
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(spacing.field))
@@ -175,7 +232,10 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "No locations yet.",
+                                text = when {
+                                    termFilterId != null -> "No locations used in this term."
+                                    else -> "No locations yet."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -219,10 +279,23 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                             .verticalScroll(rememberScrollState()),
                     ) {
                         LocationForm(
-                            state = formState,
-                            onStateChange = { formState = it },
+                            state = form.draft,
+                            onStateChange = { form.draft = it },
                             spacing = spacing,
                         )
+
+                        if (!isCreating && selectedId != null) {
+                            val classCount = LocationStore.classCount(selectedId!!)
+                            if (classCount > 0) {
+                                Spacer(modifier = Modifier.height(spacing.field))
+                                Text(
+                                    text = "Used by $classCount class${if (classCount == 1) "" else "es"}. " +
+                                        "Remove this location from those classes before deleting.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
 
                         formError?.let { error ->
                             Spacer(modifier = Modifier.height(spacing.field))
@@ -242,19 +315,19 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                     ) {
                         GlideButton(
                             onClick = {
-                                if (!formState.isValid()) {
+                                if (!form.draft.isValid()) {
                                     formError = "Location name is required. Capacity must be a positive number if set."
                                     return@GlideButton
                                 }
                                 formError = null
                                 if (isCreating) {
-                                    val location = formState.toLocation()
+                                    val location = form.draft.toLocation()
                                     LocationStore.create(location)
                                     loadIntoForm(location)
                                 } else {
                                     val existing = selectedId?.let { LocationStore.findById(it) }
                                     if (existing != null) {
-                                        val updated = formState.toLocation(
+                                        val updated = form.draft.toLocation(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
@@ -263,13 +336,17 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                                     }
                                 }
                             },
+                            enabled = form.isDirty,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(saveLabel)
                         }
 
                         if (!isCreating) {
-                            GlideOutlinedButton(onClick = { showDeleteConfirm = true }) {
+                            GlideOutlinedButton(
+                                onClick = { showDeleteConfirm = true },
+                                enabled = selectedId?.let { LocationStore.canDelete(it) } == true,
+                            ) {
                                 Text("Delete", color = MaterialTheme.colorScheme.error)
                             }
                         }
@@ -295,36 +372,27 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        val linkedClasses = ScheduledClassStore.countForLocation(selectedId!!)
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete location?") },
-            text = {
-                Text(
-                    if (linkedClasses > 0) {
-                        "This location will be removed. $linkedClasses class${if (linkedClasses == 1) "" else "es"} " +
-                            "will be unlinked from this location."
-                    } else {
-                        "This location will be removed permanently."
-                    },
-                )
+        val linkedClasses = LocationStore.classCount(selectedId!!)
+        val attachedToClass = linkedClasses > 0
+        DeleteConfirmDialog(
+            title = "Delete location?",
+            message = if (attachedToClass) {
+                "This location is used by $linkedClasses class${if (linkedClasses == 1) "" else "es"} " +
+                    "and cannot be deleted. Remove it from those classes first."
+            } else {
+                "This location will be removed permanently."
             },
-            confirmButton = {
-                GlideTextButton(
-                    onClick = {
-                        LocationStore.delete(selectedId!!)
-                        showDeleteConfirm = false
-                        clearSelection()
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+            onDismiss = { showDeleteConfirm = false },
+            onContinue = {
+                if (LocationStore.delete(selectedId!!)) {
+                    showDeleteConfirm = false
+                    clearSelection()
+                } else {
+                    showDeleteConfirm = false
+                    formError = "This location is attached to a class and cannot be deleted."
                 }
             },
-            dismissButton = {
-                GlideTextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+            continueEnabled = !attachedToClass,
         )
     }
 }
@@ -369,6 +437,16 @@ private fun LocationListItem(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        val addressPreview = location.formattedAddressLines().joinToString(", ")
+        if (addressPreview.isNotBlank()) {
+            Text(
+                text = addressPreview,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (location.notes.isNotBlank()) {
             Text(
                 text = location.notes,
@@ -395,27 +473,91 @@ private fun LocationForm(
     onStateChange: (LocationFormState) -> Unit,
     spacing: GlideLayout.Spacing,
 ) {
-    GlideOutlinedField(
-        value = state.name,
-        onValueChange = { onStateChange(state.copy(name = it)) },
-        label = "Location name",
-        placeholder = "e.g. Studio A",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.maxCapacityText,
-        onValueChange = { onStateChange(state.copy(maxCapacityText = it)) },
-        label = "Max capacity",
-        placeholder = "e.g. 20",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.notes,
-        onValueChange = { onStateChange(state.copy(notes = it)) },
-        label = "Notes",
-        singleLine = false,
-        minLines = 2,
-        maxLines = 4,
-        fieldHeight = GlideDimensions.notesMinHeight,
-    )
+    FormPanelSection(
+        title = "Location",
+        description = "Room or venue name used on classes.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        GlideOutlinedField(
+            value = state.name,
+            onValueChange = { onStateChange(state.copy(name = it)) },
+            label = "Location name",
+            placeholder = "e.g. Studio A",
+        )
+    }
+
+    FormPanelSectionsDivider(label = "Address", spacing = spacing)
+
+    FormPanelSection(
+        title = "Venue address",
+        description = "Printed on invoices so customers know where classes take place.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
+        GlideOutlinedField(
+            value = state.addressLine1,
+            onValueChange = { onStateChange(state.copy(addressLine1 = it)) },
+            label = "Address line 1",
+            placeholder = "e.g. 12 High Street",
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        GlideOutlinedField(
+            value = state.addressLine2,
+            onValueChange = { onStateChange(state.copy(addressLine2 = it)) },
+            label = "Address line 2",
+            placeholder = "e.g. Unit 3",
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        GlideOutlinedField(
+            value = state.city,
+            onValueChange = { onStateChange(state.copy(city = it)) },
+            label = "District / area",
+            placeholder = "e.g. Central",
+        )
+    }
+
+    FormPanelSectionsDivider(label = "Capacity", spacing = spacing)
+
+    FormPanelSection(
+        title = "Room capacity",
+        description = "Maximum students for classes at this location.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
+        GlideOutlinedField(
+            value = state.maxCapacityText,
+            onValueChange = { onStateChange(state.copy(maxCapacityText = it)) },
+            label = "Max capacity",
+            placeholder = "e.g. 20",
+        )
+    }
+
+    FormPanelSectionsDivider(label = "Notes", spacing = spacing)
+
+    FormPanelSection(
+        title = "Notes",
+        description = "Internal notes about this location.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        GlideOutlinedField(
+            value = state.notes,
+            onValueChange = { onStateChange(state.copy(notes = it)) },
+            label = "Notes",
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            fieldHeight = GlideDimensions.notesMinHeight,
+        )
+    }
 }
+
+private fun ClassLocation.toFormState(): LocationFormState = LocationFormState(
+    name = name,
+    maxCapacityText = maxCapacity?.toString() ?: "",
+    addressLine1 = addressLine1,
+    addressLine2 = addressLine2,
+    city = city,
+    notes = notes,
+)

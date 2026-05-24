@@ -3,8 +3,9 @@ package glide.model
 import java.util.UUID
 
 enum class PlanKind(val label: String) {
-    MULTI_LESSON_PACK("Multi Lesson Pack"),
-    SINGLE_LESSON_PACK("Single Lesson Pack"),
+    MULTI_LESSON_PLAN("Multi Lesson Plan"),
+    SINGLE_LESSON_PLAN("Single Lesson Plan"),
+    CAMP("Camp"),
 }
 
 data class Plan(
@@ -21,9 +22,10 @@ data class Plan(
 )
 
 fun Plan.summaryLine(): String = when (kind) {
-    PlanKind.MULTI_LESSON_PACK -> {
+    PlanKind.MULTI_LESSON_PLAN -> {
         val rollingLabel = if (rolling) "Rolling" else "Fixed"
         "$lessonCount classes · $rollingLabel"
     }
-    PlanKind.SINGLE_LESSON_PACK -> "1 class"
+    PlanKind.SINGLE_LESSON_PLAN -> "1 class"
+    PlanKind.CAMP -> "$lessonCount days"
 }

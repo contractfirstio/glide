@@ -16,7 +16,7 @@ data class Bill(
     val enrollmentId: String,
     val peopleGroupId: String,
     val description: String,
-    /** Pack total before attendance credits; null on older bills (inferred from credits). */
+    /** Plan total before attendance credits; null on older bills (inferred from credits). */
     val grossAmountMinor: Long? = null,
     /** Amount due after credits applied. */
     val amountMinor: Long,
@@ -27,21 +27,37 @@ data class Bill(
     val issuedAtMillis: Long? = null,
     val dueAtMillis: Long? = null,
     val paidAtMillis: Long? = null,
+    /** Frozen invoice content captured at issue time; used for identical PDF regeneration. */
+    val issuedInvoiceSnapshot: IssuedInvoiceSnapshot? = null,
+    /** Editable charge and credit lines while [status] is [BillStatus.SCHEDULED]. */
+    val lineItems: List<BillLineItem> = emptyList(),
 )
 
 fun Bill.isIssuedToCustomer(): Boolean =
     status == BillStatus.ISSUED || status == BillStatus.PAID
 
+/** Billing line items and amounts can only be edited while scheduled. */
+fun Bill.isBillingEditable(): Boolean = status == BillStatus.SCHEDULED
+
+/** Only scheduled bills can be voided (removed). */
+fun Bill.canBeVoided(): Boolean = status == BillStatus.SCHEDULED
+
 fun Bill.displayDateMillis(): Long = issuedAtMillis ?: createdAtMillis
 
-/** When payment is expected; explicit [dueAtMillis] or issue date (on receipt). */
+/** When payment is expected; [dueAtMillis] or issue date plus [PAYMENT_DUE_DAYS_AFTER_ISSUE]. */
 fun Bill.effectivePaymentDueAtMillis(): Long? =
     when (status) {
-        BillStatus.ISSUED -> dueAtMillis ?: issuedAtMillis
+        BillStatus.ISSUED -> dueAtMillis ?: issuedAtMillis?.let { billPaymentDueAtMillis(it) }
         else -> null
     }
 
 private const val DAY_MILLIS = 24L * 60 * 60 * 1000
+
+/** Payment is due this many whole days after the bill is issued. */
+const val PAYMENT_DUE_DAYS_AFTER_ISSUE = 2L
+
+fun billPaymentDueAtMillis(issuedAtMillis: Long): Long =
+    issuedAtMillis + PAYMENT_DUE_DAYS_AFTER_ISSUE * DAY_MILLIS
 
 /** Whole days after [effectivePaymentDueAtMillis]; null if not issued or not yet due. */
 fun Bill.daysPastPaymentDue(nowMillis: Long = System.currentTimeMillis()): Int? {

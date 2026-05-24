@@ -13,7 +13,7 @@ fun CustomersFloatingPanel(
     windowHeightPx: Int,
 ) {
     FloatingPanelShell(
-        title = "Customers",
+        title = "Sold Plans",
         slot = PanelSlots.CUSTOMERS,
         windowWidthPx = windowWidthPx,
         windowHeightPx = windowHeightPx,

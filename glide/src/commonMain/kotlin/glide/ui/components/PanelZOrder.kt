@@ -10,15 +10,15 @@ object PanelZOrder {
     private val customerManagementOrder = mutableStateListOf(
         PanelSlots.LEADS,
         PanelSlots.PLANS,
-        PanelSlots.RELATED,
-        PanelSlots.PEOPLE,
+        PanelSlots.STUDENTS,
+        PanelSlots.CLIENTS,
         PanelSlots.CUSTOMERS,
     )
 
     private val schedulingOrder = mutableStateListOf(
-        SchedulingPanelSlots.CUSTOMER_GROUPS,
-        SchedulingPanelSlots.TERMS,
         SchedulingPanelSlots.LOCATIONS,
+        SchedulingPanelSlots.TERMS,
+        SchedulingPanelSlots.CUSTOMER_GROUPS,
         SchedulingPanelSlots.SCHEDULE,
         SchedulingPanelSlots.CALENDAR,
     )

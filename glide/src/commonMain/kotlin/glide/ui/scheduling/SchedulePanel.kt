@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,33 +44,54 @@ import glide.data.LocationStore
 import glide.data.enrolledHeadcount
 import glide.data.headcountForCustomerGroups
 import glide.data.AddCustomerGroupResult
-import glide.data.PackClassScheduleStore
-import glide.data.RollingPackBillingService
-import glide.data.assignPackClassSchedule
+import glide.data.PlanClassScheduleStore
+import glide.data.RollingPlanBillingService
+import glide.data.assignPlanClassSchedule
 import glide.data.isCustomerGroupAvailableForClass
 import glide.data.tryAddCustomerGroup
 import glide.data.validateCustomerGroupsForClass
-import glide.data.validatePackSchedulesForClass
+import glide.data.validatePlanSchedulesForClass
+import glide.data.validateRollingPlanEnrollmentsForClass
+import glide.data.peopleGroupHasRollingPlan
+import glide.data.canAcceptRollingPlanEnrollments
+import glide.data.PlanScheduleAssignment
+import glide.data.assignWeeklyPlanClassSchedule
+import glide.data.requiredClassSessionsForPlan
+import glide.data.validateWeeklyPlanFitsClass
+import glide.model.isWeekly
+import glide.data.PlanEnrollmentStore
 import glide.data.PeopleGroupStore
+import glide.data.PlanStore
 import glide.data.ScheduledClassStore
+import glide.data.SchedulePanelState
 import glide.data.TermStore
-import glide.data.classAttendeeCount
-import glide.data.memberCount
-import glide.data.resolveMainContact
+import glide.data.resolveMainClient
+import glide.data.toScheduleMessage
 import glide.data.toUserMessage
 import glide.model.ClassLocation
+import glide.model.PeopleGroup
 import glide.model.ClassScheduleKind
 import glide.model.DayOfWeek
 import glide.model.ScheduledClass
 import glide.model.compareTime24h
 import glide.model.isValidTime24h
 import glide.model.parseScheduleIsoDate
+import glide.model.formatScheduleIsoDate
+import glide.model.formatWeeklyDaysLabel
+import glide.model.weekDateRangeFromIsoDate
 import glide.model.scheduleKind
 import glide.model.scheduleLine
 import glide.model.toModelDayOfWeek
 import glide.ui.shared.IsoDateField
+import glide.ui.leads.millisToIsoDate
 import glide.ui.leads.parseIsoDateToMillis
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.DeleteConfirmDialog
+import glide.ui.shared.FormPanelLinkedBox
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.peoplegroup.EntitySearchPicker
 import glide.ui.peoplegroup.SearchResultItem
@@ -94,6 +114,8 @@ private data class ClassFormState(
     val scheduleKind: ClassScheduleKind = ClassScheduleKind.RECURRING,
     val dayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
     val singleDate: String = "",
+    val weekOfDate: String = "",
+    val weeklyDays: Set<DayOfWeek> = emptySet(),
     val startTime: String = "09:00",
     val endTime: String = "10:00",
     val notes: String = "",
@@ -106,6 +128,8 @@ private data class ClassFormState(
         if (compareTime24h(startTime, endTime) >= 0) return false
         return when (scheduleKind) {
             ClassScheduleKind.RECURRING -> true
+            ClassScheduleKind.WEEKLY ->
+                parseIsoDateToMillis(weekOfDate) != null && weeklyDays.isNotEmpty()
             ClassScheduleKind.SINGLE_DAY -> parseIsoDateToMillis(singleDate) != null
         }
     }
@@ -115,12 +139,24 @@ private data class ClassFormState(
         createdAtMillis: Long = System.currentTimeMillis(),
     ): ScheduledClass {
         val resolvedSingleDate = when (scheduleKind) {
-            ClassScheduleKind.RECURRING -> null
+            ClassScheduleKind.RECURRING, ClassScheduleKind.WEEKLY -> null
             ClassScheduleKind.SINGLE_DAY -> singleDate.trim().takeIf { it.isNotBlank() }
         }
-        val resolvedDayOfWeek = resolvedSingleDate?.let { iso ->
-            parseScheduleIsoDate(iso)?.dayOfWeek?.toModelDayOfWeek()
-        } ?: dayOfWeek
+        val resolvedWeekOfDate = when (scheduleKind) {
+            ClassScheduleKind.WEEKLY -> weekOfDate.trim().takeIf { it.isNotBlank() }
+            else -> null
+        }
+        val resolvedWeeklyDays = when (scheduleKind) {
+            ClassScheduleKind.WEEKLY -> weeklyDays.sortedBy { it.sortOrder }
+            else -> emptyList()
+        }
+        val resolvedDayOfWeek = when (scheduleKind) {
+            ClassScheduleKind.SINGLE_DAY -> resolvedSingleDate?.let { iso ->
+                parseScheduleIsoDate(iso)?.dayOfWeek?.toModelDayOfWeek()
+            } ?: dayOfWeek
+            ClassScheduleKind.WEEKLY -> resolvedWeeklyDays.firstOrNull() ?: dayOfWeek
+            ClassScheduleKind.RECURRING -> dayOfWeek
+        }
         return ScheduledClass(
             id = existingId ?: UUID.randomUUID().toString(),
             name = name.trim(),
@@ -129,6 +165,8 @@ private data class ClassFormState(
             locationId = locationId,
             dayOfWeek = resolvedDayOfWeek,
             singleDate = resolvedSingleDate,
+            weekOfDate = resolvedWeekOfDate,
+            weeklyDays = resolvedWeeklyDays,
             startTime = startTime,
             endTime = endTime,
             notes = notes.trim(),
@@ -144,6 +182,19 @@ private data class ClassFormState(
         return copy(termIds = term?.let { setOf(it.id) } ?: emptySet())
     }
 
+    fun withAutoTermForWeekly(terms: List<glide.model.AcademicTerm>): ClassFormState {
+        if (scheduleKind != ClassScheduleKind.WEEKLY) return this
+        if (weekOfDate.isBlank()) return copy(termIds = emptySet())
+        val term = findTermContainingIsoDate(terms, weekOfDate)
+        return copy(termIds = term?.let { setOf(it.id) } ?: emptySet())
+    }
+
+    fun withAutoTerms(terms: List<glide.model.AcademicTerm>): ClassFormState = when (scheduleKind) {
+        ClassScheduleKind.SINGLE_DAY -> withAutoTermForSingleDay(terms)
+        ClassScheduleKind.WEEKLY -> withAutoTermForWeekly(terms)
+        ClassScheduleKind.RECURRING -> this
+    }
+
     companion object {
         fun defaultForCreate(terms: List<glide.model.AcademicTerm>): ClassFormState =
             ClassFormState(termIds = defaultRecurringClassTermIds(terms))
@@ -154,58 +205,119 @@ private data class ClassFormState(
 fun SchedulePanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     val terms = TermStore.sortedForPanel()
-    var formState by remember { mutableStateOf(ClassFormState.defaultForCreate(terms)) }
+    val form = rememberFormDirtyTracker(ClassFormState.defaultForCreate(terms))
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
     val locations = LocationStore.sortedForPanel()
-    val classes = ScheduledClassStore.forSchedulePanel()
+    val soldPlanFilterId = SchedulePanelState.selectedSoldPlanId
+    val termFilterId = SchedulePanelState.selectedTermFilterId
+    val locationFilterId = SchedulePanelState.selectedLocationFilterId
+    val classes = ScheduledClassStore.forSchedulingPanel(
+        soldPlanId = soldPlanFilterId,
+        termId = termFilterId,
+        locationId = locationFilterId,
+    )
+    val soldPlanFilterLabel = soldPlanFilterId?.let { groupId ->
+        PeopleGroupStore.findById(groupId)?.let { group ->
+            group.resolveMainClient().name.takeIf { it.isNotBlank() }
+                ?: group.planId?.let { PlanStore.findById(it)?.name }?.takeIf { it.isNotBlank() }
+        }
+    }
+    val termFilterLabel = termFilterId?.let { TermStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+    val locationFilterLabel = locationFilterId?.let { LocationStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
 
-    fun clearSelection() {
+    fun clearLocalSelection() {
         selectedId = null
         isCreating = true
-        formState = ClassFormState.defaultForCreate(terms)
+        form.load(ClassFormState.defaultForCreate(terms))
         formError = null
     }
 
+    fun clearSelection() {
+        clearLocalSelection()
+        SchedulePanelState.onClassCleared()
+    }
+
     fun resetFormForCreate() {
-        selectedId = null
-        isCreating = true
-        formState = ClassFormState.defaultForCreate(terms)
+        clearLocalSelection()
+        SchedulePanelState.onClassCleared()
+    }
+
+    fun syncClassIntoForm(scheduledClass: ScheduledClass) {
+        selectedId = scheduledClass.id
+        isCreating = false
+        SchedulePanelState.syncClassContext(scheduledClass.id)
+        form.load(
+            ClassFormState(
+                name = scheduledClass.name,
+                termIds = scheduledClass.termIds.toSet(),
+                customerGroupIds = scheduledClass.customerGroupIds.toSet(),
+                locationId = scheduledClass.locationId,
+                scheduleKind = scheduledClass.scheduleKind(),
+                dayOfWeek = scheduledClass.dayOfWeek,
+                singleDate = scheduledClass.singleDate.orEmpty(),
+                weekOfDate = scheduledClass.weekOfDate.orEmpty(),
+                weeklyDays = scheduledClass.weeklyDays.toSet(),
+                startTime = scheduledClass.startTime,
+                endTime = scheduledClass.endTime,
+                notes = scheduledClass.notes,
+                calendarColorArgb = scheduledClass.calendarColorArgb,
+                classId = scheduledClass.id,
+            ),
+        )
         formError = null
     }
 
     fun loadIntoForm(scheduledClass: ScheduledClass) {
         selectedId = scheduledClass.id
         isCreating = false
-        formState = ClassFormState(
-            name = scheduledClass.name,
-            termIds = scheduledClass.termIds.toSet(),
-            customerGroupIds = scheduledClass.customerGroupIds.toSet(),
-            locationId = scheduledClass.locationId,
-            scheduleKind = scheduledClass.scheduleKind(),
-            dayOfWeek = scheduledClass.dayOfWeek,
-            singleDate = scheduledClass.singleDate.orEmpty(),
-            startTime = scheduledClass.startTime,
-            endTime = scheduledClass.endTime,
-            notes = scheduledClass.notes,
-            calendarColorArgb = scheduledClass.calendarColorArgb,
-            classId = scheduledClass.id,
+        SchedulePanelState.onClassSelected(scheduledClass.id)
+        form.load(
+            ClassFormState(
+                name = scheduledClass.name,
+                termIds = scheduledClass.termIds.toSet(),
+                customerGroupIds = scheduledClass.customerGroupIds.toSet(),
+                locationId = scheduledClass.locationId,
+                scheduleKind = scheduledClass.scheduleKind(),
+                dayOfWeek = scheduledClass.dayOfWeek,
+                singleDate = scheduledClass.singleDate.orEmpty(),
+                weekOfDate = scheduledClass.weekOfDate.orEmpty(),
+                weeklyDays = scheduledClass.weeklyDays.toSet(),
+                startTime = scheduledClass.startTime,
+                endTime = scheduledClass.endTime,
+                notes = scheduledClass.notes,
+                calendarColorArgb = scheduledClass.calendarColorArgb,
+                classId = scheduledClass.id,
+            ),
         )
         formError = null
     }
 
-    LaunchedEffect(classes, selectedId) {
+    LaunchedEffect(soldPlanFilterId, classes) {
+        val soldPlanId = soldPlanFilterId ?: return@LaunchedEffect
+        val scheduledClass = ScheduledClassStore.findClassContainingCustomerGroup(soldPlanId)
+        if (scheduledClass == null) {
+            if (selectedId != null) clearLocalSelection()
+            return@LaunchedEffect
+        }
+        if (selectedId != scheduledClass.id) {
+            syncClassIntoForm(scheduledClass)
+        }
+    }
+
+    LaunchedEffect(classes, selectedId, soldPlanFilterId, termFilterId, locationFilterId) {
+        if (soldPlanFilterId != null || termFilterId != null || locationFilterId != null) return@LaunchedEffect
         if (selectedId != null && classes.none { it.id == selectedId }) {
             clearSelection()
         }
     }
 
-    LaunchedEffect(locations, formState.locationId) {
-        val locationId = formState.locationId ?: return@LaunchedEffect
+    LaunchedEffect(locations, form.draft.locationId) {
+        val locationId = form.draft.locationId ?: return@LaunchedEffect
         if (locations.none { it.id == locationId }) {
-            formState = formState.copy(locationId = null)
+            form.draft = form.draft.copy(locationId = null)
         }
     }
 
@@ -227,6 +339,18 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
             if (!compact) {
                 Text(
                     text = when {
+                        soldPlanFilterId != null -> {
+                            val label = soldPlanFilterLabel ?: "this sold plan"
+                            "Showing class for $label. Use Clear filter to reset."
+                        }
+                        termFilterId != null -> {
+                            val label = termFilterLabel ?: "this term"
+                            "Showing classes in $label. Use Clear filter to reset."
+                        }
+                        locationFilterId != null -> {
+                            val label = locationFilterLabel ?: "this location"
+                            "Showing classes at $label. Use Clear filter to reset."
+                        }
                         terms.isEmpty() && locations.isEmpty() ->
                             "Create terms and locations in their panels, then add weekly or single-day classes here."
                         terms.isEmpty() ->
@@ -253,8 +377,25 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             text = "${classes.size} class${if (classes.size == 1) "" else "es"}",
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        GlideButton(onClick = { resetFormForCreate() }) {
-                            Text(if (compact) "New" else "New class")
+                        Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (soldPlanFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearSoldPlanFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            if (termFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearTermFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            if (locationFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearLocationFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            GlideButton(onClick = { resetFormForCreate() }) {
+                                Text(if (compact) "New" else "New class")
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(spacing.field))
@@ -277,7 +418,15 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "No classes yet.",
+                                text = when {
+                                    soldPlanFilterId != null ->
+                                        "This sold plan is not assigned to a class."
+                                    termFilterId != null ->
+                                        "No classes in this term."
+                                    locationFilterId != null ->
+                                        "No classes at this location."
+                                    else -> "No classes yet."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -315,31 +464,62 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                     )
                     Spacer(modifier = Modifier.height(spacing.section))
 
+                    val termsReadOnly = !isCreating &&
+                        selectedId != null &&
+                        !ScheduledClassStore.canEditTerms(selectedId!!)
+
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .verticalScroll(rememberScrollState()),
                     ) {
                         ClassForm(
-                            state = formState,
-                            onStateChange = { formState = it },
+                            state = form.draft,
+                            onStateChange = { form.draft = it },
                             terms = terms,
                             locations = locations,
                             spacing = spacing,
                             isCreating = isCreating,
+                            termsReadOnly = termsReadOnly,
                         )
 
-                        if (!isCreating && selectedId != null) {
+                        if (termsReadOnly) {
                             Spacer(modifier = Modifier.height(spacing.field))
+                            Text(
+                                text = ScheduledClassStore.classTermsEditBlockReason(selectedId!!)
+                                    ?: "This class has sold plans and its terms cannot be changed.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+
+                        if (!isCreating && selectedId != null) {
+                            FormPanelSectionsDivider(label = "Enrollment", spacing = spacing)
                             ClassCustomerGroupsSection(
                                 classId = selectedId,
-                                customerGroupIds = formState.customerGroupIds.toList(),
-                                locationId = formState.locationId,
+                                scheduledClassForValidation = selectedId?.let { id ->
+                                    form.draft.toScheduledClass(existingId = id)
+                                },
+                                customerGroupIds = form.draft.customerGroupIds.toList(),
+                                locationId = form.draft.locationId,
                                 onCustomerGroupIdsChange = { ids ->
-                                    formState = formState.copy(customerGroupIds = ids.toSet())
+                                    form.draft = form.draft.copy(customerGroupIds = ids.toSet())
                                 },
                                 spacing = spacing,
                             )
+                        }
+
+                        if (!isCreating && selectedId != null) {
+                            val soldPlanCount = ScheduledClassStore.soldPlanCount(selectedId!!)
+                            if (soldPlanCount > 0) {
+                                Spacer(modifier = Modifier.height(spacing.field))
+                                Text(
+                                    text = "$soldPlanCount sold plan${if (soldPlanCount == 1) "" else "s"} " +
+                                        "on this class. Remove them before deleting the class.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
 
                         formError?.let { error ->
@@ -360,19 +540,21 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                     ) {
                         GlideButton(
                             onClick = {
-                                if (!formState.isValid()) {
-                                    formError = when (formState.scheduleKind) {
+                                if (!form.draft.isValid()) {
+                                    formError = when (form.draft.scheduleKind) {
                                         ClassScheduleKind.RECURRING ->
                                             "Name, valid start/end times (HH:MM), and end after start are required."
+                                        ClassScheduleKind.WEEKLY ->
+                                            "Name, week date, at least one day, valid start/end times (HH:MM), and end after start are required."
                                         ClassScheduleKind.SINGLE_DAY ->
                                             "Name, class date, valid start/end times (HH:MM), and end after start are required."
                                     }
                                     return@GlideButton
                                 }
                                 formError = null
-                                val stateToSave = formState.withAutoTermForSingleDay(terms)
-                                if (stateToSave != formState) {
-                                    formState = stateToSave
+                                val stateToSave = form.draft.withAutoTerms(terms)
+                                if (stateToSave != form.draft) {
+                                    form.draft = stateToSave
                                 }
                                 if (isCreating) {
                                     val scheduledClass = stateToSave.toScheduledClass()
@@ -392,7 +574,21 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
-                                        validatePackSchedulesForClass(
+                                        if (ScheduledClassStore.soldPlanCount(existing.id) > 0 &&
+                                            updated.termIds.toSet() != existing.termIds.toSet()
+                                        ) {
+                                            formError = ScheduledClassStore.classTermsEditBlockReason(existing.id)
+                                                ?: "This class has sold plans and its terms cannot be changed."
+                                            return@GlideButton
+                                        }
+                                        validatePlanSchedulesForClass(
+                                            updated.customerGroupIds,
+                                            updated,
+                                        )?.let { message ->
+                                            formError = message
+                                            return@GlideButton
+                                        }
+                                        validateRollingPlanEnrollmentsForClass(
                                             updated.customerGroupIds,
                                             updated,
                                         )?.let { message ->
@@ -401,20 +597,28 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                         }
                                         ScheduledClassStore.update(updated)
                                         updated.customerGroupIds.forEach { groupId ->
-                                            assignPackClassSchedule(groupId, updated)
-                                            RollingPackBillingService.syncRollingPackBilling(groupId)
+                                            if (!updated.isWeekly() ||
+                                                PlanClassScheduleStore.sessionDatesFor(groupId, updated.id) == null
+                                            ) {
+                                                assignPlanClassSchedule(groupId, updated)
+                                            }
+                                            RollingPlanBillingService.syncRollingPlanBilling(groupId)
                                         }
                                         loadIntoForm(updated)
                                     }
                                 }
                             },
+                            enabled = form.isDirty,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(saveLabel)
                         }
 
                         if (!isCreating) {
-                            GlideOutlinedButton(onClick = { showDeleteConfirm = true }) {
+                            GlideOutlinedButton(
+                                onClick = { showDeleteConfirm = true },
+                                enabled = selectedId?.let { ScheduledClassStore.canDelete(it) } == true,
+                            ) {
                                 Text("Delete", color = MaterialTheme.colorScheme.error)
                             }
                         }
@@ -440,26 +644,27 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete class?") },
-            text = { Text("This class will be removed permanently.") },
-            confirmButton = {
-                GlideTextButton(
-                    onClick = {
-                        ScheduledClassStore.delete(selectedId!!)
-                        showDeleteConfirm = false
-                        clearSelection()
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+        val soldPlanCount = ScheduledClassStore.soldPlanCount(selectedId!!)
+        val hasSoldPlans = soldPlanCount > 0
+        DeleteConfirmDialog(
+            title = "Delete class?",
+            message = if (hasSoldPlans) {
+                "This class has $soldPlanCount sold plan${if (soldPlanCount == 1) "" else "s"} " +
+                    "and cannot be deleted. Remove them from this class first."
+            } else {
+                "This class will be removed permanently."
+            },
+            onDismiss = { showDeleteConfirm = false },
+            onContinue = {
+                if (ScheduledClassStore.delete(selectedId!!)) {
+                    showDeleteConfirm = false
+                    clearSelection()
+                } else {
+                    showDeleteConfirm = false
+                    formError = "This class has sold plans and cannot be deleted."
                 }
             },
-            dismissButton = {
-                GlideTextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+            continueEnabled = !hasSoldPlans,
         )
     }
 }
@@ -542,9 +747,17 @@ private fun ClassListItem(
     }
 }
 
+private data class PendingWeeklyPlanLink(
+    val groupId: String,
+    val planName: String,
+    val requiredDays: Int,
+    val availableDays: List<DayOfWeek>,
+)
+
 @Composable
 private fun ClassCustomerGroupsSection(
     classId: String?,
+    scheduledClassForValidation: ScheduledClass?,
     customerGroupIds: List<String>,
     locationId: String?,
     onCustomerGroupIdsChange: (List<String>) -> Unit,
@@ -552,64 +765,105 @@ private fun ClassCustomerGroupsSection(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var enrollmentMessage by remember { mutableStateOf<String?>(null) }
+    var pendingRemoveGroupId by remember { mutableStateOf<String?>(null) }
+    var pendingWeeklyLink by remember { mutableStateOf<PendingWeeklyPlanLink?>(null) }
+    var weeklyLinkBlockedMessage by remember { mutableStateOf<String?>(null) }
 
-    val scheduledClass = classId?.let { ScheduledClassStore.findById(it) }
+    val classForValidation = scheduledClassForValidation
     val assignedIds = customerGroupIds
     val location = locationId?.let { LocationStore.findById(it) }
     val headcount = headcountForCustomerGroups(customerGroupIds)
 
-    val searchResults = remember(searchQuery, assignedIds, classId) {
+    val searchResults = remember(searchQuery, assignedIds, classId, classForValidation) {
         PeopleGroupStore.customers
             .filter { it.id !in assignedIds }
             .filter { group -> isCustomerGroupAvailableForClass(group.id, classId) }
             .filter { group ->
-                val main = group.resolveMainContact()
+                if (!peopleGroupHasRollingPlan(group.id)) return@filter true
+                classForValidation?.canAcceptRollingPlanEnrollments() == true
+            }
+            .filter { group ->
+                val main = group.resolveMainClient()
                 searchQuery.isBlank() ||
                     main.name.matchesEntitySearch(searchQuery) ||
                     main.email.matchesEntitySearch(searchQuery)
             }
             .map { group ->
-                val main = group.resolveMainContact()
+                val main = group.resolveMainClient()
                 SearchResultItem(
                     id = group.id,
                     primaryLabel = formatPersonLabel(main.name, main.dateOfBirth),
-                    secondaryLabel = "${group.classAttendeeCount()} attending",
+                    secondaryLabel = soldPlanSearchSecondaryLabel(group),
                 )
             }
     }
 
-    Column {
-        GlideFieldLabel("Customer groups")
-        Spacer(modifier = Modifier.height(2.dp))
+    FormPanelSection(
+        title = "Customer groups",
+        description = "Customer plans enrolled on this class. Each group can only be on one class.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
         ClassCapacityGraphic(
             occupiedCount = headcount,
             maxCapacity = location?.maxCapacity,
         )
         Spacer(modifier = Modifier.height(spacing.section))
         EntitySearchPicker(
-            label = "Add customer group",
+            label = "Sold Plans",
             placeholder = "Search by name or email…",
             query = searchQuery,
             onQueryChange = { searchQuery = it },
             results = searchResults,
             onSelect = { groupId ->
+                val cls = classForValidation
+                if (cls != null && cls.isWeekly()) {
+                    validateWeeklyPlanFitsClass(groupId, cls)?.let { message ->
+                        weeklyLinkBlockedMessage = message
+                        return@EntitySearchPicker
+                    }
+                    val enrollment = PlanEnrollmentStore.forPeopleGroup(groupId)
+                    val requiredDays = enrollment?.let { requiredClassSessionsForPlan(it.planSnapshot) }
+                    if (requiredDays == null) {
+                        enrollmentMessage = "Sold plan not found for this customer group."
+                        return@EntitySearchPicker
+                    }
+                    val preCheck = tryAddCustomerGroup(
+                        currentGroupIds = customerGroupIds,
+                        groupId = groupId,
+                        locationId = locationId,
+                        classId = classId,
+                        scheduledClass = cls,
+                    )
+                    if (preCheck != AddCustomerGroupResult.Success) {
+                        enrollmentMessage = preCheck.toUserMessage()
+                        return@EntitySearchPicker
+                    }
+                    pendingWeeklyLink = PendingWeeklyPlanLink(
+                        groupId = groupId,
+                        planName = enrollment.planSnapshot.planName,
+                        requiredDays = requiredDays,
+                        availableDays = cls.weeklyDays.sortedBy { it.sortOrder },
+                    )
+                    return@EntitySearchPicker
+                }
                 val result = tryAddCustomerGroup(
                     currentGroupIds = customerGroupIds,
                     groupId = groupId,
                     locationId = locationId,
                     classId = classId,
-                    scheduledClass = scheduledClass,
+                    scheduledClass = classForValidation,
                 )
                 if (result == AddCustomerGroupResult.Success) {
                     onCustomerGroupIdsChange(customerGroupIds + groupId)
-                    scheduledClass?.let { cls -> assignPackClassSchedule(groupId, cls) }
-                    RollingPackBillingService.syncRollingPackBilling(groupId)
+                    classForValidation?.let { cls -> assignPlanClassSchedule(groupId, cls) }
+                    RollingPlanBillingService.syncRollingPlanBilling(groupId)
                     enrollmentMessage = result.toUserMessage()
                 } else {
                     enrollmentMessage = result.toUserMessage()
                 }
             },
-            noResultsText = "No available customer groups (each group can only be on one class).",
+            noResultsText = "No available sold plans (each plan can only be on one class).",
         )
         enrollmentMessage?.let { message ->
             Spacer(modifier = Modifier.height(spacing.field))
@@ -619,7 +873,9 @@ private fun ClassCustomerGroupsSection(
                 color = if (
                     message.contains("exceeded", ignoreCase = true) ||
                     message.contains("already", ignoreCase = true) ||
-                    message.contains("Create a new term", ignoreCase = true)
+                    message.contains("Create a new term", ignoreCase = true) ||
+                    message.contains("rolling plan", ignoreCase = true) ||
+                    message.contains("requires", ignoreCase = true)
                 ) {
                     MaterialTheme.colorScheme.error
                 } else {
@@ -629,102 +885,141 @@ private fun ClassCustomerGroupsSection(
         }
         if (assignedIds.isNotEmpty()) {
             Spacer(modifier = Modifier.height(spacing.section))
-            Text(
-                text = "On this class",
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Spacer(modifier = Modifier.height(spacing.field))
-            assignedIds.forEach { groupId ->
-                val group = PeopleGroupStore.findById(groupId) ?: return@forEach
-                val main = group.resolveMainContact()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = formatPersonLabel(main.name, main.dateOfBirth),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = buildString {
-                                append("${group.classAttendeeCount()} attending · ${group.memberCount()} in group")
-                                if (!group.mainContactAttendsClass) {
-                                    append(" · main contact not attending")
-                                }
-                                classId?.let { id ->
-                                    PackClassScheduleStore.scheduledSessionCount(groupId, id)?.let { count ->
-                                        append(" · $count session${if (count == 1) "" else "s"} scheduled")
-                                    }
-                                }
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    GlideTextButton(
-                        onClick = {
-                            if (classId != null) {
-                                PackClassScheduleStore.remove(groupId, classId)
-                            }
-                            onCustomerGroupIdsChange(customerGroupIds.filter { it != groupId })
-                            enrollmentMessage = "Customer group removed from class."
-                        },
+            FormPanelLinkedBox(role = FormPanelSectionRole.Secondary) {
+                GlideFieldLabel("In this class (${assignedIds.size})")
+                Spacer(modifier = Modifier.height(spacing.field))
+                assignedIds.forEachIndexed { index, groupId ->
+                    val group = PeopleGroupStore.findById(groupId) ?: return@forEachIndexed
+                    val main = group.resolveMainClient()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
+                                MaterialTheme.shapes.small,
+                            )
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Remove", color = MaterialTheme.colorScheme.error)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = formatPersonLabel(main.name, main.dateOfBirth),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = soldPlanSearchSecondaryLabel(group),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            classId?.let { cid ->
+                                PlanClassScheduleStore.formatSessionDatesLabel(groupId, cid)?.let { scheduleLabel ->
+                                    Text(
+                                        text = scheduleLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                        GlideTextButton(
+                            onClick = { pendingRemoveGroupId = groupId },
+                        ) {
+                            Text("Remove", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    if (index < assignedIds.lastIndex) {
+                        Spacer(modifier = Modifier.height(spacing.field))
                     }
                 }
             }
         }
     }
+
+    pendingRemoveGroupId?.let { groupId ->
+        val group = PeopleGroupStore.findById(groupId)
+        val label = group?.resolveMainClient()?.name?.takeIf { it.isNotBlank() } ?: "This customer group"
+        DeleteConfirmDialog(
+            title = "Remove from class?",
+            message = "$label will be removed from this class.",
+            onDismiss = { pendingRemoveGroupId = null },
+            onContinue = {
+                if (classId != null) {
+                    PlanClassScheduleStore.remove(groupId, classId)
+                }
+                onCustomerGroupIdsChange(customerGroupIds.filter { it != groupId })
+                enrollmentMessage = "Customer group removed from class."
+                pendingRemoveGroupId = null
+            },
+        )
+    }
+
+    weeklyLinkBlockedMessage?.let { message ->
+        WeeklyPlanScheduleBlockedDialog(
+            message = message,
+            onDismiss = { weeklyLinkBlockedMessage = null },
+        )
+    }
+
+    pendingWeeklyLink?.let { pending ->
+        WeeklyPlanScheduleDialog(
+            planName = pending.planName,
+            requiredDays = pending.requiredDays,
+            availableDays = pending.availableDays,
+            onDismiss = { pendingWeeklyLink = null },
+            onConfirm = { selectedDays ->
+                val cls = classForValidation ?: return@WeeklyPlanScheduleDialog
+                val result = tryAddCustomerGroup(
+                    currentGroupIds = customerGroupIds,
+                    groupId = pending.groupId,
+                    locationId = locationId,
+                    classId = classId,
+                    scheduledClass = cls,
+                )
+                if (result != AddCustomerGroupResult.Success) {
+                    enrollmentMessage = result.toUserMessage()
+                    pendingWeeklyLink = null
+                    return@WeeklyPlanScheduleDialog
+                }
+                val assignment = assignWeeklyPlanClassSchedule(pending.groupId, cls, selectedDays)
+                if (assignment is PlanScheduleAssignment.Partial ||
+                    assignment is PlanScheduleAssignment.NoSessionsAvailable
+                ) {
+                    enrollmentMessage = assignment.toScheduleMessage()
+                        ?: "Could not schedule this plan on the selected days."
+                    pendingWeeklyLink = null
+                    return@WeeklyPlanScheduleDialog
+                }
+                onCustomerGroupIdsChange(customerGroupIds + pending.groupId)
+                RollingPlanBillingService.syncRollingPlanBilling(pending.groupId)
+                enrollmentMessage = AddCustomerGroupResult.Success.toUserMessage()
+                pendingWeeklyLink = null
+            },
+        )
+    }
 }
 
-@Composable
-private fun CollapsibleFormSection(
-    title: String,
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
-    summary: String? = null,
-    content: @Composable () -> Unit,
-) {
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onExpandedChange(!expanded) },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = if (expanded) "▾" else "▸",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-                modifier = Modifier.padding(end = 4.dp),
-            )
-            GlideFieldLabel(title)
-            if (!expanded && summary != null) {
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
-        }
-        if (expanded) {
-            Spacer(modifier = Modifier.height(2.dp))
-            content()
-        }
+private fun soldPlanSearchSecondaryLabel(group: PeopleGroup): String {
+    val planName = PlanEnrollmentStore.forPeopleGroup(group.id)?.planSnapshot?.planName
+        ?: group.planId?.let { PlanStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() } }
+        ?: "No plan"
+    val startDate = group.planStartDate.takeIf { it.isNotBlank() }
+        ?.let { formatIsoDateForDisplay(it) }
+        ?.takeIf { it.isNotBlank() }
+        ?: PlanEnrollmentStore.forPeopleGroup(group.id)?.planPeriodStartedAtMillis
+            ?.let { formatIsoDateForDisplay(millisToIsoDate(it)) }
+            ?.takeIf { it.isNotBlank() }
+    return if (startDate != null) {
+        "$planName · Starts $startDate"
+    } else {
+        planName
     }
 }
 
@@ -737,35 +1032,35 @@ private fun ClassForm(
     locations: List<ClassLocation>,
     spacing: GlideLayout.Spacing,
     isCreating: Boolean,
+    termsReadOnly: Boolean = false,
 ) {
     var scheduleKindExpanded by remember { mutableStateOf(false) }
     var dayExpanded by remember { mutableStateOf(false) }
     var locationExpanded by remember { mutableStateOf(false) }
-    var termsExpanded by remember { mutableStateOf(false) }
-    var locationSectionExpanded by remember { mutableStateOf(false) }
     val colorPicker = rememberClassColorPickerState()
     val previewColorArgb = state.calendarColorArgb
         ?: state.classId?.let { defaultCalendarColorArgb(it) }
         ?: state.name.takeIf { it.isNotBlank() }?.let { defaultCalendarColorArgb(it) }
         ?: ClassCalendarPalette.first()
 
-    val termsSummary = when {
-        state.termIds.isEmpty() -> "None selected"
-        state.termIds.size == 1 -> terms.find { it.id in state.termIds }?.name ?: "1 term"
-        else -> "${state.termIds.size} terms"
-    }
     val locationSummary = state.locationId?.let { id ->
         locations.find { it.id == id }?.name
     } ?: "None"
 
-    GlideOutlinedField(
-        value = state.name,
-        onValueChange = { onStateChange(state.copy(name = it)) },
-        label = "Class name",
-        placeholder = "e.g. Tuesday Beginner Ballet",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    Row(
+    FormPanelSection(
+        title = "Class details",
+        description = "Name and calendar color for this class.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        GlideOutlinedField(
+            value = state.name,
+            onValueChange = { onStateChange(state.copy(name = it)) },
+            label = "Class name",
+            placeholder = "e.g. Tuesday Beginner Ballet",
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -799,15 +1094,15 @@ private fun ClassForm(
         ) {
             Text("Change")
         }
+        }
+        colorPicker.dialog()
     }
-    colorPicker.dialog()
-    Spacer(modifier = Modifier.height(spacing.field))
 
-    CollapsibleFormSection(
+    FormPanelSection(
         title = "Terms",
-        expanded = termsExpanded,
-        onExpandedChange = { termsExpanded = it },
-        summary = termsSummary,
+        description = "Which academic terms this class runs in.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
     ) {
         if (terms.isEmpty()) {
             Text(
@@ -817,10 +1112,13 @@ private fun ClassForm(
             )
         } else {
             Text(
-                text = if (isCreating && state.scheduleKind == ClassScheduleKind.RECURRING) {
-                    "Current and future terms are selected by default for new weekly classes. Adjust as needed."
-                } else {
-                    "Select all terms this class spans (e.g. rolling classes across seasons)."
+                text = when {
+                    termsReadOnly ->
+                        "Terms are locked while sold plans are on this class."
+                    isCreating && state.scheduleKind == ClassScheduleKind.RECURRING ->
+                        "Current and future terms are selected by default for new weekly classes. Adjust as needed."
+                    else ->
+                        "Select all terms this class spans (e.g. rolling classes across seasons)."
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -830,19 +1128,26 @@ private fun ClassForm(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            val next = if (term.id in state.termIds) {
-                                state.termIds - term.id
+                        .then(
+                            if (termsReadOnly) {
+                                Modifier
                             } else {
-                                state.termIds + term.id
-                            }
-                            onStateChange(state.copy(termIds = next))
-                        },
+                                Modifier.clickable {
+                                    val next = if (term.id in state.termIds) {
+                                        state.termIds - term.id
+                                    } else {
+                                        state.termIds + term.id
+                                    }
+                                    onStateChange(state.copy(termIds = next))
+                                }
+                            },
+                        ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(
                         checked = term.id in state.termIds,
                         onCheckedChange = { checked ->
+                            if (termsReadOnly) return@Checkbox
                             val next = if (checked) {
                                 state.termIds + term.id
                             } else {
@@ -850,6 +1155,7 @@ private fun ClassForm(
                             }
                             onStateChange(state.copy(termIds = next))
                         },
+                        enabled = !termsReadOnly,
                     )
                     Column(modifier = Modifier.padding(start = 4.dp)) {
                         Text(
@@ -874,13 +1180,11 @@ private fun ClassForm(
         }
     }
 
-    Spacer(modifier = Modifier.height(spacing.field))
-
-    CollapsibleFormSection(
+    FormPanelSection(
         title = "Location",
-        expanded = locationSectionExpanded,
-        onExpandedChange = { locationSectionExpanded = it },
-        summary = locationSummary,
+        description = "Room or venue for this class.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
     ) {
         if (locations.isEmpty()) {
             Text(
@@ -936,19 +1240,26 @@ private fun ClassForm(
         }
     }
 
-    Spacer(modifier = Modifier.height(spacing.field))
+    FormPanelSectionsDivider(label = "When it runs", spacing = spacing)
 
-    Column {
-        GlideFieldLabel("Schedule")
-        Spacer(modifier = Modifier.height(2.dp))
-        ExposedDropdownMenuBox(
+    FormPanelSection(
+        title = "Schedule",
+        description = "Recurring weekly, one-week multi-day, or single-day timing for this class.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        Column {
+            GlideFieldLabel("Schedule type")
+            Spacer(modifier = Modifier.height(2.dp))
+            ExposedDropdownMenuBox(
             expanded = scheduleKindExpanded,
-            onExpandedChange = { scheduleKindExpanded = it },
+            onExpandedChange = { if (!termsReadOnly) scheduleKindExpanded = it },
         ) {
             OutlinedTextField(
                 value = state.scheduleKind.label,
                 onValueChange = {},
                 readOnly = true,
+                enabled = !termsReadOnly,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = scheduleKindExpanded) },
                 shape = MaterialTheme.shapes.small,
                 textStyle = MaterialTheme.typography.bodySmall.copy(
@@ -977,6 +1288,8 @@ private fun ClassForm(
                                         val recurring = state.copy(
                                             scheduleKind = kind,
                                             singleDate = "",
+                                            weekOfDate = "",
+                                            weeklyDays = emptySet(),
                                         )
                                         if (isCreating) {
                                             recurring.copy(termIds = defaultRecurringClassTermIds(terms))
@@ -984,8 +1297,18 @@ private fun ClassForm(
                                             recurring
                                         }
                                     }
+                                    ClassScheduleKind.WEEKLY -> state.copy(
+                                        scheduleKind = kind,
+                                        singleDate = "",
+                                        weekOfDate = state.weekOfDate,
+                                        weeklyDays = state.weeklyDays.ifEmpty { setOf(state.dayOfWeek) },
+                                    ).withAutoTermForWeekly(terms)
                                     ClassScheduleKind.SINGLE_DAY ->
-                                        state.copy(scheduleKind = kind).withAutoTermForSingleDay(terms)
+                                        state.copy(
+                                            scheduleKind = kind,
+                                            weekOfDate = "",
+                                            weeklyDays = emptySet(),
+                                        ).withAutoTermForSingleDay(terms)
                                 },
                             )
                             scheduleKindExpanded = false
@@ -994,11 +1317,11 @@ private fun ClassForm(
                 }
             }
         }
-    }
+        }
 
-    Spacer(modifier = Modifier.height(spacing.field))
+        Spacer(modifier = Modifier.height(spacing.field))
 
-    when (state.scheduleKind) {
+        when (state.scheduleKind) {
         ClassScheduleKind.RECURRING -> {
             Column {
                 GlideFieldLabel("Day of week")
@@ -1042,6 +1365,109 @@ private fun ClassForm(
                 }
             }
         }
+        ClassScheduleKind.WEEKLY -> {
+            IsoDateField(
+                label = "Week of",
+                value = state.weekOfDate,
+                onValueChange = { isoDate ->
+                    onStateChange(
+                        state.copy(weekOfDate = isoDate).withAutoTermForWeekly(terms),
+                    )
+                },
+                readOnly = termsReadOnly,
+            )
+            Spacer(modifier = Modifier.height(spacing.field))
+            GlideFieldLabel("Days in week")
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                DayOfWeek.entries.forEach { day ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .weight(1f)
+                            .then(
+                                if (termsReadOnly) {
+                                    Modifier
+                                } else {
+                                    Modifier.clickable {
+                                        val next = if (day in state.weeklyDays) {
+                                            state.weeklyDays - day
+                                        } else {
+                                            state.weeklyDays + day
+                                        }
+                                        onStateChange(state.copy(weeklyDays = next))
+                                    }
+                                },
+                            ),
+                    ) {
+                        Checkbox(
+                            checked = day in state.weeklyDays,
+                            onCheckedChange = { checked ->
+                                if (termsReadOnly) return@Checkbox
+                                val next = if (checked) {
+                                    state.weeklyDays + day
+                                } else {
+                                    state.weeklyDays - day
+                                }
+                                onStateChange(state.copy(weeklyDays = next))
+                            },
+                            enabled = !termsReadOnly,
+                        )
+                        Text(
+                            text = day.shortLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            val autoTerm = state.termIds.singleOrNull()?.let { id -> terms.find { it.id == id } }
+            when {
+                state.weekOfDate.isBlank() -> {
+                    Text(
+                        text = "Pick a date in the week and select which days the class runs (e.g. Mon, Wed, Fri).",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                state.weeklyDays.isEmpty() -> {
+                    Text(
+                        text = "Select at least one day in the week.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                else -> {
+                    val weekLabel = weekDateRangeFromIsoDate(state.weekOfDate)?.let { range ->
+                        "${formatScheduleIsoDate(range.start.toString())} – " +
+                            formatScheduleIsoDate(range.endInclusive.toString())
+                    } ?: formatScheduleIsoDate(state.weekOfDate)
+                    Text(
+                        text = "${formatWeeklyDaysLabel(state.weeklyDays.toList())} · $weekLabel",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (autoTerm != null) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Term set automatically: ${autoTerm.name}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "No term includes this week. Adjust term dates in the Terms panel.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+        }
         ClassScheduleKind.SINGLE_DAY -> {
             IsoDateField(
                 label = "Class date",
@@ -1055,6 +1481,7 @@ private fun ClassForm(
                         ).withAutoTermForSingleDay(terms),
                     )
                 },
+                readOnly = termsReadOnly,
             )
             Spacer(modifier = Modifier.height(4.dp))
             val autoTerm = state.termIds.singleOrNull()?.let { id -> terms.find { it.id == id } }
@@ -1082,36 +1509,37 @@ private fun ClassForm(
                 }
             }
         }
-    }
+        }
 
-    Spacer(modifier = Modifier.height(spacing.field))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(spacing.field),
-    ) {
+        Spacer(modifier = Modifier.height(spacing.field))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(spacing.field),
+        ) {
+            GlideOutlinedField(
+                value = state.startTime,
+                onValueChange = { onStateChange(state.copy(startTime = it)) },
+                label = "Start time",
+                placeholder = "09:00",
+                modifier = Modifier.weight(1f),
+            )
+            GlideOutlinedField(
+                value = state.endTime,
+                onValueChange = { onStateChange(state.copy(endTime = it)) },
+                label = "End time",
+                placeholder = "10:00",
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Spacer(modifier = Modifier.height(spacing.field))
         GlideOutlinedField(
-            value = state.startTime,
-            onValueChange = { onStateChange(state.copy(startTime = it)) },
-            label = "Start time",
-            placeholder = "09:00",
-            modifier = Modifier.weight(1f),
-        )
-        GlideOutlinedField(
-            value = state.endTime,
-            onValueChange = { onStateChange(state.copy(endTime = it)) },
-            label = "End time",
-            placeholder = "10:00",
-            modifier = Modifier.weight(1f),
+            value = state.notes,
+            onValueChange = { onStateChange(state.copy(notes = it)) },
+            label = "Notes",
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            fieldHeight = GlideDimensions.notesMinHeight,
         )
     }
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.notes,
-        onValueChange = { onStateChange(state.copy(notes = it)) },
-        label = "Notes",
-        singleLine = false,
-        minLines = 2,
-        maxLines = 4,
-        fieldHeight = GlideDimensions.notesMinHeight,
-    )
 }

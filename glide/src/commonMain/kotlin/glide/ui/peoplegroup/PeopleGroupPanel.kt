@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenuItem
@@ -39,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -47,24 +47,35 @@ import glide.data.AppViewMode
 import glide.data.AppViewState
 import glide.data.BillStore
 import glide.data.BillingPanelState
-import glide.data.ContactStore
-import glide.data.ContactsPanelState
+import glide.data.ClientStore
+import glide.data.ClientsPanelState
+import glide.data.LocationStore
 import glide.data.PlansPanelState
-import glide.data.RelatedPanelState
-import glide.data.RelatedPersonStore
-import glide.data.PackEnrollmentStore
+import glide.data.StudentsPanelState
+import glide.data.StudentStore
+import glide.data.SchedulePanelState
+import glide.data.TermStore
+import glide.data.PlanEnrollmentStore
 import glide.data.PeopleGroupNavigation
 import glide.data.PeopleGroupStore
+import glide.data.soldPlanDeletionBlockReason
 import glide.data.PlanStore
+import glide.data.ScheduledClassStore
 import glide.model.formatMoney
 import glide.data.classAttendeeCount
+import glide.data.hasClassParticipant
+import glide.data.hasResolvableMainClient
 import glide.data.memberCount
-import glide.data.resolveMainContact
-import glide.data.resolveRelatedPeople
+import glide.data.resolveMainClient
+import glide.data.resolveStudents
 import glide.model.PeopleGroup
 import glide.model.PeopleGroupStatus
 import glide.model.PeopleGroupType
+import glide.model.parseIsoLocalDate
 import glide.model.summaryLine
+import glide.ui.leads.formatIsoDateForDisplay
+import glide.ui.leads.millisToIsoDate
+import glide.ui.leads.todayIsoDate
 import glide.ui.shared.formatPersonLabel
 import glide.ui.layout.GlideLayout
 import glide.ui.theme.GlideButton
@@ -73,6 +84,12 @@ import glide.ui.theme.GlideFieldLabel
 import glide.ui.theme.glideListItemTitleColor
 import glide.ui.theme.GlideOutlinedButton
 import glide.ui.theme.GlideOutlinedField
+import glide.ui.shared.DeleteConfirmDialog
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.IsoDateField
+import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.theme.GlideTextButton
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -100,7 +117,7 @@ data class PeopleGroupPanelUi(
 
 private val LeadsPanelUi = PeopleGroupPanelUi(
     type = PeopleGroupType.LEAD,
-    subtitle = "Manage leads, link existing contacts, and search to add related people.",
+    subtitle = "Manage leads, link existing clients, and search to add students.",
     emptyListMessage = "No leads yet.",
     newButtonLabel = "New lead",
     createFormTitle = "Create lead",
@@ -119,7 +136,7 @@ private val LeadsPanelUi = PeopleGroupPanelUi(
 
 private val CustomersPanelUi = PeopleGroupPanelUi(
     type = PeopleGroupType.CUSTOMER,
-    subtitle = "Customer groups are locked after creation. Clone one to a new lead to build another pack.",
+    subtitle = "Customer groups are locked after creation. Clone one to a new lead to build another plan.",
     emptyListMessage = "No customers yet. Use Make customer on a lead.",
     newButtonLabel = "",
     createFormTitle = "Customer group",
@@ -131,8 +148,9 @@ private val CustomersPanelUi = PeopleGroupPanelUi(
     allowCreate = false,
     readOnly = true,
     noSelectionMessage = "Select a customer group to view.",
-    deleteConfirmTitle = "Delete customer group?",
-    deleteConfirmMessage = "Customer groups cannot be deleted.",
+    deleteConfirmTitle = "Revert sold plan to lead?",
+    deleteConfirmMessage = "Billing and class enrollment for this sold plan will be removed. " +
+        "The household will become a lead again with the same client and plan selection.",
     showClearSelection = true,
 )
 
@@ -147,20 +165,21 @@ fun CustomersPeopleGroupPanel(modifier: Modifier = Modifier) {
 }
 
 private data class PeopleGroupFormState(
-    val mainContactId: String? = null,
-    val contactName: String = "",
+    val mainClientId: String? = null,
+    val clientName: String = "",
     val dateOfBirth: String = "",
     val email: String = "",
     val phone: String = "",
-    val relatedPersonIds: List<String> = emptyList(),
+    val studentIds: List<String> = emptyList(),
     val status: PeopleGroupStatus = PeopleGroupStatus.New,
     val planId: String? = null,
-    val mainContactAttendsClass: Boolean = true,
+    val planStartDate: String = "",
+    val mainClientAttendsClass: Boolean = true,
     val notes: String = "",
 ) {
     fun isValidForLead(): Boolean =
-        (mainContactId != null && ContactStore.findById(mainContactId) != null) ||
-            contactName.isNotBlank()
+        (mainClientId != null && ClientStore.findById(mainClientId) != null) ||
+            clientName.isNotBlank()
 
     fun hasPlanSelected(): Boolean = !planId.isNullOrBlank()
 
@@ -170,24 +189,58 @@ private data class PeopleGroupFormState(
         createdAtMillis: Long = System.currentTimeMillis(),
     ): PeopleGroup {
         val isCustomer = type == PeopleGroupType.CUSTOMER
-        val linkedContact = !isCustomer && mainContactId != null
+        val linkedClient = !isCustomer && mainClientId != null
         return PeopleGroup(
             id = existingId ?: UUID.randomUUID().toString(),
             type = type,
-            mainContactId = if (isCustomer || linkedContact) mainContactId else null,
-            contactName = if (isCustomer || linkedContact) "" else contactName.trim(),
-            dateOfBirth = if (isCustomer || linkedContact) "" else dateOfBirth.trim(),
-            email = if (isCustomer || linkedContact) "" else email.trim(),
-            phone = if (isCustomer || linkedContact) "" else phone.trim(),
-            relatedPersonIds = relatedPersonIds,
+            mainClientId = if (isCustomer || linkedClient) mainClientId else null,
+            clientName = if (isCustomer || linkedClient) "" else clientName.trim(),
+            dateOfBirth = if (isCustomer || linkedClient) "" else dateOfBirth.trim(),
+            email = if (isCustomer || linkedClient) "" else email.trim(),
+            phone = if (isCustomer || linkedClient) "" else phone.trim(),
+            studentIds = studentIds,
             status = status,
             planId = planId,
-            mainContactAttendsClass = mainContactAttendsClass,
+            planStartDate = planStartDate.trim(),
+            mainClientAttendsClass = mainClientAttendsClass,
             notes = notes.trim(),
             createdAtMillis = createdAtMillis,
         )
     }
 }
+
+private fun soldDisabledReason(
+    groupId: String?,
+    isDirty: Boolean,
+    hasPlanSelected: Boolean,
+): String? =
+    when {
+        PlanStore.plans.isEmpty() -> "Create a plan in the Plans panel first."
+        isDirty -> "Save changes before marking as sold."
+        else -> {
+            val group = groupId?.let { PeopleGroupStore.findById(it) }
+            val main = group?.resolveMainClient()
+            when {
+                main == null || main.name.isBlank() ->
+                    "Main client name is required before marking as sold."
+                main.email.isBlank() || main.phone.isBlank() ->
+                    "Email and phone are required before marking as sold."
+                !hasPlanSelected -> "Select a plan above to enable Sold."
+                group?.planStartDate.isNullOrBlank() ||
+                    parseIsoLocalDate(group.planStartDate) == null ->
+                    "Plan start date is required before marking as sold."
+                group != null && !group.hasClassParticipant() ->
+                    "At least one class participant is required before marking as sold."
+                else -> null
+            }
+        }
+    }
+
+private fun canMarkLeadSold(
+    groupId: String?,
+    isDirty: Boolean,
+    hasPlanSelected: Boolean,
+): Boolean = soldDisabledReason(groupId, isDirty, hasPlanSelected) == null
 
 @Composable
 private fun PeopleGroupPanel(
@@ -195,14 +248,14 @@ private fun PeopleGroupPanel(
     modifier: Modifier = Modifier,
 ) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var formState by remember { mutableStateOf(PeopleGroupFormState()) }
+    val form = rememberFormDirtyTracker(PeopleGroupFormState(planStartDate = todayIsoDate()))
     var isCreating by remember(ui.allowCreate) { mutableStateOf(ui.allowCreate) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
     var cloneMessage by remember { mutableStateOf<String?>(null) }
 
-    val contactFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
-        ContactsPanelState.selectedContactId
+    val clientFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
+        ClientsPanelState.selectedClientId
     } else {
         null
     }
@@ -211,40 +264,80 @@ private fun PeopleGroupPanel(
     } else {
         null
     }
-    val relatedFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
-        RelatedPanelState.selectedRelatedPersonId
+    val studentFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
+        StudentsPanelState.selectedStudentId
     } else {
         null
     }
-    val groups = when (ui.type) {
-        PeopleGroupType.LEAD -> PeopleGroupStore.leads
-        PeopleGroupType.CUSTOMER ->
-            PeopleGroupStore.forCustomersPanel(contactFilterId, relatedFilterId, planFilterId)
+    val schedulingSoldPlansPanel =
+        ui.type == PeopleGroupType.CUSTOMER && AppViewState.mode == AppViewMode.SCHEDULING
+    val soldPlanFilterId = SchedulePanelState.selectedSoldPlanId
+    val termFilterId = SchedulePanelState.selectedTermFilterId
+    val locationFilterId = SchedulePanelState.selectedLocationFilterId
+    val classFilterId = if (schedulingSoldPlansPanel && soldPlanFilterId == null) {
+        SchedulePanelState.selectedClassId
+    } else {
+        null
     }
-    val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+    val soldPlansTermFilterId = if (schedulingSoldPlansPanel && soldPlanFilterId == null && classFilterId == null) {
+        termFilterId
+    } else {
+        null
+    }
+    val soldPlansLocationFilterId = if (
+        schedulingSoldPlansPanel &&
+        soldPlanFilterId == null &&
+        classFilterId == null &&
+        termFilterId == null
+    ) {
+        locationFilterId
+    } else {
+        null
+    }
+    val groups = when {
+        schedulingSoldPlansPanel -> PeopleGroupStore.forSchedulingSoldPlans(
+            classId = classFilterId,
+            termId = soldPlansTermFilterId,
+            locationId = soldPlansLocationFilterId,
+        )
+        ui.type == PeopleGroupType.LEAD -> PeopleGroupStore.leads
+        else -> PeopleGroupStore.forCustomersPanel(clientFilterId, studentFilterId, planFilterId)
+    }
+    val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
-    val relatedFilterLabel = relatedFilterId?.let {
-        RelatedPersonStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    val studentFilterLabel = studentFilterId?.let {
+        StudentStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    }
+    val classFilterLabel = classFilterId?.let {
+        ScheduledClassStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    }
+    val termFilterLabel = soldPlansTermFilterId?.let {
+        TermStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    }
+    val locationFilterLabel = soldPlansLocationFilterId?.let {
+        LocationStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     fun resetFormForCreate() {
         selectedId = null
         isCreating = ui.allowCreate
-        formState = PeopleGroupFormState()
+        form.load(PeopleGroupFormState(planStartDate = todayIsoDate()))
         formError = null
     }
 
     fun clearLocalSelection() {
         selectedId = null
         isCreating = false
-        formState = PeopleGroupFormState()
+        form.load(PeopleGroupFormState(planStartDate = todayIsoDate()))
         formError = null
     }
 
     fun clearSelection() {
         clearLocalSelection()
-        if (ui.type == PeopleGroupType.CUSTOMER) {
+        if (schedulingSoldPlansPanel) {
+            SchedulePanelState.onSoldPlanCleared()
+        } else if (ui.type == PeopleGroupType.CUSTOMER) {
             BillingPanelState.onCustomerGroupCleared()
         }
     }
@@ -252,20 +345,26 @@ private fun PeopleGroupPanel(
     fun loadIntoForm(group: PeopleGroup) {
         selectedId = group.id
         isCreating = false
-        val main = group.resolveMainContact()
-        formState = PeopleGroupFormState(
-            mainContactId = group.mainContactId,
-            contactName = if (group.mainContactId != null) "" else main.name,
-            dateOfBirth = if (group.mainContactId != null) "" else main.dateOfBirth,
-            email = if (group.mainContactId != null) "" else main.email,
-            phone = if (group.mainContactId != null) "" else main.phone,
-            relatedPersonIds = group.relatedPersonIds,
-            status = group.status,
-            planId = group.planId,
-            mainContactAttendsClass = group.mainContactAttendsClass,
-            notes = group.notes,
+        val main = group.resolveMainClient()
+        form.load(
+            PeopleGroupFormState(
+                mainClientId = group.mainClientId,
+                clientName = if (group.mainClientId != null) "" else main.name,
+                dateOfBirth = if (group.mainClientId != null) "" else main.dateOfBirth,
+                email = if (group.mainClientId != null) "" else main.email,
+                phone = if (group.mainClientId != null) "" else main.phone,
+                studentIds = group.studentIds,
+                status = group.status,
+                planId = group.planId,
+                planStartDate = group.planStartDate.ifBlank { todayIsoDate() },
+                mainClientAttendsClass = group.mainClientAttendsClass,
+                notes = group.notes,
+            ),
         )
         formError = null
+        if (schedulingSoldPlansPanel) {
+            SchedulePanelState.onSoldPlanSelected(group.id)
+        }
     }
 
     val pendingLeadId = PeopleGroupNavigation.pendingLeadId
@@ -288,7 +387,7 @@ private fun PeopleGroupPanel(
     }
 
     LaunchedEffect(BillingPanelState.peopleGroupId) {
-        if (ui.type != PeopleGroupType.CUSTOMER) return@LaunchedEffect
+        if (ui.type != PeopleGroupType.CUSTOMER || schedulingSoldPlansPanel) return@LaunchedEffect
         when (BillingPanelState.peopleGroupId) {
             null -> if (selectedId != null) clearLocalSelection()
             else -> if (selectedId != null && selectedId != BillingPanelState.peopleGroupId) {
@@ -297,16 +396,28 @@ private fun PeopleGroupPanel(
         }
     }
 
-    LaunchedEffect(contactFilterId, planFilterId, relatedFilterId) {
+    LaunchedEffect(clientFilterId, planFilterId, studentFilterId, classFilterId, soldPlanFilterId, soldPlansTermFilterId, soldPlansLocationFilterId) {
+        if (ui.type == PeopleGroupType.CUSTOMER && soldPlanFilterId != null) return@LaunchedEffect
         if (ui.type == PeopleGroupType.CUSTOMER &&
-            (contactFilterId != null || planFilterId != null || relatedFilterId != null) &&
+            (clientFilterId != null || planFilterId != null || studentFilterId != null ||
+                classFilterId != null || soldPlansTermFilterId != null || soldPlansLocationFilterId != null) &&
             selectedId != null
         ) {
             clearLocalSelection()
         }
     }
 
-    LaunchedEffect(contactFilterId, planFilterId, relatedFilterId, groups, selectedId) {
+    LaunchedEffect(
+        clientFilterId,
+        planFilterId,
+        studentFilterId,
+        classFilterId,
+        soldPlanFilterId,
+        soldPlansTermFilterId,
+        soldPlansLocationFilterId,
+        groups,
+        selectedId,
+    ) {
         if (ui.type == PeopleGroupType.CUSTOMER &&
             selectedId != null &&
             groups.none { it.id == selectedId }
@@ -334,18 +445,32 @@ private fun PeopleGroupPanel(
             if (!compact) {
                 Text(
                     text = when {
+                        schedulingSoldPlansPanel && classFilterId != null -> {
+                            val label = classFilterLabel ?: "this class"
+                            "Showing sold plans on $label. Use Clear filter to reset."
+                        }
+                        schedulingSoldPlansPanel && soldPlansTermFilterId != null -> {
+                            val label = termFilterLabel ?: "this term"
+                            "Showing sold plans in $label. Use Clear filter to reset."
+                        }
+                        schedulingSoldPlansPanel && soldPlansLocationFilterId != null -> {
+                            val label = locationFilterLabel ?: "this location"
+                            "Showing sold plans at $label. Use Clear filter to reset."
+                        }
                         ui.type == PeopleGroupType.CUSTOMER && planFilterId != null -> {
                             val label = planFilterLabel ?: "this plan"
                             "Showing customer groups on $label. Use Clear filter in Plans to reset."
                         }
-                        ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null -> {
-                            val label = relatedFilterLabel ?: "this related person"
-                            "Showing customer groups for $label. Use Clear filter in Related to reset."
+                        ui.type == PeopleGroupType.CUSTOMER && studentFilterId != null -> {
+                            val label = studentFilterLabel ?: "this student"
+                            "Showing customer groups for $label. Use Clear filter in Students to reset."
                         }
-                        ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null -> {
-                            val label = contactFilterLabel ?: "this contact"
+                        ui.type == PeopleGroupType.CUSTOMER && clientFilterId != null -> {
+                            val label = clientFilterLabel ?: "this client"
                             "Showing customer groups for $label. Use Clear filter to reset."
                         }
+                        schedulingSoldPlansPanel ->
+                            "Select a sold plan to see its students."
                         else -> ui.subtitle
                     },
                     style = MaterialTheme.typography.bodySmall,
@@ -366,18 +491,33 @@ private fun PeopleGroupPanel(
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (schedulingSoldPlansPanel && classFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearClassFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            if (schedulingSoldPlansPanel && soldPlansTermFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearTermFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            if (schedulingSoldPlansPanel && soldPlansLocationFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearLocationFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
                             if (ui.type == PeopleGroupType.CUSTOMER && planFilterId != null) {
                                 GlideTextButton(onClick = { PlansPanelState.clearPlanFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null) {
-                                GlideTextButton(onClick = { RelatedPanelState.clearRelatedPersonFilter() }) {
+                            if (ui.type == PeopleGroupType.CUSTOMER && studentFilterId != null) {
+                                GlideTextButton(onClick = { StudentsPanelState.clearStudentFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null) {
-                                GlideTextButton(onClick = { ContactsPanelState.clearContactFilter() }) {
+                            if (ui.type == PeopleGroupType.CUSTOMER && clientFilterId != null) {
+                                GlideTextButton(onClick = { ClientsPanelState.clearClientFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
@@ -416,10 +556,16 @@ private fun PeopleGroupPanel(
                                 text = when {
                                     ui.type == PeopleGroupType.CUSTOMER && planFilterId != null ->
                                         "No customer groups on this plan."
-                                    ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null ->
-                                        "No customer groups for this related person."
-                                    ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null ->
-                                        "No customer groups for this contact."
+                                    ui.type == PeopleGroupType.CUSTOMER && studentFilterId != null ->
+                                        "No customer groups for this student."
+                                    ui.type == PeopleGroupType.CUSTOMER && clientFilterId != null ->
+                                        "No customer groups for this client."
+                                    schedulingSoldPlansPanel && classFilterId != null ->
+                                        "No sold plans on this class."
+                                    schedulingSoldPlansPanel && soldPlansTermFilterId != null ->
+                                        "No sold plans in this term."
+                                    schedulingSoldPlansPanel && soldPlansLocationFilterId != null ->
+                                        "No sold plans at this location."
                                     else -> ui.emptyListMessage
                                 },
                                 style = MaterialTheme.typography.bodySmall,
@@ -450,7 +596,7 @@ private fun PeopleGroupPanel(
                                             clearSelection()
                                         } else {
                                             loadIntoForm(group)
-                                            if (ui.type == PeopleGroupType.CUSTOMER) {
+                                            if (!schedulingSoldPlansPanel && ui.type == PeopleGroupType.CUSTOMER) {
                                                 BillingPanelState.onCustomerGroupSelected(group.id)
                                             }
                                         }
@@ -464,12 +610,18 @@ private fun PeopleGroupPanel(
 
             val formSection: @Composable (Modifier) -> Unit = { formModifier ->
                 val showForm = selectedId != null || (ui.allowCreate && isCreating)
+                val selectedGroup = selectedId?.let { PeopleGroupStore.findById(it) }
 
                 Column(modifier = formModifier.fillMaxHeight()) {
                     Text(
                         text = when {
-                            !showForm -> ui.editFormTitle
+                            !showForm -> if (schedulingSoldPlansPanel) {
+                                "Students"
+                            } else {
+                                ui.editFormTitle
+                            }
                             isCreating -> ui.createFormTitle
+                            schedulingSoldPlansPanel && selectedGroup != null -> "Students"
                             else -> ui.editFormTitle
                         },
                         style = MaterialTheme.typography.titleSmall,
@@ -489,7 +641,11 @@ private fun PeopleGroupPanel(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = ui.noSelectionMessage,
+                                text = if (schedulingSoldPlansPanel) {
+                                    "Select a sold plan to see its students."
+                                } else {
+                                    ui.noSelectionMessage
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(spacing.outer),
@@ -504,28 +660,32 @@ private fun PeopleGroupPanel(
                             if (ui.readOnly && selectedId != null) {
                                 val group = PeopleGroupStore.findById(selectedId!!)
                                 if (group != null) {
-                                    CustomerGroupDetailView(
-                                        group = group,
-                                        spacing = spacing,
-                                        onOpenBilling = {
-                                            if (AppViewState.mode == AppViewMode.SCHEDULING) {
-                                                AppViewState.switchTo(AppViewMode.CUSTOMER_MANAGEMENT)
-                                            } else {
+                                    if (schedulingSoldPlansPanel) {
+                                        SchedulingSoldPlanDetailView(
+                                            group = group,
+                                            spacing = spacing,
+                                        )
+                                    } else {
+                                        CustomerGroupDetailView(
+                                            group = group,
+                                            spacing = spacing,
+                                            onOpenBilling = {
                                                 BillingPanelState.reopenForCurrentGroup()
-                                            }
-                                        },
-                                        onCloneToLead = {
-                                            cloneMessage = null
-                                            val lead = PeopleGroupStore.cloneToLead(group.id)
-                                            if (lead != null) {
-                                                PeopleGroupNavigation.openLead(lead.id)
-                                                cloneMessage =
-                                                    "Lead created from this customer group. Open the Leads panel to edit and convert."
-                                            } else {
-                                                cloneMessage = "Could not create a lead from this group."
-                                            }
-                                        },
-                                    )
+                                            },
+                                            onDelete = { showDeleteConfirm = true },
+                                            onCloneToLead = {
+                                                cloneMessage = null
+                                                val lead = PeopleGroupStore.cloneToLead(group.id)
+                                                if (lead != null) {
+                                                    PeopleGroupNavigation.openLead(lead.id)
+                                                    cloneMessage =
+                                                        "Lead created from this customer group. Open the Leads panel to edit and convert."
+                                                } else {
+                                                    cloneMessage = "Could not create a lead from this group."
+                                                }
+                                            },
+                                        )
+                                    }
                                 }
 
                                 cloneMessage?.let { message ->
@@ -538,8 +698,8 @@ private fun PeopleGroupPanel(
                                 }
                             } else {
                                 PeopleGroupForm(
-                                    state = formState,
-                                    onStateChange = { formState = it },
+                                    state = form.draft,
+                                    onStateChange = { form.draft = it },
                                     spacing = spacing,
                                     notesHeight = notesHeight,
                                     isCustomerGroup = ui.type == PeopleGroupType.CUSTOMER,
@@ -558,53 +718,22 @@ private fun PeopleGroupPanel(
                             }
                         }
 
-                        if (ui.showConvertToCustomer && !isCreating && selectedId != null) {
-                            Spacer(modifier = Modifier.height(spacing.field))
-                            val canConvert = formState.hasPlanSelected() && PlanStore.plans.isNotEmpty()
-                            GlideOutlinedButton(
-                                onClick = {
-                                    if (!formState.isValidForLead()) {
-                                        formError = "Main contact name is required."
-                                        return@GlideOutlinedButton
-                                    }
-                                    if (!formState.hasPlanSelected()) {
-                                        formError = "Select a pack before making a customer."
-                                        return@GlideOutlinedButton
-                                    }
-                                    val existing = PeopleGroupStore.findById(selectedId!!) ?: return@GlideOutlinedButton
-                                    val updated = formState.toPeopleGroup(
-                                        type = existing.type,
-                                        existingId = existing.id,
-                                        createdAtMillis = existing.createdAtMillis,
-                                    )
-                                    PeopleGroupStore.update(updated)
-                                    if (!PeopleGroupStore.convertToCustomer(selectedId!!)) {
-                                        formError = "Select a pack before making a customer."
-                                        return@GlideOutlinedButton
-                                    }
-                                    formError = null
-                                    resetFormForCreate()
-                                },
-                                enabled = canConvert,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text("Make customer")
-                            }
-                            if (!canConvert) {
-                                Spacer(modifier = Modifier.height(spacing.field))
-                                Text(
-                                    text = if (PlanStore.plans.isEmpty()) {
-                                        "Create a pack in the Plans panel first."
-                                    } else {
-                                        "Select a pack above to enable conversion."
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-
                         if (!ui.readOnly) {
+                            if (ui.showConvertToCustomer && !isCreating && selectedId != null) {
+                                soldDisabledReason(
+                                    groupId = selectedId,
+                                    isDirty = form.isDirty,
+                                    hasPlanSelected = form.draft.hasPlanSelected(),
+                                )?.let { reason ->
+                                    Spacer(modifier = Modifier.height(spacing.field))
+                                    Text(
+                                        text = reason,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+
                             Spacer(modifier = Modifier.height(spacing.field))
 
                             Row(
@@ -614,18 +743,18 @@ private fun PeopleGroupPanel(
                                 GlideButton(
                                     onClick = {
                                         formError = null
-                                        if (ui.type == PeopleGroupType.LEAD && !formState.isValidForLead()) {
-                                            formError = "Link a contact or enter a new contact name."
+                                        if (ui.type == PeopleGroupType.LEAD && !form.draft.isValidForLead()) {
+                                            formError = "Link a client or enter a new client name."
                                             return@GlideButton
                                         }
                                         if (isCreating && ui.allowCreate) {
-                                            val group = formState.toPeopleGroup(type = PeopleGroupType.LEAD)
+                                            val group = form.draft.toPeopleGroup(type = PeopleGroupType.LEAD)
                                             PeopleGroupStore.create(group)
                                             loadIntoForm(group)
                                         } else {
                                             val existing = selectedId?.let { PeopleGroupStore.findById(it) }
                                             if (existing != null) {
-                                                val updated = formState.toPeopleGroup(
+                                                val updated = form.draft.toPeopleGroup(
                                                     type = existing.type,
                                                     existingId = existing.id,
                                                     createdAtMillis = existing.createdAtMillis,
@@ -638,9 +767,58 @@ private fun PeopleGroupPanel(
                                             }
                                         }
                                     },
+                                    enabled = form.isDirty,
                                     modifier = Modifier.weight(1f),
                                 ) {
                                     Text(saveLabel)
+                                }
+
+                                if (ui.showConvertToCustomer && !isCreating && selectedId != null) {
+                                    GlideOutlinedButton(
+                                        onClick = {
+                                            if (!form.draft.isValidForLead()) {
+                                                formError = "Main client name is required."
+                                                return@GlideOutlinedButton
+                                            }
+                                            if (!form.draft.hasPlanSelected()) {
+                                                formError = "Select a plan before marking as sold."
+                                                return@GlideOutlinedButton
+                                            }
+                                            if (form.draft.planStartDate.isBlank() ||
+                                                parseIsoLocalDate(form.draft.planStartDate) == null
+                                            ) {
+                                                formError = "Plan start date is required before marking as sold."
+                                                return@GlideOutlinedButton
+                                            }
+                                            val existing = PeopleGroupStore.findById(selectedId!!)
+                                                ?: return@GlideOutlinedButton
+                                            val updated = form.draft.toPeopleGroup(
+                                                type = existing.type,
+                                                existingId = existing.id,
+                                                createdAtMillis = existing.createdAtMillis,
+                                            )
+                                            if (!updated.hasClassParticipant()) {
+                                                formError =
+                                                    "At least one class participant is required before marking as sold."
+                                                return@GlideOutlinedButton
+                                            }
+                                            PeopleGroupStore.update(updated)
+                                            if (!PeopleGroupStore.convertToCustomer(selectedId!!)) {
+                                                formError =
+                                                    "Could not mark as sold. Check plan, start date, and class participants."
+                                                return@GlideOutlinedButton
+                                            }
+                                            formError = null
+                                            resetFormForCreate()
+                                        },
+                                        enabled = canMarkLeadSold(
+                                            groupId = selectedId,
+                                            isDirty = form.isDirty,
+                                            hasPlanSelected = form.draft.hasPlanSelected(),
+                                        ),
+                                    ) {
+                                        Text("Sold")
+                                    }
                                 }
 
                                 if (!isCreating && selectedId != null) {
@@ -671,35 +849,35 @@ private fun PeopleGroupPanel(
         }
     }
 
-    if (showDeleteConfirm && selectedId != null && !ui.readOnly) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text(ui.deleteConfirmTitle) },
-            text = { Text(ui.deleteConfirmMessage) },
-            confirmButton = {
-                GlideTextButton(
-                    onClick = {
-                        if (PeopleGroupStore.delete(selectedId!!)) {
-                            showDeleteConfirm = false
-                            if (ui.allowCreate) {
-                                resetFormForCreate()
-                            } else {
-                                clearSelection()
-                            }
-                        } else {
-                            showDeleteConfirm = false
-                            formError = "This record cannot be deleted."
+    if (showDeleteConfirm && selectedId != null && (ui.type == PeopleGroupType.CUSTOMER || !ui.readOnly)) {
+        val soldPlanBlockReason = if (ui.type == PeopleGroupType.CUSTOMER) {
+            soldPlanDeletionBlockReason(selectedId!!)
+        } else {
+            null
+        }
+        DeleteConfirmDialog(
+            title = ui.deleteConfirmTitle,
+            message = soldPlanBlockReason ?: ui.deleteConfirmMessage,
+            onDismiss = { showDeleteConfirm = false },
+            onContinue = {
+                val groupId = selectedId!!
+                if (PeopleGroupStore.delete(groupId)) {
+                    showDeleteConfirm = false
+                    when {
+                        ui.type == PeopleGroupType.CUSTOMER -> {
+                            PeopleGroupNavigation.openLead(groupId)
+                            clearSelection()
                         }
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                        ui.allowCreate -> resetFormForCreate()
+                        else -> clearSelection()
+                    }
+                } else {
+                    showDeleteConfirm = false
+                    formError = soldPlanBlockReason
+                        ?: "This record cannot be deleted."
                 }
             },
-            dismissButton = {
-                GlideTextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+            continueEnabled = soldPlanBlockReason == null,
         )
     }
 }
@@ -730,123 +908,219 @@ private fun PeopleGroupListItem(
                 vertical = spacing.listItemVertical,
             ),
     ) {
-        val main = group.resolveMainContact()
-        Text(
-            text = formatPersonLabel(main.name, main.dateOfBirth),
-            style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            color = glideListItemTitleColor(selected),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        val main = group.resolveMainClient()
         if (emphasizePlan) {
-            Spacer(modifier = Modifier.height(4.dp))
-            PeopleGroupPlanLabel(group = group, prominent = true)
-        }
-        if (main.email.isNotBlank() && !compact) {
             Text(
-                text = main.email,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = main.name.ifBlank { "Unknown client" },
+                style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = glideListItemTitleColor(selected),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-        group.relatedPeopleSummary(compact)?.let { summary ->
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = summary,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = if (compact) 1 else 2,
+                text = planNameForGroup(group),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-        if (!emphasizePlan) {
-            planLabelForGroup(group)?.let { packLabel ->
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = planStartDateLabelForGroup(group),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        } else {
+            Text(
+                text = formatPersonLabel(main.name, main.dateOfBirth),
+                style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = glideListItemTitleColor(selected),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (main.email.isNotBlank() && !compact) {
                 Text(
-                    text = packLabel,
+                    text = main.email,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            group.studentsSummary(compact)?.let { summary ->
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (compact) 1 else 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            planLabelForGroup(group)?.let { planLabel ->
+                Text(
+                    text = planLabel,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            if (showPipelineStatus) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                if (showPipelineStatus) {
+                    Text(
+                        text = group.status.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                } else {
+                    Text(
+                        text = "Customer",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 Text(
-                    text = group.status.label,
+                    text = dateFormat.format(Date(group.createdAtMillis)),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            } else {
-                Text(
-                    text = "Customer",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                text = dateFormat.format(Date(group.createdAtMillis)),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
+}
+
+private fun planNameForGroup(group: PeopleGroup): String =
+    group.planId
+        ?.let { PlanStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() } }
+        ?: "No plan"
+
+private fun planStartDateLabelForGroup(group: PeopleGroup): String {
+    val fromGroup = group.planStartDate.takeIf { it.isNotBlank() }
+        ?.let { formatIsoDateForDisplay(it) }
+        ?.takeIf { it.isNotBlank() }
+    if (fromGroup != null) return fromGroup
+
+    return PlanEnrollmentStore.forPeopleGroup(group.id)
+        ?.startedAtMillis
+        ?.let { formatIsoDateForDisplay(millisToIsoDate(it)) }
+        ?.takeIf { it.isNotBlank() }
+        ?: "No start date"
 }
 
 private fun planLabelForGroup(group: PeopleGroup): String? {
     val planId = group.planId ?: return null
     val plan = PlanStore.findById(planId) ?: return null
-    return "Pack: ${plan.name}"
+    return "Plan: ${plan.name}"
+}
+
+private fun PeopleGroup.studentsSummary(compact: Boolean): String? {
+    val students = resolveStudents()
+    if (students.isEmpty()) return null
+    val labels = students.joinToString { formatPersonLabel(it.name, it.dateOfBirth) }
+    return if (compact) labels else "Students: $labels"
 }
 
 @Composable
-private fun PeopleGroupPlanLabel(
-    group: PeopleGroup,
-    prominent: Boolean,
+private fun SoldPlanDeleteSection(
+    groupId: String,
+    spacing: GlideLayout.Spacing,
+    onDelete: () -> Unit,
 ) {
-    val plan = group.planId?.let { PlanStore.findById(it) }
-    if (plan != null) {
-        Text(
-            text = plan.name,
-            style = if (prominent) {
-                MaterialTheme.typography.bodyMedium
-            } else {
-                MaterialTheme.typography.labelSmall
-            },
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (prominent) {
+    val blockReason = soldPlanDeletionBlockReason(groupId)
+    Spacer(modifier = Modifier.height(spacing.section))
+    FormPanelSectionsDivider(label = "Danger zone", spacing = spacing)
+    FormPanelSection(
+        title = "Revert to lead",
+        description = "Remove this sold plan and turn the household back into a lead. " +
+            "Only sold plans that are not on a class and have no issued or paid bills can be reverted.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        blockReason?.let { reason ->
             Text(
-                text = plan.summaryLine(),
+                text = reason,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.error,
             )
+            Spacer(modifier = Modifier.height(spacing.field))
         }
-    } else if (prominent) {
-        Text(
-            text = "No pack assigned",
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        GlideOutlinedButton(
+            onClick = onDelete,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = blockReason == null,
+        ) {
+            Text("Revert to lead", color = MaterialTheme.colorScheme.error)
+        }
     }
 }
 
-private fun PeopleGroup.relatedPeopleSummary(compact: Boolean): String? {
-    val related = resolveRelatedPeople()
-    if (related.isEmpty()) return null
-    val labels = related.joinToString { formatPersonLabel(it.name, it.dateOfBirth) }
-    return if (compact) labels else "Related: $labels"
+@Composable
+private fun SchedulingSoldPlanDetailView(
+    group: PeopleGroup,
+    spacing: GlideLayout.Spacing,
+) {
+    FormPanelSection(
+        title = "Students",
+        description = "Students on this sold plan. The client is highlighted when they attend class too.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        SchedulingSoldPlanStudentsSection(group = group, spacing = spacing)
+    }
+}
+
+@Composable
+private fun SchedulingSoldPlanStudentsSection(
+    group: PeopleGroup,
+    spacing: GlideLayout.Spacing,
+) {
+    val clientAttends = group.mainClientAttendsClass && group.hasResolvableMainClient()
+    if (clientAttends) {
+        val main = group.resolveMainClient()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.small)
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .padding(
+                    horizontal = spacing.listItemHorizontal,
+                    vertical = spacing.listItemVertical,
+                ),
+        ) {
+            Text(
+                text = "Client",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = formatPersonLabel(main.name, main.dateOfBirth),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Also attends class",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Spacer(modifier = Modifier.height(spacing.field))
+    }
+    ReadOnlyStudentsSection(studentIds = group.studentIds, showLabel = false)
 }
 
 @Composable
@@ -854,88 +1128,127 @@ private fun CustomerGroupDetailView(
     group: PeopleGroup,
     spacing: GlideLayout.Spacing,
     onOpenBilling: () -> Unit,
+    onDelete: () -> Unit,
     onCloneToLead: () -> Unit,
 ) {
-    val enrollment = PackEnrollmentStore.forPeopleGroup(group.id)
+    val enrollment = PlanEnrollmentStore.forPeopleGroup(group.id)
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
-    ReadOnlyPackSection(planId = group.planId, prominent = true)
-    Spacer(modifier = Modifier.height(spacing.section))
-    ReadOnlyMainContactSection(contactId = group.mainContactId)
-    Spacer(modifier = Modifier.height(spacing.field))
-    Text(
-        text = if (group.mainContactAttendsClass) {
-            "Main contact attends class"
-        } else {
-            "Main contact does not attend class"
-        },
-        style = MaterialTheme.typography.bodySmall,
-        fontWeight = FontWeight.Medium,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
-    Text(
-        text = "Related people always attend. Set on the lead before conversion.",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 2.dp),
-    )
-    Spacer(modifier = Modifier.height(spacing.section))
-    ReadOnlyRelatedPeopleSection(relatedPersonIds = group.relatedPersonIds)
-    Text(
-        text = "${group.classAttendeeCount()} attending on classes · ${group.memberCount()} in household",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = spacing.field),
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    if (group.notes.isNotBlank()) {
-        GlideFieldLabel("Notes")
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = group.notes,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+
+    FormPanelSection(
+        title = "Plan",
+        description = "The plan assigned to this customer group.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        ReadOnlyPlanSection(planId = group.planId, prominent = false)
     }
-    enrollment?.let {
+
+    FormPanelSectionsDivider(label = "Clients on this plan", spacing = spacing)
+
+    FormPanelSection(
+        title = "Main client",
+        description = "The primary person for billing and household identity.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        ReadOnlyMainClientSection(clientId = group.mainClientId, showLabel = false)
         Spacer(modifier = Modifier.height(spacing.field))
         Text(
-            text = if (outstanding > 0) {
-                "Outstanding: ${formatMoney(outstanding, it.planSnapshot.currencyCode)}"
+            text = if (group.mainClientAttendsClass) {
+                "Main client attends class"
             } else {
-                "No outstanding bills"
+                "Main client does not attend class"
             },
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = "Students always attend. Set on the lead before conversion.",
             style = MaterialTheme.typography.labelSmall,
-            color = if (outstanding > 0) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
         )
     }
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideButton(
-        onClick = onOpenBilling,
-        modifier = Modifier.fillMaxWidth(),
+
+    FormPanelSection(
+        title = "Students",
+        description = "Others on this plan besides the main client.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
     ) {
-        Text("Billing")
+        ReadOnlyStudentsSection(studentIds = group.studentIds, showLabel = false)
+        Text(
+            text = "${group.classAttendeeCount()} attending on classes · ${group.memberCount()} in household",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = spacing.field),
+        )
     }
-    Spacer(modifier = Modifier.height(spacing.field))
-    Text(
-        text = "This customer group is locked. Clone to a lead to create another pack with the same people.",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+
+    FormPanelSectionsDivider(label = "Billing & actions", spacing = spacing)
+
+    FormPanelSection(
+        title = "Details & billing",
+        description = "Notes, outstanding balance, and next steps.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        if (group.notes.isNotBlank()) {
+            GlideFieldLabel("Notes")
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = group.notes,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(spacing.field))
+        }
+        enrollment?.let {
+            Text(
+                text = if (outstanding > 0) {
+                    "Outstanding: ${formatMoney(outstanding, it.planSnapshot.currencyCode)}"
+                } else {
+                    "No outstanding bills"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = if (outstanding > 0) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Spacer(modifier = Modifier.height(spacing.field))
+        }
+        GlideButton(
+            onClick = onOpenBilling,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Billing")
+        }
+        Spacer(modifier = Modifier.height(spacing.field))
+        Text(
+            text = "This customer group is locked. Clone to a lead to create another plan with the same people.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        GlideOutlinedButton(
+            onClick = onCloneToLead,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Clone to new lead")
+        }
+    }
+    SoldPlanDeleteSection(
+        groupId = group.id,
+        spacing = spacing,
+        onDelete = onDelete,
     )
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedButton(
-        onClick = onCloneToLead,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text("Clone to new lead")
-    }
 }
 
 @Composable
-private fun LeadMainContactAttendsField(
+private fun LeadMainClientAttendsField(
     attends: Boolean,
     onAttendsChange: (Boolean) -> Unit,
 ) {
@@ -952,15 +1265,15 @@ private fun LeadMainContactAttendsField(
         )
         Column(modifier = Modifier.padding(start = 4.dp)) {
             Text(
-                text = "Main contact attends class",
+                text = "Main client attends class",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium,
             )
             Text(
                 text = if (attends) {
-                    "Main contact counts toward room capacity when this group is on a class."
+                    "Main client counts toward room capacity when this group is on a class."
                 } else {
-                    "Only related people attend; main contact is not counted on classes."
+                    "Only students attend; main client is not counted on classes."
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -983,19 +1296,19 @@ private fun PeopleGroupForm(
     var statusExpanded by remember { mutableStateOf(false) }
 
     if (isCustomerGroup) {
-        ReadOnlyMainContactSection(contactId = state.mainContactId)
+        ReadOnlyMainClientSection(clientId = state.mainClientId)
     } else {
-        LeadMainContactSection(
-            mainContactId = state.mainContactId,
-            contactName = state.contactName,
+        LeadMainClientSection(
+            mainClientId = state.mainClientId,
+            clientName = state.clientName,
             dateOfBirth = state.dateOfBirth,
             email = state.email,
             phone = state.phone,
-            onStateChange = { contactId, name, dob, email, phone ->
+            onStateChange = { clientId, name, dob, email, phone ->
                 onStateChange(
                     state.copy(
-                        mainContactId = contactId,
-                        contactName = name,
+                        mainClientId = clientId,
+                        clientName = name,
                         dateOfBirth = dob,
                         email = email,
                         phone = phone,
@@ -1005,98 +1318,146 @@ private fun PeopleGroupForm(
             spacing = spacing,
         )
     }
-    Spacer(modifier = Modifier.height(spacing.section * 2))
+    if (!isCustomerGroup) {
+        LeadPeopleSectionsDivider(spacing = spacing)
+    } else {
+        Spacer(modifier = Modifier.height(spacing.section * 2))
+    }
 
     if (isCustomerGroup) {
-        RelatedPersonLinkSection(
-            selectedIds = state.relatedPersonIds,
-            onSelectionChange = { onStateChange(state.copy(relatedPersonIds = it)) },
+        StudentLinkSection(
+            selectedIds = state.studentIds,
+            onSelectionChange = { onStateChange(state.copy(studentIds = it)) },
             spacing = spacing,
         )
     } else {
-        LeadRelatedPeopleSection(
-            selectedIds = state.relatedPersonIds,
-            onSelectionChange = { onStateChange(state.copy(relatedPersonIds = it)) },
+        LeadStudentsSection(
+            selectedIds = state.studentIds,
+            onSelectionChange = { onStateChange(state.copy(studentIds = it)) },
             spacing = spacing,
         )
     }
 
-    if (showPlanPicker) {
-        Spacer(modifier = Modifier.height(spacing.field))
-        PlanPackDropdown(
-            selectedPlanId = state.planId,
-            onPlanSelected = { onStateChange(state.copy(planId = it)) },
-        )
+    if (!isCustomerGroup && (showPlanPicker || showPipelineStatus)) {
+        FormPanelSectionsDivider(label = "Lead setup", spacing = spacing)
     }
 
-    if (!isCustomerGroup) {
+    if (showPlanPicker) {
+        FormPanelSection(
+            title = "Plan",
+            description = "Select the plan before converting this lead to a customer.",
+            spacing = spacing,
+            role = FormPanelSectionRole.Tertiary,
+        ) {
+            PlanDropdown(
+                selectedPlanId = state.planId,
+                onPlanSelected = { onStateChange(state.copy(planId = it)) },
+            )
+            if (!isCustomerGroup) {
+                Spacer(modifier = Modifier.height(spacing.field))
+                LeadMainClientAttendsField(
+                    attends = state.mainClientAttendsClass,
+                    onAttendsChange = { onStateChange(state.copy(mainClientAttendsClass = it)) },
+                )
+            }
+        }
+    } else if (!isCustomerGroup) {
         Spacer(modifier = Modifier.height(spacing.field))
-        LeadMainContactAttendsField(
-            attends = state.mainContactAttendsClass,
-            onAttendsChange = { onStateChange(state.copy(mainContactAttendsClass = it)) },
+        LeadMainClientAttendsField(
+            attends = state.mainClientAttendsClass,
+            onAttendsChange = { onStateChange(state.copy(mainClientAttendsClass = it)) },
         )
     }
 
     if (showPipelineStatus) {
-        Spacer(modifier = Modifier.height(spacing.field))
-        Column {
-            GlideFieldLabel("Status")
-            Spacer(modifier = Modifier.height(2.dp))
-            ExposedDropdownMenuBox(
-                expanded = statusExpanded,
-                onExpandedChange = { statusExpanded = it },
-            ) {
-                OutlinedTextField(
-                    value = state.status.label,
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusExpanded) },
-                    shape = MaterialTheme.shapes.small,
-                    textStyle = MaterialTheme.typography.bodySmall.copy(
-                        color = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
-                        .menuAnchor(),
-                )
-                ExposedDropdownMenu(
+        FormPanelSection(
+            title = "Pipeline",
+            description = "Track where this lead is in your sales process.",
+            spacing = spacing,
+            role = FormPanelSectionRole.Tertiary,
+        ) {
+            Column {
+                GlideFieldLabel("Status")
+                Spacer(modifier = Modifier.height(2.dp))
+                ExposedDropdownMenuBox(
                     expanded = statusExpanded,
-                    onDismissRequest = { statusExpanded = false },
+                    onExpandedChange = { statusExpanded = it },
                 ) {
-                    PeopleGroupStatus.entries.forEach { status ->
-                        DropdownMenuItem(
-                            text = { Text(status.label, style = MaterialTheme.typography.bodySmall) },
-                            onClick = {
-                                onStateChange(state.copy(status = status))
-                                statusExpanded = false
-                            },
-                        )
+                    OutlinedTextField(
+                        value = state.status.label,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusExpanded) },
+                        shape = MaterialTheme.shapes.small,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
+                            .menuAnchor(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded = statusExpanded,
+                        onDismissRequest = { statusExpanded = false },
+                    ) {
+                        PeopleGroupStatus.entries.forEach { status ->
+                            DropdownMenuItem(
+                                text = { Text(status.label, style = MaterialTheme.typography.bodySmall) },
+                                onClick = {
+                                    onStateChange(state.copy(status = status))
+                                    statusExpanded = false
+                                },
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.notes,
-        onValueChange = { onStateChange(state.copy(notes = it)) },
-        label = "Notes",
-        singleLine = false,
-        minLines = 2,
-        maxLines = 4,
-        fieldHeight = notesHeight,
-    )
+    Spacer(modifier = Modifier.height(spacing.section))
+    FormPanelSection(
+        title = "Notes",
+        description = "Internal notes about this lead.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        GlideOutlinedField(
+            value = state.notes,
+            onValueChange = { onStateChange(state.copy(notes = it)) },
+            label = "Notes",
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            fieldHeight = notesHeight,
+        )
+    }
+
+    if (showPlanPicker) {
+        Spacer(modifier = Modifier.height(spacing.section))
+        FormPanelSection(
+            title = "Plan start",
+            description = "When this plan begins for the customer.",
+            spacing = spacing,
+            role = FormPanelSectionRole.Tertiary,
+        ) {
+            IsoDateField(
+                label = "Start date",
+                value = state.planStartDate,
+                onValueChange = { onStateChange(state.copy(planStartDate = it)) },
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlanPackDropdown(
+private fun PlanDropdown(
     selectedPlanId: String?,
     onPlanSelected: (String) -> Unit,
 ) {
@@ -1104,10 +1465,10 @@ private fun PlanPackDropdown(
     var expanded by remember { mutableStateOf(false) }
     val selectedPlan = plans.find { it.id == selectedPlanId }
     val displayValue = selectedPlan?.let { "${it.name} (${it.summaryLine()})" }
-        ?: if (plans.isEmpty()) "No packs available" else "Select a pack"
+        ?: if (plans.isEmpty()) "No plans available" else "Select a plan"
 
     Column {
-        GlideFieldLabel("Pack")
+        GlideFieldLabel("Plan")
         Spacer(modifier = Modifier.height(2.dp))
         ExposedDropdownMenuBox(
             expanded = expanded,
@@ -1159,7 +1520,7 @@ private fun PlanPackDropdown(
         if (plans.isEmpty()) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Add multi lesson packs in the Plans panel.",
+                text = "Add multi lesson plans in the Plans panel.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

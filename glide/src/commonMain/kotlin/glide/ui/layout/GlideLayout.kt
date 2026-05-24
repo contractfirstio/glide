@@ -73,17 +73,17 @@ object GlideLayout {
     /**
      * Customer Management grid:
      * ```
-     * [ Leads ] [ Plans  ] [ Related ]
-     * [ People] [ Billing] [ Customers ]
+     * [ Leads    ] [ Plans  ] [ Clients ]
+     * [ Customers] [ Billing] [ Students ]
      * ```
      */
     fun customerManagementPanelGridCell(slot: Int): Pair<Int, Int> = when (slot) {
         PanelSlots.LEADS -> 0 to 0
         PanelSlots.PLANS -> 0 to 1
-        PanelSlots.RELATED -> 0 to 2
-        PanelSlots.PEOPLE -> 1 to 0
+        PanelSlots.CLIENTS -> 0 to 2
+        PanelSlots.CUSTOMERS -> 1 to 0
         PanelSlots.BILLING -> 1 to 1
-        PanelSlots.CUSTOMERS -> 1 to 2
+        PanelSlots.STUDENTS -> 1 to 2
         else -> 0 to 0
     }
 
@@ -92,16 +92,16 @@ object GlideLayout {
      * calendar class is clicked.
      * ```
      * [ Classes       ] [ Term calendar ] [ Attendance* ]
-     * [ Locations     ] [ Terms         ] [ Customer groups ]
+     * [ Sold Plans    ] [ Terms         ] [ Locations     ]
      * ```
      */
     fun schedulingPanelGridCell(slot: Int): Pair<Int, Int> = when (slot) {
         SchedulingPanelSlots.SCHEDULE -> 0 to 0
         SchedulingPanelSlots.CALENDAR -> 0 to 1
         SchedulingPanelSlots.ATTENDANCE -> 0 to 2
-        SchedulingPanelSlots.LOCATIONS -> 1 to 0
+        SchedulingPanelSlots.CUSTOMER_GROUPS -> 1 to 0
         SchedulingPanelSlots.TERMS -> 1 to 1
-        SchedulingPanelSlots.CUSTOMER_GROUPS -> 1 to 2
+        SchedulingPanelSlots.LOCATIONS -> 1 to 2
         else -> 0 to 0
     }
 
@@ -160,8 +160,8 @@ object GlideLayout {
 object PanelSlots {
     const val LEADS = 0
     const val PLANS = 1
-    const val RELATED = 2
-    const val PEOPLE = 3
+    const val STUDENTS = 2
+    const val CLIENTS = 3
     const val CUSTOMERS = 4
     const val BILLING = 5
 }

@@ -21,8 +21,8 @@ object BillingPanelState {
             clear()
             return
         }
-        ContactsPanelState.clearContactFilter()
-        RelatedPanelState.clearRelatedPersonFilter()
+        ClientsPanelState.clearClientFilter()
+        StudentsPanelState.clearStudentFilter()
         PlansPanelState.clearPlanFilter()
         peopleGroupId = groupId
         visible = AppViewState.mode == AppViewMode.CUSTOMER_MANAGEMENT

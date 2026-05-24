@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import glide.model.ClassSessionKey
-import glide.model.canTakeAttendance
 import java.time.LocalDate
 
 /**
@@ -26,8 +25,7 @@ object AttendancePanelState {
         }
 
     fun open(scheduledClassId: String, sessionDate: LocalDate) {
-        val scheduledClass = ScheduledClassStore.findById(scheduledClassId) ?: return
-        if (!scheduledClass.canTakeAttendance(sessionDate)) return
+        if (ScheduledClassStore.findById(scheduledClassId) == null) return
         this.scheduledClassId = scheduledClassId
         this.sessionDate = sessionDate.toString()
         visible = AppViewState.mode == AppViewMode.SCHEDULING

@@ -17,7 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,11 +33,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import glide.data.LocationStore
 import glide.data.ScheduledClassStore
+import glide.data.SchedulePanelState
 import glide.data.TermStore
+import glide.data.validateTermDisablingRollingPlans
 import glide.model.AcademicTerm
 import glide.model.findOverlappingTerm
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.DeleteConfirmDialog
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.leads.parseIsoDateToMillis
 import glide.ui.shared.IsoDateField
@@ -54,6 +62,7 @@ private data class TermFormState(
     val startDate: String = "",
     val endDate: String = "",
     val notes: String = "",
+    val acceptsRollingPlans: Boolean = true,
 ) {
     fun isValid(): Boolean {
         if (name.isBlank()) return false
@@ -71,6 +80,7 @@ private data class TermFormState(
         startDate = startDate,
         endDate = endDate,
         notes = notes.trim(),
+        acceptsRollingPlans = acceptsRollingPlans,
         createdAtMillis = createdAtMillis,
     )
 }
@@ -87,43 +97,93 @@ private fun overlapErrorMessage(overlapping: AcademicTerm): String {
 @Composable
 fun TermsPanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var formState by remember { mutableStateOf(TermFormState()) }
+    val form = rememberFormDirtyTracker(TermFormState())
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
-    val terms = TermStore.sortedForPanel()
+    val allTerms = TermStore.sortedForPanel()
+    val termFilterId = SchedulePanelState.selectedTermFilterId
+    val locationFilterId = SchedulePanelState.selectedLocationFilterId
+    val classSyncId = SchedulePanelState.selectedClassId.takeIf {
+        termFilterId == null && locationFilterId == null
+    }
+    val terms = if (locationFilterId != null) {
+        val termIds = ScheduledClassStore.termIdsForLocation(locationFilterId)
+        allTerms.filter { it.id in termIds }
+    } else {
+        allTerms
+    }
+    val highlightedTermId = termFilterId ?: selectedId
+    val locationFilterLabel = locationFilterId?.let {
+        LocationStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() }
+    }
 
-    fun clearSelection() {
+    fun clearLocalSelection() {
         selectedId = null
         isCreating = true
-        formState = TermFormState()
+        form.load(TermFormState())
         formError = null
     }
 
+    fun clearSelection() {
+        clearLocalSelection()
+        SchedulePanelState.onTermCleared()
+    }
+
     fun resetFormForCreate() {
-        selectedId = null
-        isCreating = true
-        formState = TermFormState()
+        clearLocalSelection()
+        SchedulePanelState.onTermCleared()
+    }
+
+    fun syncTermIntoForm(term: AcademicTerm) {
+        selectedId = term.id
+        isCreating = false
+        form.load(
+            TermFormState(
+                name = term.name,
+                startDate = term.startDate,
+                endDate = term.endDate,
+                notes = term.notes,
+                acceptsRollingPlans = term.acceptsRollingPlans,
+            ),
+        )
         formError = null
     }
 
     fun loadIntoForm(term: AcademicTerm) {
         selectedId = term.id
         isCreating = false
-        formState = TermFormState(
-            name = term.name,
-            startDate = term.startDate,
-            endDate = term.endDate,
-            notes = term.notes,
+        SchedulePanelState.onTermSelected(term.id)
+        form.load(
+            TermFormState(
+                name = term.name,
+                startDate = term.startDate,
+                endDate = term.endDate,
+                notes = term.notes,
+                acceptsRollingPlans = term.acceptsRollingPlans,
+            ),
         )
         formError = null
     }
 
-    LaunchedEffect(terms, selectedId) {
-        if (selectedId != null && terms.none { it.id == selectedId }) {
+    LaunchedEffect(allTerms, selectedId, locationFilterId) {
+        if (selectedId != null && allTerms.none { it.id == selectedId }) {
             clearSelection()
         }
+    }
+
+    LaunchedEffect(classSyncId, allTerms) {
+        val classId = classSyncId ?: return@LaunchedEffect
+        val scheduledClass = ScheduledClassStore.findById(classId) ?: return@LaunchedEffect
+        val resolvedTermId = termIdForClassSelection(scheduledClass, allTerms) ?: return@LaunchedEffect
+        allTerms.find { it.id == resolvedTermId }?.let { syncTermIntoForm(it) }
+    }
+
+    LaunchedEffect(termFilterId, allTerms) {
+        val id = termFilterId ?: return@LaunchedEffect
+        if (selectedId == id) return@LaunchedEffect
+        allTerms.find { it.id == id }?.let { syncTermIntoForm(it) }
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -143,7 +203,13 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         ) {
             if (!compact) {
                 Text(
-                    text = "Define academic terms and school breaks. Term dates cannot overlap.",
+                    text = when {
+                        locationFilterId != null -> {
+                            val label = locationFilterLabel ?: "this location"
+                            "Showing terms with classes at $label. Use Clear filter in Locations to reset."
+                        }
+                        else -> "Define academic terms and school breaks. Term dates cannot overlap."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -161,8 +227,15 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             text = "${terms.size} term${if (terms.size == 1) "" else "s"}",
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        GlideButton(onClick = { resetFormForCreate() }) {
-                            Text(if (compact) "New" else "New term")
+                        Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
+                            if (locationFilterId != null) {
+                                GlideTextButton(onClick = { SchedulePanelState.clearLocationFilter() }) {
+                                    Text("Clear filter")
+                                }
+                            }
+                            GlideButton(onClick = { resetFormForCreate() }) {
+                                Text(if (compact) "New" else "New term")
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(spacing.field))
@@ -185,7 +258,10 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "No terms yet.",
+                                text = when {
+                                    locationFilterId != null -> "No terms with classes at this location."
+                                    else -> "No terms yet."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -204,7 +280,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             items(terms, key = { it.id }) { term ->
                                 TermListItem(
                                     term = term,
-                                    selected = term.id == selectedId,
+                                    selected = term.id == highlightedTermId,
                                     compact = compact,
                                     onClick = { loadIntoForm(term) },
                                 )
@@ -223,16 +299,31 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                     )
                     Spacer(modifier = Modifier.height(spacing.section))
 
+                    val termReadOnly = !isCreating &&
+                        selectedId != null &&
+                        !TermStore.canEdit(selectedId!!)
+
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .verticalScroll(rememberScrollState()),
                     ) {
                         TermForm(
-                            state = formState,
-                            onStateChange = { formState = it },
+                            state = form.draft,
+                            onStateChange = { form.draft = it },
                             spacing = spacing,
+                            readOnly = termReadOnly,
                         )
+
+                        if (termReadOnly) {
+                            Spacer(modifier = Modifier.height(spacing.field))
+                            Text(
+                                text = TermStore.termEditBlockReason(selectedId!!)
+                                    ?: "This term is attached to a class and cannot be edited.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
 
                         formError?.let { error ->
                             Spacer(modifier = Modifier.height(spacing.field))
@@ -252,15 +343,19 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                     ) {
                         GlideButton(
                             onClick = {
-                                if (!formState.isValid()) {
+                                if (!form.draft.isValid()) {
                                     formError = "Name, start date, and end date are required. End must be on or after start."
                                     return@GlideButton
                                 }
                                 val excludeId = if (isCreating) null else selectedId
-                                val candidate = formState.toTerm(existingId = excludeId)
+                                val candidate = form.draft.toTerm(existingId = excludeId)
                                 val overlapping = findOverlappingTerm(terms, candidate, excludeTermId = excludeId)
                                 if (overlapping != null) {
                                     formError = overlapErrorMessage(overlapping)
+                                    return@GlideButton
+                                }
+                                validateTermDisablingRollingPlans(candidate)?.let { message ->
+                                    formError = message
                                     return@GlideButton
                                 }
                                 formError = null
@@ -273,25 +368,34 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                                 } else {
                                     val existing = selectedId?.let { TermStore.findById(it) }
                                     if (existing != null) {
-                                        val updated = formState.toTerm(
+                                        TermStore.termEditBlockReason(existing.id)?.let { reason ->
+                                            formError = reason
+                                            return@GlideButton
+                                        }
+                                        val updated = form.draft.toTerm(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
                                         if (!TermStore.update(updated)) {
-                                            formError = "Could not save term — dates overlap an existing term."
+                                            formError = TermStore.termEditBlockReason(existing.id)
+                                                ?: "Could not save term — dates overlap an existing term."
                                             return@GlideButton
                                         }
                                         loadIntoForm(updated)
                                     }
                                 }
                             },
+                            enabled = form.isDirty && !termReadOnly,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(saveLabel)
                         }
 
                         if (!isCreating) {
-                            GlideOutlinedButton(onClick = { showDeleteConfirm = true }) {
+                            GlideOutlinedButton(
+                                onClick = { showDeleteConfirm = true },
+                                enabled = selectedId?.let { TermStore.canDelete(it) } == true,
+                            ) {
                                 Text("Delete", color = MaterialTheme.colorScheme.error)
                             }
                         }
@@ -317,36 +421,27 @@ fun TermsPanel(modifier: Modifier = Modifier) {
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        val linkedClasses = ScheduledClassStore.countForTerm(selectedId!!)
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete term?") },
-            text = {
-                Text(
-                    if (linkedClasses > 0) {
-                        "This term will be removed. $linkedClasses class${if (linkedClasses == 1) "" else "es"} " +
-                            "will be unlinked from this term."
-                    } else {
-                        "This term will be removed permanently."
-                    },
-                )
+        val linkedClasses = TermStore.classCount(selectedId!!)
+        val attachedToClass = linkedClasses > 0
+        DeleteConfirmDialog(
+            title = "Delete term?",
+            message = if (attachedToClass) {
+                "This term is used by $linkedClasses class${if (linkedClasses == 1) "" else "es"} " +
+                    "and cannot be deleted. Remove it from those classes first."
+            } else {
+                "This term will be removed permanently."
             },
-            confirmButton = {
-                GlideTextButton(
-                    onClick = {
-                        TermStore.delete(selectedId!!)
-                        showDeleteConfirm = false
-                        clearSelection()
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+            onDismiss = { showDeleteConfirm = false },
+            onContinue = {
+                if (TermStore.delete(selectedId!!)) {
+                    showDeleteConfirm = false
+                    clearSelection()
+                } else {
+                    showDeleteConfirm = false
+                    formError = "This term is attached to a class and cannot be deleted."
                 }
             },
-            dismissButton = {
-                GlideTextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+            continueEnabled = !attachedToClass,
         )
     }
 }
@@ -396,7 +491,7 @@ private fun TermListItem(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        val classCount = ScheduledClassStore.countForTerm(term.id)
+        val classCount = TermStore.classCount(term.id)
         if (classCount > 0) {
             Text(
                 text = "$classCount class${if (classCount == 1) "" else "es"}",
@@ -412,33 +507,94 @@ private fun TermForm(
     state: TermFormState,
     onStateChange: (TermFormState) -> Unit,
     spacing: GlideLayout.Spacing,
+    readOnly: Boolean = false,
 ) {
-    GlideOutlinedField(
-        value = state.name,
-        onValueChange = { onStateChange(state.copy(name = it)) },
-        label = "Term name",
-        placeholder = "e.g. Spring 2026",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    IsoDateField(
-        label = "Start date",
-        value = state.startDate,
-        onValueChange = { onStateChange(state.copy(startDate = it)) },
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    IsoDateField(
-        label = "End date",
-        value = state.endDate,
-        onValueChange = { onStateChange(state.copy(endDate = it)) },
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.notes,
-        onValueChange = { onStateChange(state.copy(notes = it)) },
-        label = "Notes",
-        singleLine = false,
-        minLines = 2,
-        maxLines = 4,
-        fieldHeight = GlideDimensions.notesMinHeight,
-    )
+    FormPanelSection(
+        title = "Term identity",
+        description = "Name shown on the calendar and class forms.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        GlideOutlinedField(
+            value = state.name,
+            onValueChange = { onStateChange(state.copy(name = it)) },
+            label = "Term name",
+            placeholder = "e.g. Spring 2026",
+            readOnly = readOnly,
+        )
+    }
+
+    FormPanelSectionsDivider(label = "Date range", spacing = spacing)
+
+    FormPanelSection(
+        title = "Dates",
+        description = "When this term starts and ends.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
+        IsoDateField(
+            label = "Start date",
+            value = state.startDate,
+            onValueChange = { onStateChange(state.copy(startDate = it)) },
+            readOnly = readOnly,
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        IsoDateField(
+            label = "End date",
+            value = state.endDate,
+            onValueChange = { onStateChange(state.copy(endDate = it)) },
+            readOnly = readOnly,
+        )
+    }
+
+    FormPanelSectionsDivider(label = "Rolling plans", spacing = spacing)
+
+    FormPanelSection(
+        title = "Rolling plans",
+        description = "Whether rolling plan classes can extend into this term.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Checkbox(
+                checked = state.acceptsRollingPlans,
+                onCheckedChange = { onStateChange(state.copy(acceptsRollingPlans = it)) },
+                enabled = !readOnly,
+            )
+            Column(modifier = Modifier.padding(start = 4.dp)) {
+                Text(
+                    text = "Accepts Rolling Plans",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    text = "Rolling plan schedules may span into this term when a new term is added.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+
+    FormPanelSectionsDivider(label = "Notes", spacing = spacing)
+
+    FormPanelSection(
+        title = "Notes",
+        description = "Internal notes about this term.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        GlideOutlinedField(
+            value = state.notes,
+            onValueChange = { onStateChange(state.copy(notes = it)) },
+            label = "Notes",
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            fieldHeight = GlideDimensions.notesMinHeight,
+            readOnly = readOnly,
+        )
+    }
 }

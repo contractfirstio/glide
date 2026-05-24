@@ -12,12 +12,12 @@ fun attendeesForClass(scheduledClass: ScheduledClass, sessionDate: LocalDate): L
         .flatMap { group -> group.attendeesForClassRoster() }
 
 private fun PeopleGroup.attendeesForClassRoster(): List<ClassAttendee> {
-    val household = contactName.ifBlank { "Household" }
+    val household = clientName.ifBlank { "Household" }
     val attendees = mutableListOf<ClassAttendee>()
-    if (mainContactAttendsClass && hasResolvableMainContact()) {
-        val main = resolveMainContact()
-        val name = main.name.trim().ifBlank { "Main contact" }
-        val key = mainContactId?.let { "contact:$it" } ?: "legacy-main:$id"
+    if (mainClientAttendsClass && hasResolvableMainClient()) {
+        val main = resolveMainClient()
+        val name = main.name.trim().ifBlank { "Main client" }
+        val key = mainClientId?.let { "client:$it" } ?: "legacy-main:$id"
         attendees.add(
             ClassAttendee(
                 key = key,
@@ -27,11 +27,11 @@ private fun PeopleGroup.attendeesForClassRoster(): List<ClassAttendee> {
             ),
         )
     }
-    resolveRelatedPeople().forEach { person ->
-        val name = person.name.trim().ifBlank { "Related person" }
+    resolveStudents().forEach { person ->
+        val name = person.name.trim().ifBlank { "Student" }
         attendees.add(
             ClassAttendee(
-                key = "related:${person.id}",
+                key = "student:${person.id}",
                 displayName = name,
                 peopleGroupId = id,
                 householdLabel = household,

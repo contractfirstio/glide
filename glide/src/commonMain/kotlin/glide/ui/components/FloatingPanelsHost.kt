@@ -17,9 +17,9 @@ import glide.ui.scheduling.rememberPendingAttendanceSessions
 import glide.ui.scheduling.AttendanceFloatingPanel
 import glide.ui.customers.CustomersFloatingPanel
 import glide.ui.leads.LeadsFloatingPanel
-import glide.ui.people.PeopleFloatingPanel
+import glide.ui.clients.ClientsFloatingPanel
 import glide.ui.plans.PlansFloatingPanel
-import glide.ui.related.RelatedPeopleFloatingPanel
+import glide.ui.students.StudentsFloatingPanel
 import glide.ui.layout.PanelSlots
 import glide.ui.layout.SchedulingPanelSlots
 import glide.ui.scheduling.LocationsFloatingPanel
@@ -83,11 +83,11 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
                             windowWidthPx = windowWidthPx,
                             windowHeightPx = windowHeightPx,
                         )
-                        PanelSlots.RELATED -> RelatedPeopleFloatingPanel(
+                        PanelSlots.STUDENTS -> StudentsFloatingPanel(
                             windowWidthPx = windowWidthPx,
                             windowHeightPx = windowHeightPx,
                         )
-                        PanelSlots.PEOPLE -> PeopleFloatingPanel(
+                        PanelSlots.CLIENTS -> ClientsFloatingPanel(
                             windowWidthPx = windowWidthPx,
                             windowHeightPx = windowHeightPx,
                         )

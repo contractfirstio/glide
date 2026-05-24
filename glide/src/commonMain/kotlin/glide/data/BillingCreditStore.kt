@@ -63,9 +63,7 @@ object BillingCreditStore {
         return applied
     }
 
-    fun seed(credit: BillingCredit) {
-        if (!hasCreditForAbsentSession(credit.scheduledClassId, credit.sessionDate, credit.attendeeKey)) {
-            _credits.add(credit)
-        }
+    fun removeAllForEnrollment(enrollmentId: String) {
+        _credits.removeAll { it.enrollmentId == enrollmentId }
     }
 }

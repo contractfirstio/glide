@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,14 +41,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.BillingPanelState
-import glide.data.ContactStore
-import glide.data.ContactsPanelState
+import glide.data.ClientStore
+import glide.data.ClientsPanelState
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
-import glide.data.RelatedPanelState
-import glide.data.RelatedPersonStore
-import glide.data.resolveMainContact
+import glide.data.StudentsPanelState
+import glide.data.StudentStore
+import glide.data.resolveMainClient
 import glide.model.Plan
 import glide.model.PlanKind
 import glide.model.formatMoney
@@ -58,6 +57,11 @@ import glide.model.parseMajorAmount
 import glide.model.summaryLine
 import glide.model.DEFAULT_CURRENCY_CODE
 import glide.ui.layout.GlideLayout
+import glide.ui.shared.DeleteConfirmDialog
+import glide.ui.shared.FormPanelSection
+import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideFieldLabel
@@ -69,7 +73,7 @@ import java.util.UUID
 
 private data class PlanFormState(
     val name: String = "",
-    val kind: PlanKind = PlanKind.MULTI_LESSON_PACK,
+    val kind: PlanKind = PlanKind.MULTI_LESSON_PLAN,
     val lessonCount: String = "10",
     val rolling: Boolean = true,
     val priceMajor: String = "",
@@ -79,8 +83,9 @@ private data class PlanFormState(
         if (name.isBlank()) return false
         if (parseMajorAmount(priceMajor) == null) return false
         return when (kind) {
-            PlanKind.SINGLE_LESSON_PACK -> true
-            PlanKind.MULTI_LESSON_PACK -> lessonCount.toIntOrNull()?.let { it > 0 } == true
+            PlanKind.SINGLE_LESSON_PLAN -> true
+            PlanKind.MULTI_LESSON_PLAN -> lessonCount.toIntOrNull()?.let { it > 0 } == true
+            PlanKind.CAMP -> lessonCount.toIntOrNull()?.let { it > 0 } == true
         }
     }
 
@@ -90,8 +95,9 @@ private data class PlanFormState(
         existingCurrency: String = DEFAULT_CURRENCY_CODE,
     ): Plan? {
         val count = when (kind) {
-            PlanKind.SINGLE_LESSON_PACK -> 1
-            PlanKind.MULTI_LESSON_PACK -> lessonCount.toIntOrNull() ?: return null
+            PlanKind.SINGLE_LESSON_PLAN -> 1
+            PlanKind.MULTI_LESSON_PLAN -> lessonCount.toIntOrNull() ?: return null
+            PlanKind.CAMP -> lessonCount.toIntOrNull() ?: return null
         }
         val priceMajorAmount = parseMajorAmount(priceMajor) ?: return null
         return Plan(
@@ -99,7 +105,7 @@ private data class PlanFormState(
             kind = kind,
             name = name.trim(),
             lessonCount = count,
-            rolling = kind != PlanKind.SINGLE_LESSON_PACK && rolling,
+            rolling = kind == PlanKind.MULTI_LESSON_PLAN && rolling,
             priceAmountMinor = majorToMinor(priceMajorAmount),
             currencyCode = existingCurrency,
             notes = notes.trim(),
@@ -117,34 +123,34 @@ private fun Plan.priceMajorString(): String {
 @Composable
 fun PlansPanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var formState by remember { mutableStateOf(PlanFormState()) }
+    val form = rememberFormDirtyTracker(PlanFormState())
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
     val customerGroupId = BillingPanelState.peopleGroupId
-    val contactFilterId = ContactsPanelState.selectedContactId
-    val relatedFilterId = RelatedPanelState.selectedRelatedPersonId
+    val clientFilterId = ClientsPanelState.selectedClientId
+    val studentFilterId = StudentsPanelState.selectedStudentId
     val outboundPlanFilterId = PlansPanelState.selectedPlanId
-    val plans = PlanStore.forPlansPanel(customerGroupId, contactFilterId, relatedFilterId)
+    val plans = PlanStore.forPlansPanel(customerGroupId, clientFilterId, studentFilterId)
     val outboundPlanFilterLabel = outboundPlanFilterId?.let {
         PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
     val customerGroupLabel = customerGroupId?.let { id ->
-        PeopleGroupStore.findById(id)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+        PeopleGroupStore.findById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
     }
-    val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
-    val relatedFilterLabel = relatedFilterId?.let {
-        RelatedPersonStore.findById(it)?.name?.takeIf { it.isNotBlank() }
+    val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+    val studentFilterLabel = studentFilterId?.let {
+        StudentStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
     val hasInboundFilter = customerGroupId != null ||
-        contactFilterId != null ||
-        relatedFilterId != null
+        clientFilterId != null ||
+        studentFilterId != null
 
     fun clearLocalSelection() {
         selectedId = null
         isCreating = false
-        formState = PlanFormState()
+        form.load(PlanFormState())
         formError = null
     }
 
@@ -156,7 +162,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
     fun resetFormForCreate() {
         clearLocalSelection()
         isCreating = true
-        formState = PlanFormState()
+        form.load(PlanFormState())
         formError = null
     }
 
@@ -164,18 +170,20 @@ fun PlansPanel(modifier: Modifier = Modifier) {
         PlansPanelState.onPlanSelected(plan.id)
         selectedId = plan.id
         isCreating = false
-        formState = PlanFormState(
-            name = plan.name,
-            kind = plan.kind,
-            lessonCount = plan.lessonCount.toString(),
-            rolling = plan.rolling,
-            priceMajor = plan.priceMajorString(),
-            notes = plan.notes,
+        form.load(
+            PlanFormState(
+                name = plan.name,
+                kind = plan.kind,
+                lessonCount = plan.lessonCount.toString(),
+                rolling = plan.rolling,
+                priceMajor = plan.priceMajorString(),
+                notes = plan.notes,
+            ),
         )
         formError = null
     }
 
-    LaunchedEffect(customerGroupId, contactFilterId, relatedFilterId) {
+    LaunchedEffect(customerGroupId, clientFilterId, studentFilterId) {
         if (hasInboundFilter && selectedId != null) {
             clearLocalSelection()
         }
@@ -209,19 +217,19 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             val label = customerGroupLabel ?: "this customer group"
                             "Showing plans for $label. Use Show all in Customers to reset."
                         }
-                        contactFilterId != null -> {
-                            val label = contactFilterLabel ?: "this contact"
-                            "Showing plans for $label. Use Clear filter in Contacts to reset."
+                        clientFilterId != null -> {
+                            val label = clientFilterLabel ?: "this client"
+                            "Showing plans for $label. Use Clear filter in Clients to reset."
                         }
-                        relatedFilterId != null -> {
-                            val label = relatedFilterLabel ?: "this related person"
-                            "Showing plans for $label. Use Clear filter in Related to reset."
+                        studentFilterId != null -> {
+                            val label = studentFilterLabel ?: "this student"
+                            "Showing plans for $label. Use Clear filter in Students to reset."
                         }
                         outboundPlanFilterId != null -> {
                             val label = outboundPlanFilterLabel ?: "this plan"
-                            "Filtering customer groups, contacts, and related people for $label. Use Clear filter to reset."
+                            "Filtering customer groups, clients, and students for $label. Use Clear filter to reset."
                         }
-                        else -> "Define plan types and packs offered to customers."
+                        else -> "Define plan types and plans offered to customers."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -241,13 +249,13 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
-                            if (relatedFilterId != null) {
-                                GlideTextButton(onClick = { RelatedPanelState.clearRelatedPersonFilter() }) {
+                            if (studentFilterId != null) {
+                                GlideTextButton(onClick = { StudentsPanelState.clearStudentFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (contactFilterId != null) {
-                                GlideTextButton(onClick = { ContactsPanelState.clearContactFilter() }) {
+                            if (clientFilterId != null) {
+                                GlideTextButton(onClick = { ClientsPanelState.clearClientFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
@@ -289,10 +297,10 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                                 text = when {
                                     customerGroupId != null ->
                                         "No plan on this customer group."
-                                    contactFilterId != null ->
-                                        "No plans linked to this contact."
-                                    relatedFilterId != null ->
-                                        "No plans linked to this related person."
+                                    clientFilterId != null ->
+                                        "No plans linked to this client."
+                                    studentFilterId != null ->
+                                        "No plans linked to this student."
                                     else -> "No plans yet."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
@@ -332,16 +340,31 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                     )
                     Spacer(modifier = Modifier.height(spacing.section))
 
+                    val planReadOnly = !isCreating &&
+                        selectedId != null &&
+                        !PlanStore.canEdit(selectedId!!)
+
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .verticalScroll(rememberScrollState()),
                     ) {
                         PlanForm(
-                            state = formState,
-                            onStateChange = { formState = it },
+                            state = form.draft,
+                            onStateChange = { form.draft = it },
                             spacing = spacing,
+                            readOnly = planReadOnly,
                         )
+
+                        if (planReadOnly) {
+                            Spacer(modifier = Modifier.height(spacing.field))
+                            Text(
+                                text = PlanStore.planEditBlockReason(selectedId!!)
+                                    ?: "This plan has been sold and cannot be edited.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
 
                         formError?.let { error ->
                             Spacer(modifier = Modifier.height(spacing.field))
@@ -361,16 +384,17 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                     ) {
                         GlideButton(
                             onClick = {
-                                if (!formState.isValid()) {
-                                    formError = when (formState.kind) {
-                                        PlanKind.SINGLE_LESSON_PACK -> "Name and a valid price per person are required."
-                                        PlanKind.MULTI_LESSON_PACK -> "Name, class count, and a valid price per person are required."
+                                if (!form.draft.isValid()) {
+                                    formError = when (form.draft.kind) {
+                                        PlanKind.SINGLE_LESSON_PLAN -> "Name and a valid price per person are required."
+                                        PlanKind.MULTI_LESSON_PLAN -> "Name, class count, and a valid price per person are required."
+                                        PlanKind.CAMP -> "Name, day count, and a valid price per person are required."
                                     }
                                     return@GlideButton
                                 }
-                                val plan = formState.toPlan()
+                                val plan = form.draft.toPlan()
                                 if (plan == null) {
-                                    formError = "Class count must be a positive number."
+                                    formError = "Count must be a positive number."
                                     return@GlideButton
                                 }
                                 formError = null
@@ -380,25 +404,37 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                                 } else {
                                     val existing = selectedId?.let { PlanStore.findById(it) }
                                     if (existing != null) {
-                                        val updated = formState.toPlan(
+                                        PlanStore.planEditBlockReason(existing.id)?.let { reason ->
+                                            formError = reason
+                                            return@GlideButton
+                                        }
+                                        val updated = form.draft.toPlan(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                             existingCurrency = existing.currencyCode,
                                         )
                                         if (updated != null) {
-                                            PlanStore.update(updated)
-                                            loadIntoForm(updated)
+                                            if (PlanStore.update(updated)) {
+                                                loadIntoForm(updated)
+                                            } else {
+                                                formError = PlanStore.planEditBlockReason(existing.id)
+                                                    ?: "This plan has been sold and cannot be edited."
+                                            }
                                         }
                                     }
                                 }
                             },
+                            enabled = form.isDirty && !planReadOnly,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(saveLabel)
                         }
 
                         if (!isCreating) {
-                            GlideOutlinedButton(onClick = { showDeleteConfirm = true }) {
+                            GlideOutlinedButton(
+                                onClick = { showDeleteConfirm = true },
+                                enabled = selectedId?.let { PlanStore.canDelete(it) } == true,
+                            ) {
                                 Text("Delete", color = MaterialTheme.colorScheme.error)
                             }
                         }
@@ -424,28 +460,23 @@ fun PlansPanel(modifier: Modifier = Modifier) {
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete plan?") },
-            text = { Text("This plan will be removed permanently.") },
-            confirmButton = {
-                GlideTextButton(
-                    onClick = {
-                        PlanStore.delete(selectedId!!)
-                        showDeleteConfirm = false
-                        clearSelection()
-                        isCreating = true
-                        formState = PlanFormState()
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+        val blockReason = PlanStore.planDeletionBlockReason(selectedId!!)
+        DeleteConfirmDialog(
+            title = "Delete plan?",
+            message = blockReason ?: "This plan will be removed permanently.",
+            onDismiss = { showDeleteConfirm = false },
+            onContinue = {
+                if (PlanStore.delete(selectedId!!)) {
+                    showDeleteConfirm = false
+                    clearSelection()
+                    isCreating = true
+                    form.load(PlanFormState())
+                } else {
+                    showDeleteConfirm = false
+                    formError = blockReason ?: "This plan has been sold and cannot be deleted."
                 }
             },
-            dismissButton = {
-                GlideTextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+            continueEnabled = blockReason == null,
         )
     }
 }
@@ -507,110 +538,144 @@ private fun PlanForm(
     state: PlanFormState,
     onStateChange: (PlanFormState) -> Unit,
     spacing: GlideLayout.Spacing,
+    readOnly: Boolean = false,
 ) {
     var kindExpanded by remember { mutableStateOf(false) }
 
-    GlideOutlinedField(
-        value = state.name,
-        onValueChange = { onStateChange(state.copy(name = it)) },
-        label = "Plan name",
-        placeholder = "e.g. 10 Class Rolling Pack",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
+    FormPanelSection(
+        title = "Plan identity",
+        description = "Name and type of plan you offer to customers.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Primary,
+    ) {
+        GlideOutlinedField(
+            value = state.name,
+            onValueChange = { onStateChange(state.copy(name = it)) },
+            label = "Plan name",
+            placeholder = "e.g. 10 Class Rolling Plan",
+            readOnly = readOnly,
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
 
-    Column {
-        GlideFieldLabel("Plan type")
-        Spacer(modifier = Modifier.height(2.dp))
-        ExposedDropdownMenuBox(
-            expanded = kindExpanded,
-            onExpandedChange = { kindExpanded = it },
-        ) {
-            OutlinedTextField(
-                value = state.kind.label,
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = kindExpanded) },
-                shape = MaterialTheme.shapes.small,
-                textStyle = MaterialTheme.typography.bodySmall.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
-                    .menuAnchor(),
-            )
-            ExposedDropdownMenu(
+        Column {
+            GlideFieldLabel("Plan type")
+            Spacer(modifier = Modifier.height(2.dp))
+            ExposedDropdownMenuBox(
                 expanded = kindExpanded,
-                onDismissRequest = { kindExpanded = false },
+                onExpandedChange = { if (!readOnly) kindExpanded = it },
             ) {
-                PlanKind.entries.forEach { kind ->
-                    DropdownMenuItem(
-                        text = { Text(kind.label, style = MaterialTheme.typography.bodySmall) },
-                        onClick = {
-                            onStateChange(
-                                when (kind) {
-                                    PlanKind.SINGLE_LESSON_PACK -> state.copy(
-                                        kind = kind,
-                                        lessonCount = "1",
-                                        rolling = false,
-                                    )
-                                    PlanKind.MULTI_LESSON_PACK -> state.copy(kind = kind)
-                                },
-                            )
-                            kindExpanded = false
-                        },
-                    )
+                OutlinedTextField(
+                    value = state.kind.label,
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = kindExpanded) },
+                    shape = MaterialTheme.shapes.small,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
+                        .menuAnchor(),
+                )
+                ExposedDropdownMenu(
+                    expanded = kindExpanded,
+                    onDismissRequest = { kindExpanded = false },
+                ) {
+                    PlanKind.entries.forEach { kind ->
+                        DropdownMenuItem(
+                            text = { Text(kind.label, style = MaterialTheme.typography.bodySmall) },
+                            onClick = {
+                                onStateChange(
+                                    when (kind) {
+                                        PlanKind.SINGLE_LESSON_PLAN -> state.copy(
+                                            kind = kind,
+                                            lessonCount = "1",
+                                            rolling = false,
+                                        )
+                                        PlanKind.MULTI_LESSON_PLAN -> state.copy(kind = kind)
+                                        PlanKind.CAMP -> state.copy(
+                                            kind = kind,
+                                            rolling = false,
+                                            lessonCount = if (state.lessonCount == "1") "5" else state.lessonCount,
+                                        )
+                                    },
+                                )
+                                kindExpanded = false
+                            },
+                        )
+                    }
                 }
             }
         }
     }
 
-    when (state.kind) {
-        PlanKind.MULTI_LESSON_PACK -> {
-            Spacer(modifier = Modifier.height(spacing.field))
-            GlideOutlinedField(
-                value = state.lessonCount,
-                onValueChange = { onStateChange(state.copy(lessonCount = it.filter { c -> c.isDigit() })) },
-                label = "Number of classes",
-                placeholder = "10",
-            )
-            Spacer(modifier = Modifier.height(spacing.field))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Checkbox(
-                    checked = state.rolling,
-                    onCheckedChange = { onStateChange(state.copy(rolling = it)) },
+    FormPanelSectionsDivider(
+        label = when (state.kind) {
+            PlanKind.CAMP -> "Camp configuration"
+            else -> "Plan configuration"
+        },
+        spacing = spacing,
+    )
+
+    FormPanelSection(
+        title = when (state.kind) {
+            PlanKind.CAMP -> "Camp duration"
+            else -> "Classes in plan"
+        },
+        description = when (state.kind) {
+            PlanKind.CAMP -> "How many days the camp runs for. Camps are always fixed and never roll over."
+            else -> "How many lessons are included and whether they roll over."
+        },
+        spacing = spacing,
+        role = FormPanelSectionRole.Secondary,
+    ) {
+        when (state.kind) {
+            PlanKind.MULTI_LESSON_PLAN -> {
+                GlideOutlinedField(
+                    value = state.lessonCount,
+                    onValueChange = { onStateChange(state.copy(lessonCount = it.filter { c -> c.isDigit() })) },
+                    label = "Number of classes",
+                    placeholder = "10",
+                    readOnly = readOnly,
                 )
-                Column(modifier = Modifier.padding(start = 4.dp)) {
-                    Text(
-                        text = "Rolling plan",
-                        style = MaterialTheme.typography.labelLarge,
+                Spacer(modifier = Modifier.height(spacing.field))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Checkbox(
+                        checked = state.rolling,
+                        onCheckedChange = { onStateChange(state.copy(rolling = it)) },
+                        enabled = !readOnly,
                     )
-                    Text(
-                        text = "Classes roll over within the pack (e.g. 10-class rolling pack).",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Column(modifier = Modifier.padding(start = 4.dp)) {
+                        Text(
+                            text = "Rolling plan",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Text(
+                            text = "Classes roll over within the plan (e.g. 10-class rolling plan).",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
-        }
-        PlanKind.SINGLE_LESSON_PACK -> {
-            Spacer(modifier = Modifier.height(spacing.field))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        MaterialTheme.shapes.small,
-                    )
-                    .padding(spacing.outer),
-            ) {
+            PlanKind.CAMP -> {
+                GlideOutlinedField(
+                    value = state.lessonCount,
+                    onValueChange = { onStateChange(state.copy(lessonCount = it.filter { c -> c.isDigit() })) },
+                    label = "Number of days",
+                    placeholder = "5",
+                    readOnly = readOnly,
+                )
+            }
+            PlanKind.SINGLE_LESSON_PLAN -> {
                 Text(
                     text = "Number of classes",
                     style = MaterialTheme.typography.labelLarge,
@@ -625,21 +690,31 @@ private fun PlanForm(
         }
     }
 
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.priceMajor,
-        onValueChange = { onStateChange(state.copy(priceMajor = it)) },
-        label = "Price per person",
-        placeholder = "e.g. 12.00",
-    )
-    Spacer(modifier = Modifier.height(spacing.field))
-    GlideOutlinedField(
-        value = state.notes,
-        onValueChange = { onStateChange(state.copy(notes = it)) },
-        label = "Notes",
-        singleLine = false,
-        minLines = 2,
-        maxLines = 4,
-        fieldHeight = GlideDimensions.notesMinHeight,
-    )
+    FormPanelSectionsDivider(label = "Pricing & notes", spacing = spacing)
+
+    FormPanelSection(
+        title = "Pricing",
+        description = "Amount charged per person on this plan.",
+        spacing = spacing,
+        role = FormPanelSectionRole.Tertiary,
+    ) {
+        GlideOutlinedField(
+            value = state.priceMajor,
+            onValueChange = { onStateChange(state.copy(priceMajor = it)) },
+            label = "Price per person",
+            placeholder = "e.g. 12.00",
+            readOnly = readOnly,
+        )
+        Spacer(modifier = Modifier.height(spacing.field))
+        GlideOutlinedField(
+            value = state.notes,
+            onValueChange = { onStateChange(state.copy(notes = it)) },
+            label = "Notes",
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            fieldHeight = GlideDimensions.notesMinHeight,
+            readOnly = readOnly,
+        )
+    }
 }

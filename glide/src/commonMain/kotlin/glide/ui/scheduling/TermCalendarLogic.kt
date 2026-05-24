@@ -1,6 +1,7 @@
 package glide.ui.scheduling
 
 import glide.data.PeopleGroupStore
+import glide.data.ScheduledClassStore
 import glide.data.isPeopleGroupOnClassSession
 import glide.data.rosterNameLabels
 import glide.model.AcademicTerm
@@ -10,8 +11,12 @@ import glide.model.dateRange
 import glide.model.occursOn
 import glide.model.parseIsoLocalDate
 import glide.model.spansTerm
+import glide.model.spansTerm
+import glide.model.usesLocation
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import kotlin.math.roundToInt
 
 fun findCurrentTerm(terms: List<AcademicTerm>, today: LocalDate = LocalDate.now()): AcademicTerm? =
     terms.firstOrNull { it.containsDate(today) }
@@ -39,6 +44,39 @@ fun defaultRecurringClassTermIds(terms: List<AcademicTerm>, today: LocalDate = L
     return sorted.drop(startIndex).map { it.id }.toSet()
 }
 
+fun termIdForClassSelection(
+    scheduledClass: ScheduledClass,
+    terms: List<AcademicTerm>,
+    today: LocalDate = LocalDate.now(),
+): String? {
+    val classTerms = terms.filter { it.id in scheduledClass.termIds }
+    return termIdFromTerms(classTerms, today)
+}
+
+fun termIdForLocationSelection(
+    locationId: String,
+    terms: List<AcademicTerm>,
+    classes: List<ScheduledClass>,
+    today: LocalDate = LocalDate.now(),
+): String? {
+    val termIds = classes.filter { it.usesLocation(locationId) }.flatMap { it.termIds }.toSet()
+    val locationTerms = terms.filter { it.id in termIds }
+    return termIdFromTerms(locationTerms, today)
+}
+
+private fun termIdFromTerms(
+    terms: List<AcademicTerm>,
+    today: LocalDate = LocalDate.now(),
+): String? {
+    if (terms.isEmpty()) return null
+    findCurrentTerm(terms, today)?.id?.let { return it }
+    terms.firstOrNull { term ->
+        val start = parseIsoLocalDate(term.startDate) ?: return@firstOrNull false
+        start.isAfter(today)
+    }?.id?.let { return it }
+    return terms.lastOrNull()?.id
+}
+
 fun defaultTermSelectionId(terms: List<AcademicTerm>, today: LocalDate = LocalDate.now()): String? {
     if (terms.isEmpty()) return null
     findCurrentTerm(terms, today)?.id?.let { return it }
@@ -47,6 +85,81 @@ fun defaultTermSelectionId(terms: List<AcademicTerm>, today: LocalDate = LocalDa
         start.isAfter(today)
     }?.id?.let { return it }
     return terms.lastOrNull()?.id
+}
+
+/** Which term the calendar should show, driven by cross-panel selection state. */
+fun resolveCalendarTermId(
+    termsChronological: List<AcademicTerm>,
+    allClasses: List<ScheduledClass>,
+    termFilterId: String?,
+    locationFilterId: String?,
+    classSyncId: String?,
+    attendanceSessionDate: String?,
+    attendanceVisible: Boolean,
+): String? {
+    if (termsChronological.isEmpty()) return null
+
+    if (attendanceVisible && !attendanceSessionDate.isNullOrBlank()) {
+        findTermContainingIsoDate(termsChronological, attendanceSessionDate)?.id?.let { return it }
+    }
+
+    termFilterId
+        ?.takeIf { id -> termsChronological.any { it.id == id } }
+        ?.let { return it }
+
+    locationFilterId?.let { locationId ->
+        termIdForLocationSelection(locationId, termsChronological, allClasses)?.let { return it }
+    }
+
+    if (termFilterId == null && locationFilterId == null) {
+        classSyncId?.let { classId ->
+            ScheduledClassStore.findById(classId)?.let { scheduledClass ->
+                termIdForClassSelection(scheduledClass, termsChronological)?.let { return it }
+            }
+        }
+    }
+
+    return defaultTermSelectionId(termsChronological)
+}
+
+fun indexOfMonthContaining(months: List<YearMonth>, date: LocalDate): Int =
+    months.indexOf(YearMonth.from(date))
+
+/** Zero-based week row within a Monday-start month grid (see [buildMonthGrid]). */
+fun weekRowIndexInMonth(date: LocalDate): Int {
+    val firstOfMonth = date.withDayOfMonth(1)
+    val startOffset = mondayBasedWeekStartOffset(firstOfMonth)
+    return (startOffset + date.dayOfMonth - 1) / 7
+}
+
+fun weekCountInMonth(yearMonth: YearMonth): Int {
+    val firstOfMonth = yearMonth.atDay(1)
+    val startOffset = mondayBasedWeekStartOffset(firstOfMonth)
+    return (startOffset + yearMonth.lengthOfMonth() + 6) / 7
+}
+
+/** Scroll offset so [date]'s week row sits near the middle of the list viewport. */
+fun scrollOffsetToShowDateInMonthItem(
+    monthItemHeightPx: Int,
+    date: LocalDate,
+    viewportHeightPx: Int,
+): Int {
+    if (monthItemHeightPx <= 0 || viewportHeightPx <= 0) return 0
+    val yearMonth = YearMonth.from(date)
+    val weekIndex = weekRowIndexInMonth(date)
+    val weekCount = weekCountInMonth(yearMonth).coerceAtLeast(1)
+    val headerPx = (monthItemHeightPx * 0.14f).roundToInt()
+    val gridHeightPx = (monthItemHeightPx - headerPx).coerceAtLeast(0)
+    val weekHeightPx = gridHeightPx / weekCount
+    val weekTopPx = headerPx + weekIndex * weekHeightPx
+    val centeredOffset = weekTopPx - (viewportHeightPx - weekHeightPx) / 2
+    val maxOffset = (monthItemHeightPx - viewportHeightPx).coerceAtLeast(0)
+    return centeredOffset.coerceIn(0, maxOffset)
+}
+
+private fun mondayBasedWeekStartOffset(firstOfMonth: LocalDate): Int {
+    val raw = firstOfMonth.dayOfWeek.value - DayOfWeek.MONDAY.value
+    return (raw + 7) % 7
 }
 
 fun monthsInTerm(term: AcademicTerm): List<YearMonth> {
@@ -76,7 +189,7 @@ fun classesOnDate(
         .filter { it.spansTerm(termId) && it.occursOn(date) }
         .sortedWith(compareBy({ it.startTime }, { it.endTime }, { it.name }))
 
-/** One line per customer group scheduled on this session: main contact and related names. */
+/** One line per customer group scheduled on this session: main client and student names. */
 fun rosterLinesForClass(scheduledClass: ScheduledClass, sessionDate: LocalDate): List<String> =
     scheduledClass.customerGroupIds
         .filter { groupId -> isPeopleGroupOnClassSession(groupId, scheduledClass, sessionDate) }

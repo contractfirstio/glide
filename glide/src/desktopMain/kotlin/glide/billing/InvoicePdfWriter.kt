@@ -1,24 +1,37 @@
 package glide.billing
 
+import glide.billing.BillingPdfSupport.PdfPageContext
+import glide.billing.BillingPdfSupport.SECTION_GAP
+import glide.billing.BillingPdfSupport.colorAccent
+import glide.billing.BillingPdfSupport.colorFill
+import glide.billing.BillingPdfSupport.colorInk
+import glide.billing.BillingPdfSupport.colorMuted
+import glide.billing.BillingPdfSupport.colorRule
+import glide.billing.BillingPdfSupport.drawAccentBar
+import glide.billing.BillingPdfSupport.drawAt
+import glide.billing.BillingPdfSupport.drawClassScheduleSection
+import glide.billing.BillingPdfSupport.drawContactLines
+import glide.billing.BillingPdfSupport.drawHorizontalRule
+import glide.billing.BillingPdfSupport.drawLineItemsTable
+import glide.billing.BillingPdfSupport.drawMetaRow
+import glide.billing.BillingPdfSupport.drawSectionHeading
+import glide.billing.BillingPdfSupport.drawWrappedLines
+import glide.billing.BillingPdfSupport.fillRect
+import glide.billing.BillingPdfSupport.fontBold
+import glide.billing.BillingPdfSupport.fontOblique
+import glide.billing.BillingPdfSupport.fontRegular
+import glide.billing.BillingPdfSupport.lineStep
+import glide.billing.BillingPdfSupport.strokeRect
+import glide.billing.BillingPdfSupport.stringWidth
+import glide.billing.BillingPdfSupport.TextAlign
 import org.apache.pdfbox.pdmodel.PDDocument
-import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.PDPageContentStream
-import org.apache.pdfbox.pdmodel.common.PDRectangle
-import org.apache.pdfbox.pdmodel.font.Standard14Fonts
-import org.apache.pdfbox.pdmodel.font.PDType1Font
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 object InvoicePdfWriter {
-    private const val MARGIN = 50f
-    private const val LINE_GAP = 5f
-    private const val AMOUNT_COLUMN_WIDTH = 90f
-    private const val COLUMN_GAP = 12f
     private val fileDateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-
-    private val fontRegular = PDType1Font(Standard14Fonts.FontName.HELVETICA)
-    private val fontBold = PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD)
 
     fun write(content: InvoiceContent, billId: String): File {
         val directory = invoiceDirectory()
@@ -26,249 +39,169 @@ object InvoicePdfWriter {
         val file = File(directory, "invoice-${fileDateFormat.format(LocalDate.now())}-${content.invoiceNumber}.pdf")
 
         PDDocument().use { document ->
-            val page = PDPage(PDRectangle.A4)
-            document.addPage(page)
-            val pageWidth = page.mediaBox.width
-            val amountRightX = pageWidth - MARGIN
-            val descriptionMaxWidth = amountRightX - MARGIN - AMOUNT_COLUMN_WIDTH - COLUMN_GAP
+            val ctx = PdfPageContext(document, billId, "Invoice continued")
+            ctx.startFirstPage()
 
-            PDPageContentStream(document, page).use { stream ->
-                var y = page.mediaBox.upperRightY - MARGIN
+            ctx.y = drawAccentBar(ctx.stream, ctx.contentLeftX, ctx.contentRightX, ctx.y)
+            ctx.y -= 18f
 
-                y = drawLine(stream, fontBold, 22f, MARGIN, y, "INVOICE")
-                y -= LINE_GAP * 2
+            val headerBottomY = drawHeader(
+                stream = ctx.stream,
+                content = content,
+                leftX = ctx.contentLeftX,
+                rightX = ctx.contentRightX,
+                y = ctx.y,
+            )
+            ctx.y = headerBottomY - SECTION_GAP
 
-                y = drawLine(stream, fontBold, 12f, MARGIN, y, INVOICE_FROM_NAME)
-                y = drawLine(stream, fontRegular, 10f, MARGIN, y, "Invoice no. ${content.invoiceNumber}")
-                y = drawLine(stream, fontRegular, 10f, MARGIN, y, "Issue date: ${content.issuedDateLabel}")
-                y = drawLine(stream, fontRegular, 10f, MARGIN, y, "Due: ${content.dueDateLabel}")
-                y = drawLine(stream, fontRegular, 10f, MARGIN, y, "Status: ${content.status.label}")
-                y -= LINE_GAP * 2
+            drawHorizontalRule(ctx.stream, ctx.contentLeftX, ctx.contentRightX, ctx.y, colorRule, 0.5f)
+            ctx.y -= SECTION_GAP
 
-                y = drawLine(stream, fontBold, 11f, MARGIN, y, "Bill to")
-                y = drawLine(stream, fontRegular, 10f, MARGIN, y, content.billToName)
-                if (content.billToEmail.isNotBlank()) {
-                    y = drawLine(stream, fontRegular, 10f, MARGIN, y, content.billToEmail)
-                }
-                if (content.billToPhone.isNotBlank()) {
-                    y = drawLine(stream, fontRegular, 10f, MARGIN, y, content.billToPhone)
-                }
-                y -= LINE_GAP * 2
+            ctx.y = drawSectionHeading(ctx.stream, ctx.contentLeftX, ctx.y, "Bill to")
+            ctx.y = drawContactLines(
+                stream = ctx.stream,
+                lines = listOfNotNull(
+                    content.billToName.takeIf { it.isNotBlank() },
+                    content.billToEmail.takeIf { it.isNotBlank() },
+                    content.billToPhone.takeIf { it.isNotBlank() },
+                ),
+                x = ctx.contentLeftX,
+                y = ctx.y,
+                fontSize = 10.5f,
+            )
+            ctx.y -= SECTION_GAP
 
-                val headerY = y
-                drawAt(stream, fontBold, 10f, MARGIN, headerY, "Description")
-                drawAtRight(stream, fontBold, 10f, amountRightX, headerY, "Amount")
-                y = headerY - lineStep(10f)
-                drawHorizontalRule(stream, MARGIN, amountRightX, y)
-                y -= LINE_GAP * 2
-
-                y = drawTableRow(
-                    stream = stream,
-                    font = fontRegular,
-                    fontSize = 10f,
-                    y = y,
-                    description = content.packLineDescription,
-                    amount = content.formattedGross,
-                    descriptionMaxWidth = descriptionMaxWidth,
-                    amountRightX = amountRightX,
-                )
-
-                content.creditLines.forEach { credit ->
-                    y = drawTableRow(
-                        stream = stream,
-                        font = fontRegular,
-                        fontSize = 10f,
-                        y = y,
-                        description = credit.description,
-                        amount = credit.formattedAmount(content.currencyCode),
-                        descriptionMaxWidth = descriptionMaxWidth,
-                        amountRightX = amountRightX,
-                    )
-                }
-
-                y -= LINE_GAP
-                drawHorizontalRule(stream, MARGIN, amountRightX, y)
-                y -= LINE_GAP * 2
-
-                val totalLabel = "Total due"
-                val totalAmount = content.formattedTotal
-                val totalFontSize = 11f
-                val totalWidth = stringWidth(fontBold, totalFontSize, totalAmount)
-                val labelWidth = stringWidth(fontBold, totalFontSize, totalLabel)
-                drawAt(stream, fontBold, totalFontSize, amountRightX - totalWidth - COLUMN_GAP - labelWidth, y, totalLabel)
-                drawAtRight(stream, fontBold, totalFontSize, amountRightX, y, totalAmount)
-                y -= lineStep(totalFontSize)
-
-                val footerY = MARGIN + 8f
-                if (y < footerY + lineStep(8f)) {
-                    y = footerY + lineStep(8f)
-                }
-                drawAt(
-                    stream,
-                    fontRegular,
-                    8f,
-                    MARGIN,
-                    footerY,
-                    "Generated by Glide · Bill $billId",
-                )
+            content.classSchedule?.let { schedule ->
+                drawClassScheduleSection(ctx, schedule)
+                ctx.y -= SECTION_GAP
             }
+
+            drawLineItemsTable(
+                ctx = ctx,
+                debitLines = content.debitLines,
+                creditLines = content.creditLines,
+                currencyCode = content.currencyCode,
+                formattedTotal = content.formattedTotal,
+                totalLabel = "Total due",
+            )
+            ctx.y -= SECTION_GAP
+
+            drawPaymentSection(
+                ctx = ctx,
+                fpsNumber = content.fpsNumber,
+                invoiceNumber = content.invoiceNumber,
+            )
+
+            ctx.finish()
             document.save(file)
         }
         return file
     }
 
-    private fun drawTableRow(
+    private fun drawHeader(
         stream: PDPageContentStream,
-        font: PDType1Font,
-        fontSize: Float,
-        y: Float,
-        description: String,
-        amount: String,
-        descriptionMaxWidth: Float,
-        amountRightX: Float,
-    ): Float {
-        val lines = wrapLines(font, fontSize, description, descriptionMaxWidth)
-        var rowY = y
-        lines.forEachIndexed { index, line ->
-            if (line.isNotEmpty()) {
-                drawAt(stream, font, fontSize, MARGIN, rowY, line)
-            }
-            if (index == 0) {
-                drawAtRight(stream, font, fontSize, amountRightX, rowY, amount)
-            }
-            rowY -= lineStep(fontSize)
-        }
-        return rowY - LINE_GAP
-    }
-
-    private fun drawLine(
-        stream: PDPageContentStream,
-        font: PDType1Font,
-        fontSize: Float,
-        x: Float,
-        y: Float,
-        text: String,
-    ): Float {
-        drawAt(stream, font, fontSize, x, y, text)
-        return y - lineStep(fontSize)
-    }
-
-    private fun drawAt(
-        stream: PDPageContentStream,
-        font: PDType1Font,
-        fontSize: Float,
-        x: Float,
-        y: Float,
-        text: String,
-    ) {
-        val safe = sanitizePdfText(text)
-        if (safe.isEmpty()) return
-        stream.beginText()
-        stream.setFont(font, fontSize)
-        stream.newLineAtOffset(x, y - fontSize)
-        stream.showText(safe)
-        stream.endText()
-    }
-
-    private fun drawAtRight(
-        stream: PDPageContentStream,
-        font: PDType1Font,
-        fontSize: Float,
-        rightX: Float,
-        y: Float,
-        text: String,
-    ) {
-        val safe = sanitizePdfText(text)
-        if (safe.isEmpty()) return
-        val width = stringWidth(font, fontSize, safe)
-        drawAt(stream, font, fontSize, rightX - width, y, safe)
-    }
-
-    private fun drawHorizontalRule(
-        stream: PDPageContentStream,
+        content: InvoiceContent,
         leftX: Float,
         rightX: Float,
         y: Float,
-    ) {
-        stream.moveTo(leftX, y)
-        stream.lineTo(rightX, y)
-        stream.stroke()
+    ): Float {
+        val titleY = y
+        drawAt(stream, fontBold, 26f, rightX, titleY, "INVOICE", align = TextAlign.RIGHT, color = colorAccent)
+        var leftY = drawAt(stream, fontBold, 14f, leftX, y, content.fromName, color = colorInk)
+        leftY = drawContactLines(
+            stream = stream,
+            lines = listOfNotNull(
+                content.fromEmail.takeIf { it.isNotBlank() },
+                content.fromPhone.takeIf { it.isNotBlank() },
+            ),
+            x = leftX,
+            y = leftY - 2f,
+            fontSize = 9.5f,
+            muted = true,
+        )
+
+        var metaY = titleY - lineStep(26f) - 6f
+        metaY = drawMetaRow(stream, rightX, metaY, "Invoice no.", content.invoiceNumber)
+        metaY = drawMetaRow(stream, rightX, metaY, "Issue date", content.issuedDateLabel)
+        metaY = drawMetaRow(stream, rightX, metaY, "Payment due", content.dueDateLabel)
+
+        return minOf(leftY, metaY) - 4f
     }
 
-    private fun lineStep(fontSize: Float): Float = fontSize + LINE_GAP
+    private fun drawPaymentSection(
+        ctx: PdfPageContext,
+        fpsNumber: String,
+        invoiceNumber: String,
+    ) {
+        val padding = 14f
+        val leftX = ctx.contentLeftX
+        val rightX = ctx.contentRightX
+        val textX = leftX + padding
+        val innerWidth = rightX - leftX - padding * 2
+        val referenceText = "Please quote invoice $invoiceNumber as your payment reference."
+        val sectionHeight = ctx.y - layoutPaymentSectionBottom(ctx.y, padding, innerWidth, referenceText)
 
-    private fun stringWidth(font: PDType1Font, fontSize: Float, text: String): Float =
-        font.getStringWidth(text) / 1000f * fontSize
+        ctx.ensureSpace(sectionHeight)
+        val topY = ctx.y
+        val contentBottomY = layoutPaymentSectionBottom(topY, padding, innerWidth, referenceText)
+        val boxHeight = topY - contentBottomY
 
-    private fun wrapLines(
-        font: PDType1Font,
-        fontSize: Float,
-        text: String,
-        maxWidth: Float,
-    ): List<String> {
-        val normalized = text.trim()
-        if (normalized.isEmpty()) return listOf("")
-        val words = normalized.split(Regex("\\s+"))
-        val lines = mutableListOf<String>()
+        fillRect(ctx.stream, leftX, contentBottomY, rightX - leftX, boxHeight, colorFill)
+        strokeRect(ctx.stream, leftX, contentBottomY, rightX - leftX, boxHeight, colorRule, 0.5f)
+
+        var innerY = topY - padding - 10f
+        innerY = drawAt(ctx.stream, fontBold, 10f, textX, innerY, "Payment", color = colorInk)
+        innerY -= 4f
+        innerY = drawAt(
+            ctx.stream,
+            fontRegular,
+            9.5f,
+            textX,
+            innerY,
+            "Pay by bank transfer using Faster Payment (FPS).",
+            color = colorMuted,
+        )
+        innerY = drawAt(ctx.stream, fontBold, 10.5f, textX, innerY, "FPS number: $fpsNumber", color = colorInk)
+        drawWrappedLines(
+            stream = ctx.stream,
+            x = textX,
+            y = innerY - 2f,
+            maxWidth = innerWidth,
+            text = referenceText,
+            fontSize = 9f,
+            color = colorMuted,
+            font = fontOblique,
+        )
+        ctx.y = contentBottomY
+    }
+
+    private fun layoutPaymentSectionBottom(
+        topY: Float,
+        padding: Float,
+        innerWidth: Float,
+        referenceText: String,
+    ): Float {
+        var innerY = topY - padding - 10f
+        innerY = innerY - lineStep(10f)
+        innerY -= 4f
+        innerY = innerY - lineStep(9.5f)
+        innerY = innerY - lineStep(10.5f)
+        val wrappedLines = referenceText.trim().split(Regex("\\s+"))
         var current = ""
-        for (word in words) {
+        var lineCount = 0
+        for (word in wrappedLines) {
             val candidate = if (current.isEmpty()) word else "$current $word"
-            if (stringWidth(font, fontSize, candidate) <= maxWidth) {
+            if (stringWidth(fontOblique, 9f, candidate) <= innerWidth) {
                 current = candidate
             } else {
-                if (current.isNotEmpty()) {
-                    lines.add(current)
-                }
-                current = if (stringWidth(font, fontSize, word) <= maxWidth) {
-                    word
-                } else {
-                    lines.addAll(breakLongWord(font, fontSize, word, maxWidth))
-                    ""
-                }
+                if (current.isNotEmpty()) lineCount++
+                current = word
             }
         }
-        if (current.isNotEmpty()) {
-            lines.add(current)
-        }
-        return lines.ifEmpty { listOf(normalized) }
+        if (current.isNotEmpty()) lineCount++
+        innerY -= lineCount * lineStep(9f)
+        return innerY - padding
     }
-
-    private fun breakLongWord(
-        font: PDType1Font,
-        fontSize: Float,
-        word: String,
-        maxWidth: Float,
-    ): List<String> {
-        val chunks = mutableListOf<String>()
-        var start = 0
-        while (start < word.length) {
-            var end = start + 1
-            while (end <= word.length && stringWidth(font, fontSize, word.substring(start, end)) <= maxWidth) {
-                end++
-            }
-            val chunkEnd = (end - 1).coerceAtLeast(start + 1)
-            chunks.add(word.substring(start, chunkEnd))
-            start = chunkEnd
-        }
-        return chunks
-    }
-
-    /** Type 1 fonts accept WinAnsi; replace unsupported characters. */
-    private fun sanitizePdfText(text: String): String =
-        buildString(text.length) {
-            for (ch in text) {
-                append(
-                    when (ch) {
-                        '\n', '\r' -> ' '
-                        '—', '–' -> '-'
-                        '’', '‘' -> '\''
-                        '“', '”' -> '"'
-                        '…' -> '.'
-                        else -> if (ch.code in 32..255) ch else '?'
-                    },
-                )
-            }
-        }.trim()
 
     private fun invoiceDirectory(): File {
         val documents = File(System.getProperty("user.home"), "Documents")

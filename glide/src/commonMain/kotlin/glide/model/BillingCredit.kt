@@ -2,7 +2,7 @@ package glide.model
 
 import java.util.UUID
 
-/** Credit toward the next pack bill for a customer group enrollment. */
+/** Credit toward the next plan bill for a customer group enrollment. */
 data class BillingCredit(
     val id: String = UUID.randomUUID().toString(),
     val enrollmentId: String,

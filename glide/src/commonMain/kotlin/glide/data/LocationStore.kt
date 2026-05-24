@@ -18,9 +18,15 @@ object LocationStore {
         }
     }
 
-    fun delete(id: String) {
+    fun classCount(locationId: String): Int =
+        ScheduledClassStore.countForLocation(locationId)
+
+    fun canDelete(locationId: String): Boolean = classCount(locationId) == 0
+
+    fun delete(id: String): Boolean {
+        if (!canDelete(id)) return false
         _locations.removeAll { it.id == id }
-        ScheduledClassStore.clearLocationReference(id)
+        return true
     }
 
     fun findById(id: String): ClassLocation? = _locations.find { it.id == id }
