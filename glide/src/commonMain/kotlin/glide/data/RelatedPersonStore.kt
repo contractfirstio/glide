@@ -54,6 +54,8 @@ object RelatedPersonStore {
     fun isOnSoldPlan(personId: String): Boolean =
         PeopleGroupStore.customers.any { personId in it.relatedPersonIds }
 
+    fun canDelete(personId: String): Boolean = !isOnSoldPlan(personId)
+
     fun soldPlanCount(personId: String): Int =
         PeopleGroupStore.customers.count { personId in it.relatedPersonIds }
 

@@ -353,7 +353,10 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                                 Text(saveLabel)
                             }
 
-                            GlideOutlinedButton(onClick = { showDeleteConfirm = true }) {
+                            GlideOutlinedButton(
+                                onClick = { showDeleteConfirm = true },
+                                enabled = selectedId?.let { RelatedPersonStore.canDelete(it) } == true,
+                            ) {
                                 Text("Delete", color = MaterialTheme.colorScheme.error)
                             }
                         }

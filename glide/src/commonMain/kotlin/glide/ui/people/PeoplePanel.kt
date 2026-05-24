@@ -357,7 +357,10 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                                 Text(saveLabel)
                             }
 
-                            GlideOutlinedButton(onClick = { showDeleteConfirm = true }) {
+                            GlideOutlinedButton(
+                                onClick = { showDeleteConfirm = true },
+                                enabled = selectedId?.let { ContactStore.canDelete(it) } == true,
+                            ) {
                                 Text("Delete", color = MaterialTheme.colorScheme.error)
                             }
                         }

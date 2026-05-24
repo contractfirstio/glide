@@ -1045,6 +1045,7 @@ private fun SoldPlanDeleteSection(
         GlideOutlinedButton(
             onClick = onDelete,
             modifier = Modifier.fillMaxWidth(),
+            enabled = blockReason == null,
         ) {
             Text("Delete sold plan", color = MaterialTheme.colorScheme.error)
         }
