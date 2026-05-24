@@ -3,6 +3,7 @@ package glide.data
 import androidx.compose.runtime.mutableStateListOf
 import glide.billing.InvoiceExportResult
 import glide.billing.InvoiceExporter
+import glide.billing.ReceiptExporter
 import glide.billing.toIssuedInvoiceSnapshot
 import glide.billing.toLiveInvoiceContent
 import glide.model.Bill
@@ -191,6 +192,17 @@ object BillStore {
             reconcileBillCredits(billId) ?: return "Could not prepare invoice."
         }
         return when (val result = InvoiceExporter.exportInvoice(exportBill)) {
+            is InvoiceExportResult.Success -> null
+            is InvoiceExportResult.Failure -> result.message
+        }
+    }
+
+    /** Returns an error message on failure, or null on success. */
+    fun generateReceipt(billId: String): String? {
+        if (!AppSettingsStore.isConfigured) return "Company settings are not configured."
+        val bill = findById(billId) ?: return "Bill not found."
+        if (bill.status != BillStatus.PAID) return "Receipt is only available for paid bills."
+        return when (val result = ReceiptExporter.exportReceipt(bill)) {
             is InvoiceExportResult.Success -> null
             is InvoiceExportResult.Failure -> result.message
         }

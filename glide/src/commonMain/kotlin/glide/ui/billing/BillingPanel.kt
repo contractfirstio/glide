@@ -353,6 +353,9 @@ fun BillingPanel(
                             }
                             billingActionMessage = BillStore.generateInvoice(selectedBill.id)
                         },
+                        onGenerateReceipt = {
+                            billingActionMessage = BillStore.generateReceipt(selectedBill.id)
+                        },
                     )
                 }
             }
@@ -380,6 +383,7 @@ fun BillingPanel(
                     } else {
                         paymentError = null
                         showPaymentDialog = false
+                        billingActionMessage = BillStore.generateReceipt(bill.id)
                     }
                 },
             )
@@ -627,6 +631,7 @@ private fun BillDetailActions(
     onRecordPayment: () -> Unit,
     onVoid: () -> Unit,
     onGenerateInvoice: () -> Unit,
+    onGenerateReceipt: () -> Unit,
 ) {
     val canIssue = !billingBlocked || bill.isIssuedToCustomer()
     Column(
@@ -697,6 +702,22 @@ private fun BillDetailActions(
             BillStatus.PAID -> {
                 BillLineItemsSection(bill = bill)
                 Spacer(modifier = Modifier.height(8.dp))
+                PaymentStore.forBill(bill.id)?.let { payment ->
+                    Text(
+                        text = "Paid ${formatMoney(payment.amountMinor, payment.currencyCode)} via ${payment.method.label}" +
+                            payment.reference.takeIf { it.isNotBlank() }?.let { " (ref: $it)" }.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                GlideOutlinedButton(
+                    onClick = onGenerateReceipt,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Generate receipt PDF")
+                }
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "This bill is paid.",
                     style = MaterialTheme.typography.bodySmall,

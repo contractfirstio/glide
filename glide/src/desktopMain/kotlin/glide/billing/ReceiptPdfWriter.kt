@@ -6,6 +6,7 @@ import glide.billing.BillingPdfSupport.colorAccent
 import glide.billing.BillingPdfSupport.colorFill
 import glide.billing.BillingPdfSupport.colorInk
 import glide.billing.BillingPdfSupport.colorMuted
+import glide.billing.BillingPdfSupport.colorPaid
 import glide.billing.BillingPdfSupport.colorRule
 import glide.billing.BillingPdfSupport.drawAccentBar
 import glide.billing.BillingPdfSupport.drawAt
@@ -15,14 +16,11 @@ import glide.billing.BillingPdfSupport.drawHorizontalRule
 import glide.billing.BillingPdfSupport.drawLineItemsTable
 import glide.billing.BillingPdfSupport.drawMetaRow
 import glide.billing.BillingPdfSupport.drawSectionHeading
-import glide.billing.BillingPdfSupport.drawWrappedLines
 import glide.billing.BillingPdfSupport.fillRect
 import glide.billing.BillingPdfSupport.fontBold
-import glide.billing.BillingPdfSupport.fontOblique
 import glide.billing.BillingPdfSupport.fontRegular
 import glide.billing.BillingPdfSupport.lineStep
 import glide.billing.BillingPdfSupport.strokeRect
-import glide.billing.BillingPdfSupport.stringWidth
 import glide.billing.BillingPdfSupport.TextAlign
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.PDPageContentStream
@@ -30,19 +28,19 @@ import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-object InvoicePdfWriter {
+object ReceiptPdfWriter {
     private val fileDateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
-    fun write(content: InvoiceContent, billId: String): File {
-        val directory = invoiceDirectory()
+    fun write(content: ReceiptContent, billId: String): File {
+        val directory = receiptDirectory()
         directory.mkdirs()
-        val file = File(directory, "invoice-${fileDateFormat.format(LocalDate.now())}-${content.invoiceNumber}.pdf")
+        val file = File(directory, "receipt-${fileDateFormat.format(LocalDate.now())}-${content.receiptNumber}.pdf")
 
         PDDocument().use { document ->
-            val ctx = PdfPageContext(document, billId, "Invoice continued")
+            val ctx = PdfPageContext(document, billId, "Receipt continued")
             ctx.startFirstPage()
 
-            ctx.y = drawAccentBar(ctx.stream, ctx.contentLeftX, ctx.contentRightX, ctx.y)
+            ctx.y = drawAccentBar(ctx.stream, ctx.contentLeftX, ctx.contentRightX, ctx.y, colorPaid)
             ctx.y -= 18f
 
             val headerBottomY = drawHeader(
@@ -82,15 +80,13 @@ object InvoicePdfWriter {
                 creditLines = content.creditLines,
                 currencyCode = content.currencyCode,
                 formattedTotal = content.formattedTotal,
-                totalLabel = "Total due",
+                totalLabel = "Amount paid",
             )
             ctx.y -= SECTION_GAP
 
-            drawPaymentSection(
-                ctx = ctx,
-                fpsNumber = content.fpsNumber,
-                invoiceNumber = content.invoiceNumber,
-            )
+            drawPaymentReceivedSection(ctx, content)
+            ctx.y -= 12f
+            drawReceiptNotice(ctx)
 
             ctx.finish()
             document.save(file)
@@ -100,13 +96,26 @@ object InvoicePdfWriter {
 
     private fun drawHeader(
         stream: PDPageContentStream,
-        content: InvoiceContent,
+        content: ReceiptContent,
         leftX: Float,
         rightX: Float,
         y: Float,
     ): Float {
         val titleY = y
-        drawAt(stream, fontBold, 26f, rightX, titleY, "INVOICE", align = TextAlign.RIGHT, color = colorAccent)
+        drawAt(stream, fontBold, 26f, rightX, titleY, "RECEIPT", align = TextAlign.RIGHT, color = colorPaid)
+        var metaY = titleY - lineStep(26f) - 2f
+        metaY = drawAt(
+            stream,
+            fontBold,
+            11f,
+            rightX,
+            metaY,
+            "PAYMENT RECEIPT",
+            align = TextAlign.RIGHT,
+            color = colorAccent,
+        )
+        metaY -= 4f
+
         var leftY = drawAt(stream, fontBold, 14f, leftX, y, content.fromName, color = colorInk)
         leftY = drawContactLines(
             stream = stream,
@@ -120,91 +129,85 @@ object InvoicePdfWriter {
             muted = true,
         )
 
-        var metaY = titleY - lineStep(26f) - 6f
-        metaY = drawMetaRow(stream, rightX, metaY, "Invoice no.", content.invoiceNumber)
-        metaY = drawMetaRow(stream, rightX, metaY, "Issue date", content.issuedDateLabel)
-        metaY = drawMetaRow(stream, rightX, metaY, "Payment due", content.dueDateLabel)
+        metaY = drawMetaRow(stream, rightX, metaY, "Receipt no.", content.receiptNumber)
+        metaY = drawMetaRow(stream, rightX, metaY, "Payment date", content.paidDateLabel)
+        metaY = drawMetaRow(stream, rightX, metaY, "Invoice ref.", content.invoiceNumber)
+        metaY = drawMetaRow(stream, rightX, metaY, "Document", "Payment receipt")
 
         return minOf(leftY, metaY) - 4f
     }
 
-    private fun drawPaymentSection(
-        ctx: PdfPageContext,
-        fpsNumber: String,
-        invoiceNumber: String,
-    ) {
+    private fun drawPaymentReceivedSection(ctx: PdfPageContext, content: ReceiptContent) {
         val padding = 14f
         val leftX = ctx.contentLeftX
         val rightX = ctx.contentRightX
         val textX = leftX + padding
-        val innerWidth = rightX - leftX - padding * 2
-        val referenceText = "Please quote invoice $invoiceNumber as your payment reference."
-        val sectionHeight = ctx.y - layoutPaymentSectionBottom(ctx.y, padding, innerWidth, referenceText)
+        val referenceLine = content.paymentReference.takeIf { it.isNotBlank() }
+            ?.let { "Reference: $it" }
+        val sectionHeight = layoutPaymentReceivedSectionHeight(padding, referenceLine)
 
         ctx.ensureSpace(sectionHeight)
         val topY = ctx.y
-        val contentBottomY = layoutPaymentSectionBottom(topY, padding, innerWidth, referenceText)
-        val boxHeight = topY - contentBottomY
+        val contentBottomY = topY - sectionHeight
 
-        fillRect(ctx.stream, leftX, contentBottomY, rightX - leftX, boxHeight, colorFill)
-        strokeRect(ctx.stream, leftX, contentBottomY, rightX - leftX, boxHeight, colorRule, 0.5f)
+        fillRect(ctx.stream, leftX, contentBottomY, rightX - leftX, sectionHeight, colorFill)
+        strokeRect(ctx.stream, leftX, contentBottomY, rightX - leftX, sectionHeight, colorPaid, 1f)
 
         var innerY = topY - padding - 10f
-        innerY = drawAt(ctx.stream, fontBold, 10f, textX, innerY, "Payment", color = colorInk)
-        innerY -= 4f
+        innerY = drawAt(ctx.stream, fontBold, 12f, textX, innerY, "PAID IN FULL", color = colorPaid)
+        innerY -= 6f
         innerY = drawAt(
             ctx.stream,
             fontRegular,
             9.5f,
             textX,
             innerY,
-            "Pay by bank transfer using Faster Payment (FPS).",
+            "This confirms payment has been received. No further payment is required.",
             color = colorMuted,
         )
-        innerY = drawAt(ctx.stream, fontBold, 10.5f, textX, innerY, "FPS number: $fpsNumber", color = colorInk)
-        drawWrappedLines(
-            stream = ctx.stream,
-            x = textX,
-            y = innerY - 2f,
-            maxWidth = innerWidth,
-            text = referenceText,
-            fontSize = 9f,
-            color = colorMuted,
-            font = fontOblique,
-        )
+        innerY -= 8f
+        innerY = drawAt(ctx.stream, fontBold, 10f, textX, innerY, "Payment method", color = colorInk)
+        innerY = drawAt(ctx.stream, fontRegular, 10.5f, textX, innerY, content.paymentMethodLabel, color = colorInk)
+        if (referenceLine != null) {
+            innerY -= 4f
+            innerY = drawAt(ctx.stream, fontBold, 10f, textX, innerY, "Payment reference", color = colorInk)
+            innerY = drawAt(ctx.stream, fontRegular, 10.5f, textX, innerY, content.paymentReference, color = colorInk)
+        }
+        innerY -= 4f
+        innerY = drawAt(ctx.stream, fontBold, 10f, textX, innerY, "Amount received", color = colorInk)
+        drawAt(ctx.stream, fontBold, 12f, textX, innerY - 2f, content.formattedTotal, color = colorPaid)
         ctx.y = contentBottomY
     }
 
-    private fun layoutPaymentSectionBottom(
-        topY: Float,
-        padding: Float,
-        innerWidth: Float,
-        referenceText: String,
-    ): Float {
-        var innerY = topY - padding - 10f
-        innerY = innerY - lineStep(10f)
-        innerY -= 4f
-        innerY = innerY - lineStep(9.5f)
-        innerY = innerY - lineStep(10.5f)
-        val wrappedLines = referenceText.trim().split(Regex("\\s+"))
-        var current = ""
-        var lineCount = 0
-        for (word in wrappedLines) {
-            val candidate = if (current.isEmpty()) word else "$current $word"
-            if (stringWidth(fontOblique, 9f, candidate) <= innerWidth) {
-                current = candidate
-            } else {
-                if (current.isNotEmpty()) lineCount++
-                current = word
-            }
+    private fun layoutPaymentReceivedSectionHeight(padding: Float, referenceLine: String?): Float {
+        var height = padding + 10f
+        height += lineStep(12f) + 6f
+        height += lineStep(9.5f) + 8f
+        height += lineStep(10f) + lineStep(10.5f)
+        if (referenceLine != null) {
+            height += 4f + lineStep(10f) + lineStep(10.5f)
         }
-        if (current.isNotEmpty()) lineCount++
-        innerY -= lineCount * lineStep(9f)
-        return innerY - padding
+        height += 4f + lineStep(10f) + lineStep(12f)
+        height += padding
+        return height
     }
 
-    private fun invoiceDirectory(): File {
+    private fun drawReceiptNotice(ctx: PdfPageContext) {
+        ctx.ensureSpace(lineStep(9f) + 4f)
+        drawAt(
+            ctx.stream,
+            fontBold,
+            9f,
+            ctx.contentLeftX,
+            ctx.y,
+            "This is a payment receipt, not an invoice. Please retain for your records.",
+            color = colorMuted,
+        )
+        ctx.y -= lineStep(9f) + 4f
+    }
+
+    private fun receiptDirectory(): File {
         val documents = File(System.getProperty("user.home"), "Documents")
-        return File(documents, "Glide/invoices")
+        return File(documents, "Glide/receipts")
     }
 }
