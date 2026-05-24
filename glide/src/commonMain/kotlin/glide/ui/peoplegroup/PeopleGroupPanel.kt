@@ -63,6 +63,7 @@ import glide.data.PlanStore
 import glide.data.ScheduledClassStore
 import glide.model.formatMoney
 import glide.data.classAttendeeCount
+import glide.data.hasClassParticipant
 import glide.data.hasResolvableMainClient
 import glide.data.memberCount
 import glide.data.resolveMainClient
@@ -228,6 +229,8 @@ private fun soldDisabledReason(
                 group?.planStartDate.isNullOrBlank() ||
                     parseIsoLocalDate(group.planStartDate) == null ->
                     "Plan start date is required before marking as sold."
+                group != null && !group.hasClassParticipant() ->
+                    "At least one class participant is required before marking as sold."
                 else -> null
             }
         }
@@ -794,9 +797,15 @@ private fun PeopleGroupPanel(
                                                 existingId = existing.id,
                                                 createdAtMillis = existing.createdAtMillis,
                                             )
+                                            if (!updated.hasClassParticipant()) {
+                                                formError =
+                                                    "At least one class participant is required before marking as sold."
+                                                return@GlideOutlinedButton
+                                            }
                                             PeopleGroupStore.update(updated)
                                             if (!PeopleGroupStore.convertToCustomer(selectedId!!)) {
-                                                formError = "Select a plan before marking as sold."
+                                                formError =
+                                                    "Could not mark as sold. Check plan, start date, and class participants."
                                                 return@GlideOutlinedButton
                                             }
                                             formError = null

@@ -43,6 +43,8 @@ fun PeopleGroup.classAttendeeCount(): Int {
     return main + studentIds.size
 }
 
+fun PeopleGroup.hasClassParticipant(): Boolean = classAttendeeCount() > 0
+
 /** Names shown on the class calendar (attending members only). */
 fun PeopleGroup.rosterNameLabels(): List<String> {
     val names = mutableListOf<String>()

@@ -138,6 +138,7 @@ object PeopleGroupStore {
         if (group.planId.isNullOrBlank()) return false
         if (group.planStartDate.isBlank() || parseIsoLocalDate(group.planStartDate) == null) return false
         if (!group.hasResolvableMainClient()) return false
+        if (!group.hasClassParticipant()) return false
 
         val clientId = group.mainClientId ?: run {
             val resolved = group.resolveMainClient()
