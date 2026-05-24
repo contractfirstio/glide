@@ -14,15 +14,15 @@ enum class PeopleGroupStatus(val label: String) {
 }
 
 /**
- * A people group is the customer unit (household / package). Leads keep draft main-contact
- * fields until conversion; customers reference [mainContactId] and [relatedPersonIds].
+ * A people group is the customer unit (household / package). Leads keep draft main-client
+ * fields until conversion; customers reference [mainClientId] and [relatedPersonIds].
  */
 data class PeopleGroup(
     val id: String = UUID.randomUUID().toString(),
     val type: PeopleGroupType = PeopleGroupType.LEAD,
-    val mainContactId: String? = null,
-    /** Draft main contact while [type] is LEAD and [mainContactId] is null. */
-    val contactName: String = "",
+    val mainClientId: String? = null,
+    /** Draft main client while [type] is LEAD and [mainClientId] is null. */
+    val clientName: String = "",
     val dateOfBirth: String = "",
     val email: String = "",
     val phone: String = "",
@@ -31,8 +31,8 @@ data class PeopleGroup(
     val planId: String? = null,
     /** ISO date (yyyy-MM-dd) when the selected plan starts; required before marking a lead as sold. */
     val planStartDate: String = "",
-    /** When false, the main contact is not counted on classes; related people always attend. */
-    val mainContactAttendsClass: Boolean = true,
+    /** When false, the main client is not counted on classes; related people always attend. */
+    val mainClientAttendsClass: Boolean = true,
     val notes: String = "",
     val createdAtMillis: Long = System.currentTimeMillis(),
 )

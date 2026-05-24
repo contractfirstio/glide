@@ -1,24 +1,24 @@
 package glide.data
 
-import glide.model.Contact
+import glide.model.Client
 import glide.model.PeopleGroup
 import glide.model.RelatedPerson
 
-data class ResolvedMainContact(
+data class ResolvedMainClient(
     val name: String,
     val dateOfBirth: String,
     val email: String,
     val phone: String,
 )
 
-fun PeopleGroup.resolveMainContact(): ResolvedMainContact {
-    mainContactId?.let { id ->
-        ContactStore.findById(id)?.let { contact ->
-            return contact.toResolved()
+fun PeopleGroup.resolveMainClient(): ResolvedMainClient {
+    mainClientId?.let { id ->
+        ClientStore.findById(id)?.let { client ->
+            return client.toResolved()
         }
     }
-    return ResolvedMainContact(
-        name = contactName,
+    return ResolvedMainClient(
+        name = clientName,
         dateOfBirth = dateOfBirth,
         email = email,
         phone = phone,
@@ -28,26 +28,26 @@ fun PeopleGroup.resolveMainContact(): ResolvedMainContact {
 fun PeopleGroup.resolveRelatedPeople(): List<RelatedPerson> =
     relatedPersonIds.mapNotNull { RelatedPersonStore.findById(it) }
 
-fun PeopleGroup.hasResolvableMainContact(): Boolean =
-    mainContactId != null || contactName.isNotBlank()
+fun PeopleGroup.hasResolvableMainClient(): Boolean =
+    mainClientId != null || clientName.isNotBlank()
 
-/** Household size (main contact plus related people). */
+/** Household size (main client plus related people). */
 fun PeopleGroup.memberCount(): Int {
-    val main = if (hasResolvableMainContact()) 1 else 0
+    val main = if (hasResolvableMainClient()) 1 else 0
     return main + relatedPersonIds.size
 }
 
-/** People who take the class: related always; main contact only when [mainContactAttendsClass]. */
+/** People who take the class: related always; main client only when [mainClientAttendsClass]. */
 fun PeopleGroup.classAttendeeCount(): Int {
-    val main = if (mainContactAttendsClass && hasResolvableMainContact()) 1 else 0
+    val main = if (mainClientAttendsClass && hasResolvableMainClient()) 1 else 0
     return main + relatedPersonIds.size
 }
 
 /** Names shown on the class calendar (attending members only). */
 fun PeopleGroup.rosterNameLabels(): List<String> {
     val names = mutableListOf<String>()
-    if (mainContactAttendsClass && hasResolvableMainContact()) {
-        val main = resolveMainContact()
+    if (mainClientAttendsClass && hasResolvableMainClient()) {
+        val main = resolveMainClient()
         if (main.name.isNotBlank()) {
             names.add(main.name.trim())
         }
@@ -60,7 +60,7 @@ fun PeopleGroup.rosterNameLabels(): List<String> {
     return names
 }
 
-private fun Contact.toResolved() = ResolvedMainContact(
+private fun Client.toResolved() = ResolvedMainClient(
     name = name,
     dateOfBirth = dateOfBirth,
     email = email,

@@ -12,10 +12,10 @@ internal object ReceiptEmailComposer {
     fun compose(content: ReceiptContent, pdf: File): InvoiceExportResult {
         val recipient = content.billToEmail.trim()
         if (recipient.isBlank()) {
-            return InvoiceExportResult.Failure("Main contact has no email address.")
+            return InvoiceExportResult.Failure("Main client has no email address.")
         }
         if (!recipient.contains('@')) {
-            return InvoiceExportResult.Failure("Main contact email address is not valid.")
+            return InvoiceExportResult.Failure("Main client email address is not valid.")
         }
 
         val subject = receiptEmailSubject(content)

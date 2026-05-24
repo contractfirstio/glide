@@ -40,7 +40,7 @@ fun LeadPanelSection(
 )
 
 @Composable
-fun LeadMainContactSummaryCard(
+fun LeadMainClientSummaryCard(
     modifier: Modifier = Modifier,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) = FormPanelSummaryCard(role = FormPanelSectionRole.Primary, modifier = modifier, content = content)

@@ -1,6 +1,6 @@
 package glide.model
 
-/** Frozen invoice fields captured when a bill is issued — survives later edits to contacts, classes, and settings. */
+/** Frozen invoice fields captured when a bill is issued — survives later edits to clients, classes, and settings. */
 data class IssuedInvoiceDebitLine(
     val description: String,
     val amountMinor: Long,

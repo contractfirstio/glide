@@ -33,14 +33,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.BillingPanelState
-import glide.data.ContactStore
-import glide.data.ContactsPanelState
+import glide.data.ClientStore
+import glide.data.ClientsPanelState
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
 import glide.data.RelatedPanelState
 import glide.data.RelatedPersonStore
-import glide.data.resolveMainContact
+import glide.data.resolveMainClient
 import glide.model.RelatedPerson
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
@@ -86,19 +86,19 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
     var formError by remember { mutableStateOf<String?>(null) }
 
     val customerGroupId = BillingPanelState.peopleGroupId
-    val contactFilterId = ContactsPanelState.selectedContactId
+    val clientFilterId = ClientsPanelState.selectedClientId
     val planFilterId = PlansPanelState.selectedPlanId
     val relatedFilterId = RelatedPanelState.selectedRelatedPersonId
     val people = RelatedPersonStore.forRelatedPanel(
         customerGroupId,
-        contactFilterId,
+        clientFilterId,
         planFilterId,
         relatedFilterId,
     )
     val customerGroupLabel = customerGroupId?.let { id ->
-        PeopleGroupStore.findById(id)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+        PeopleGroupStore.findById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
     }
-    val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+    val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
 
     fun clearLocalSelection() {
@@ -149,9 +149,9 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                             val label = customerGroupLabel ?: "this customer group"
                             "Showing related people for $label. Use Show all to reset."
                         }
-                        contactFilterId != null -> {
-                            val label = contactFilterLabel ?: "this contact"
-                            "Showing related people for $label. Use Clear filter in Contacts to reset."
+                        clientFilterId != null -> {
+                            val label = clientFilterLabel ?: "this client"
+                            "Showing related people for $label. Use Clear filter in Clients to reset."
                         }
                         planFilterId != null -> {
                             val label = planFilterLabel ?: "this plan"
@@ -160,7 +160,7 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                         relatedFilterId != null -> {
                             val label = RelatedPersonStore.findById(relatedFilterId)?.name?.takeIf { it.isNotBlank() }
                                 ?: "this related person"
-                            "Filtering contacts and customer groups for $label. Use Clear filter to reset."
+                            "Filtering clients and customer groups for $label. Use Clear filter to reset."
                         }
                         else ->
                             "Edit related people on customer plans. They appear here after a lead becomes a customer."
@@ -193,8 +193,8 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (contactFilterId != null) {
-                                GlideTextButton(onClick = { ContactsPanelState.clearContactFilter() }) {
+                            if (clientFilterId != null) {
+                                GlideTextButton(onClick = { ClientsPanelState.clearClientFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
@@ -228,8 +228,8 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                                 text = when {
                                     customerGroupId != null ->
                                         "No related people in this customer group."
-                                    contactFilterId != null ->
-                                        "No related people linked to this contact."
+                                    clientFilterId != null ->
+                                        "No related people linked to this client."
                                     planFilterId != null ->
                                         "No related people on groups with this plan."
                                     relatedFilterId != null ->

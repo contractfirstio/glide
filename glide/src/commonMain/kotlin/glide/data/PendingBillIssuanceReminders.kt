@@ -39,7 +39,7 @@ private fun Bill.toPendingBillIssuanceOrNull(): PendingBillIssuance? {
     val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
     if (group.type != PeopleGroupType.CUSTOMER) return null
     if (soldPlanBlocksBillIssuance(peopleGroupId)) return null
-    val main = group.resolveMainContact()
+    val main = group.resolveMainClient()
     val customerLabel = main.name.ifBlank { "Customer" }
     return PendingBillIssuance(
         billId = id,

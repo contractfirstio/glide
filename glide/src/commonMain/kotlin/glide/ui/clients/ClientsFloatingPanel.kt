@@ -1,4 +1,4 @@
-package glide.ui.people
+package glide.ui.clients
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -7,16 +7,16 @@ import glide.ui.components.FloatingPanelShell
 import glide.ui.layout.PanelSlots
 
 @Composable
-fun PeopleFloatingPanel(
+fun ClientsFloatingPanel(
     windowWidthPx: Int,
     windowHeightPx: Int,
 ) {
     FloatingPanelShell(
-        title = "People",
-        slot = PanelSlots.PEOPLE,
+        title = "Clients",
+        slot = PanelSlots.CLIENTS,
         windowWidthPx = windowWidthPx,
         windowHeightPx = windowHeightPx,
     ) {
-        PeoplePanel(modifier = Modifier.fillMaxSize())
+        ClientsPanel(modifier = Modifier.fillMaxSize())
     }
 }

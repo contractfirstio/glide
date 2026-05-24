@@ -15,12 +15,12 @@ object RelatedPersonStore {
 
     /**
      * Related people for the Related panel — all on customer plans, those in
-     * [customerGroupId] when a customer group is selected, or everyone linked to [contactId]
-     * across that contact's leads and customer groups.
+     * [customerGroupId] when a customer group is selected, or everyone linked to [clientId]
+     * across that client's leads and customer groups.
      */
     fun forRelatedPanel(
         customerGroupId: String? = null,
-        contactId: String? = null,
+        clientId: String? = null,
         planId: String? = null,
         relatedPersonId: String? = null,
     ): List<RelatedPerson> =
@@ -30,7 +30,7 @@ object RelatedPersonStore {
                     ?.takeIf { it.type == PeopleGroupType.CUSTOMER }
                     ?.resolveRelatedPeople()
                     ?: emptyList()
-            contactId != null -> relatedPeopleForMainContact(contactId)
+            clientId != null -> relatedPeopleForMainClient(clientId)
             planId != null -> relatedPeopleForPlan(planId)
             relatedPersonId != null ->
                 findById(relatedPersonId)?.let { listOf(it) } ?: emptyList()
@@ -44,9 +44,9 @@ object RelatedPersonStore {
             .distinct()
             .mapNotNull { findById(it) }
 
-    private fun relatedPeopleForMainContact(contactId: String): List<RelatedPerson> =
+    private fun relatedPeopleForMainClient(clientId: String): List<RelatedPerson> =
         PeopleGroupStore.all
-            .filter { it.mainContactId == contactId }
+            .filter { it.mainClientId == clientId }
             .flatMap { it.relatedPersonIds }
             .distinct()
             .mapNotNull { findById(it) }

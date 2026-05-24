@@ -35,7 +35,7 @@ fun validateCustomerGroupsForClass(customerGroupIds: List<String>, classId: Stri
     for (groupId in customerGroupIds) {
         val other = ScheduledClassStore.findClassContainingCustomerGroup(groupId, excludeClassId = classId)
             ?: continue
-        val label = PeopleGroupStore.findById(groupId)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+        val label = PeopleGroupStore.findById(groupId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
             ?: "This group"
         return "$label is already on \"${other.name}\". Each customer group can only be on one class."
     }

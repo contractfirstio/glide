@@ -1,4 +1,4 @@
-package glide.ui.people
+package glide.ui.clients
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,15 +33,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.BillingPanelState
-import glide.data.ContactStore
-import glide.data.ContactsPanelState
+import glide.data.ClientStore
+import glide.data.ClientsPanelState
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
 import glide.data.RelatedPanelState
 import glide.data.RelatedPersonStore
-import glide.data.resolveMainContact
-import glide.model.Contact
+import glide.data.resolveMainClient
+import glide.model.Client
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
@@ -58,7 +58,7 @@ import glide.ui.theme.GlideOutlinedField
 import glide.ui.theme.GlideTextButton
 import java.util.UUID
 
-private data class ContactFormState(
+private data class ClientFormState(
     val name: String = "",
     val dateOfBirth: String = "",
     val email: String = "",
@@ -67,8 +67,8 @@ private data class ContactFormState(
 ) {
     fun isValid(): Boolean = name.isNotBlank()
 
-    fun toContact(existingId: String? = null, createdAtMillis: Long = System.currentTimeMillis()): Contact =
-        Contact(
+    fun toClient(existingId: String? = null, createdAtMillis: Long = System.currentTimeMillis()): Client =
+        Client(
             id = existingId ?: UUID.randomUUID().toString(),
             name = name.trim(),
             dateOfBirth = dateOfBirth.trim(),
@@ -80,21 +80,21 @@ private data class ContactFormState(
 }
 
 @Composable
-fun PeoplePanel(modifier: Modifier = Modifier) {
+fun ClientsPanel(modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    val form = rememberFormDirtyTracker(ContactFormState())
+    val form = rememberFormDirtyTracker(ClientFormState())
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
 
     val customerGroupId = BillingPanelState.peopleGroupId
-    val contactFilterId = ContactsPanelState.selectedContactId
+    val clientFilterId = ClientsPanelState.selectedClientId
     val planFilterId = PlansPanelState.selectedPlanId
     val relatedFilterId = RelatedPanelState.selectedRelatedPersonId
-    val contacts = ContactStore.forContactsPanel(customerGroupId, planFilterId, relatedFilterId)
+    val clients = ClientStore.forClientsPanel(customerGroupId, planFilterId, relatedFilterId)
     val customerGroupLabel = customerGroupId?.let { id ->
-        PeopleGroupStore.findById(id)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+        PeopleGroupStore.findById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
     }
-    val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+    val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val relatedFilterLabel = relatedFilterId?.let {
         RelatedPersonStore.findById(it)?.name?.takeIf { it.isNotBlank() }
@@ -102,13 +102,13 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
 
     fun clearLocalSelection() {
         selectedId = null
-        form.load(ContactFormState())
+        form.load(ClientFormState())
         formError = null
     }
 
     fun clearSelection() {
         clearLocalSelection()
-        ContactsPanelState.clearContactFilter()
+        ClientsPanelState.clearClientFilter()
     }
 
     LaunchedEffect(customerGroupId, planFilterId, relatedFilterId) {
@@ -117,22 +117,22 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
         }
     }
 
-    LaunchedEffect(contacts, selectedId) {
-        if (selectedId != null && contacts.none { it.id == selectedId }) {
+    LaunchedEffect(clients, selectedId) {
+        if (selectedId != null && clients.none { it.id == selectedId }) {
             clearSelection()
         }
     }
 
-    fun loadIntoForm(contact: Contact) {
-        selectedId = contact.id
-        ContactsPanelState.onContactSelected(contact.id)
+    fun loadIntoForm(client: Client) {
+        selectedId = client.id
+        ClientsPanelState.onClientSelected(client.id)
         form.load(
-            ContactFormState(
-                name = contact.name,
-                dateOfBirth = contact.dateOfBirth,
-                email = contact.email,
-                phone = contact.phone,
-                notes = contact.notes,
+            ClientFormState(
+                name = client.name,
+                dateOfBirth = client.dateOfBirth,
+                email = client.email,
+                phone = client.phone,
+                notes = client.notes,
             ),
         )
         formError = null
@@ -154,22 +154,22 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                     text = when {
                         customerGroupId != null -> {
                             val label = customerGroupLabel ?: "this customer group"
-                            "Showing main contact for $label. Use Show all to reset."
+                            "Showing main client for $label. Use Show all to reset."
                         }
-                        contactFilterId != null -> {
-                            val label = contactFilterLabel ?: "this contact"
+                        clientFilterId != null -> {
+                            val label = clientFilterLabel ?: "this client"
                             "Filtering customer groups for $label. Use Clear filter to reset."
                         }
                         planFilterId != null -> {
                             val label = planFilterLabel ?: "this plan"
-                            "Showing contacts on groups with $label. Use Clear filter in Plans to reset."
+                            "Showing clients on groups with $label. Use Clear filter in Plans to reset."
                         }
                         relatedFilterId != null -> {
                             val label = relatedFilterLabel ?: "this related person"
-                            "Showing contacts linked to $label. Use Clear filter in Related to reset."
+                            "Showing clients linked to $label. Use Clear filter in Related to reset."
                         }
                         else ->
-                            "Edit contacts created from leads. New contacts are added when you make a customer on a lead."
+                            "Edit clients created from leads. New clients are added when you make a customer on a lead."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -185,12 +185,12 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${contacts.size} contact${if (contacts.size == 1) "" else "s"}",
+                            text = "${clients.size} client${if (clients.size == 1) "" else "s"}",
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
-                            if (contactFilterId != null) {
-                                GlideTextButton(onClick = { ContactsPanelState.clearContactFilter() }) {
+                            if (clientFilterId != null) {
+                                GlideTextButton(onClick = { ClientsPanelState.clearClientFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
@@ -213,7 +213,7 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                     }
                     Spacer(modifier = Modifier.height(spacing.field))
 
-                    if (contacts.isEmpty()) {
+                    if (clients.isEmpty()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -233,13 +233,13 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                             Text(
                                 text = when {
                                     customerGroupId != null ->
-                                        "No main contact for this customer group."
+                                        "No main client for this customer group."
                                     planFilterId != null ->
-                                        "No contacts on groups with this plan."
+                                        "No clients on groups with this plan."
                                     relatedFilterId != null ->
-                                        "No contacts linked to this related person."
+                                        "No clients linked to this related person."
                                     else ->
-                                        "No contacts yet. Contacts are created when leads become customers."
+                                        "No clients yet. Clients are created when leads become customers."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -256,12 +256,12 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            items(contacts, key = { it.id }) { contact ->
-                                ContactListItem(
-                                    contact = contact,
-                                    selected = contact.id == selectedId,
+                            items(clients, key = { it.id }) { client ->
+                                ClientListItem(
+                                    client = client,
+                                    selected = client.id == selectedId,
                                     compact = compact,
-                                    onClick = { loadIntoForm(contact) },
+                                    onClick = { loadIntoForm(client) },
                                 )
                             }
                         }
@@ -272,7 +272,7 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
             val formSection: @Composable (Modifier) -> Unit = { formModifier ->
                 Column(modifier = formModifier.fillMaxHeight()) {
                     Text(
-                        text = "Edit contact",
+                        text = "Edit client",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Medium,
                     )
@@ -290,7 +290,7 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "Select a contact to edit. Contacts are created from the Leads panel.",
+                                text = "Select a client to edit. Clients are created from the Leads panel.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(spacing.outer),
@@ -302,13 +302,13 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                                 .weight(1f)
                                 .verticalScroll(rememberScrollState()),
                         ) {
-                            ContactForm(
+                            ClientForm(
                                 state = form.draft,
                                 onStateChange = { form.draft = it },
                                 spacing = spacing,
                             )
 
-                            val soldPlanCount = selectedId?.let { ContactStore.soldPlanCount(it) } ?: 0
+                            val soldPlanCount = selectedId?.let { ClientStore.soldPlanCount(it) } ?: 0
                             if (soldPlanCount > 0) {
                                 Spacer(modifier = Modifier.height(spacing.field))
                                 Text(
@@ -341,13 +341,13 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
                                         return@GlideButton
                                     }
                                     formError = null
-                                    val existing = selectedId?.let { ContactStore.findById(it) }
+                                    val existing = selectedId?.let { ClientStore.findById(it) }
                                     if (existing != null) {
-                                        val updated = form.draft.toContact(
+                                        val updated = form.draft.toClient(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
-                                        ContactStore.update(updated)
+                                        ClientStore.update(updated)
                                         loadIntoForm(updated)
                                     }
                                 },
@@ -359,7 +359,7 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
 
                             GlideOutlinedButton(
                                 onClick = { showDeleteConfirm = true },
-                                enabled = selectedId?.let { ContactStore.canDelete(it) } == true,
+                                enabled = selectedId?.let { ClientStore.canDelete(it) } == true,
                             ) {
                                 Text("Delete", color = MaterialTheme.colorScheme.error)
                             }
@@ -386,18 +386,18 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        val onSoldPlan = ContactStore.isOnSoldPlan(selectedId!!)
+        val onSoldPlan = ClientStore.isOnSoldPlan(selectedId!!)
         DeleteConfirmDialog(
-            title = "Delete contact?",
+            title = "Delete client?",
             message = if (onSoldPlan) {
-                "This person is the main contact on one or more sold plans and cannot be deleted."
+                "This person is the main client on one or more sold plans and cannot be deleted."
             } else {
-                "This contact will be removed permanently."
+                "This client will be removed permanently."
             },
             onDismiss = { showDeleteConfirm = false },
             onContinue = {
                 if (!onSoldPlan) {
-                    ContactStore.delete(selectedId!!)
+                    ClientStore.delete(selectedId!!)
                     showDeleteConfirm = false
                     clearSelection()
                 } else {
@@ -411,8 +411,8 @@ fun PeoplePanel(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ContactListItem(
-    contact: Contact,
+private fun ClientListItem(
+    client: Client,
     selected: Boolean,
     compact: Boolean,
     onClick: () -> Unit,
@@ -423,7 +423,7 @@ private fun ContactListItem(
     } else {
         MaterialTheme.colorScheme.surface
     }
-    val soldPlanCount = ContactStore.soldPlanCount(contact.id)
+    val soldPlanCount = ClientStore.soldPlanCount(client.id)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -435,16 +435,16 @@ private fun ContactListItem(
             ),
     ) {
         Text(
-            text = formatPersonLabel(contact.name, contact.dateOfBirth),
+            text = formatPersonLabel(client.name, client.dateOfBirth),
             style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
             color = glideListItemTitleColor(selected),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        if (contact.email.isNotBlank() && !compact) {
+        if (client.email.isNotBlank() && !compact) {
             Text(
-                text = contact.email,
+                text = client.email,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -462,14 +462,14 @@ private fun ContactListItem(
 }
 
 @Composable
-private fun ContactForm(
-    state: ContactFormState,
-    onStateChange: (ContactFormState) -> Unit,
+private fun ClientForm(
+    state: ClientFormState,
+    onStateChange: (ClientFormState) -> Unit,
     spacing: GlideLayout.Spacing,
 ) {
     FormPanelSection(
         title = "Identity",
-        description = "Name and date of birth for this contact.",
+        description = "Name and date of birth for this client.",
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {
@@ -485,11 +485,11 @@ private fun ContactForm(
         )
     }
 
-    FormPanelSectionsDivider(label = "Contact details", spacing = spacing)
+    FormPanelSectionsDivider(label = "Client details", spacing = spacing)
 
     FormPanelSection(
         title = "Reach",
-        description = "Email and phone for this person.",
+        description = "Email and phone for this client.",
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
@@ -510,7 +510,7 @@ private fun ContactForm(
 
     FormPanelSection(
         title = "Notes",
-        description = "Internal notes about this contact.",
+        description = "Internal notes about this client.",
         spacing = spacing,
         role = FormPanelSectionRole.Tertiary,
     ) {

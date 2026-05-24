@@ -21,7 +21,7 @@ object BillingPanelState {
             clear()
             return
         }
-        ContactsPanelState.clearContactFilter()
+        ClientsPanelState.clearClientFilter()
         RelatedPanelState.clearRelatedPersonFilter()
         PlansPanelState.clearPlanFilter()
         peopleGroupId = groupId

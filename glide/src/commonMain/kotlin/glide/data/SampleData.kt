@@ -5,7 +5,7 @@ import glide.model.AttendanceStatus
 import glide.model.ClassAttendanceRecord
 import glide.model.ClassSessionKey
 import glide.model.ClassLocation
-import glide.model.Contact
+import glide.model.Client
 import glide.model.DayOfWeek
 import glide.model.PaymentMethod
 import glide.model.PeopleGroup
@@ -64,32 +64,32 @@ object SampleData {
         PlanStore.create(rollingPlan)
         PlanStore.create(singleLesson)
 
-        val emma = Contact(
-            id = "sample-contact-emma",
+        val emma = Client(
+            id = "sample-client-emma",
             name = "Emma Walsh",
             dateOfBirth = "12/03/1988",
             email = "emma.walsh@example.com",
             phone = "07700 900 101",
             createdAtMillis = now - 20 * day,
         )
-        val james = Contact(
-            id = "sample-contact-james",
+        val james = Client(
+            id = "sample-client-james",
             name = "James Chen",
             dateOfBirth = "05/07/1992",
             email = "james.chen@example.com",
             phone = "07700 900 202",
             createdAtMillis = now - 18 * day,
         )
-        val sarah = Contact(
-            id = "sample-contact-sarah",
+        val sarah = Client(
+            id = "sample-client-sarah",
             name = "Sarah Thompson",
             email = "sarah.thompson@example.com",
             phone = "07700 900 303",
             createdAtMillis = now - 14 * day,
         )
-        ContactStore.seed(emma)
-        ContactStore.seed(james)
-        ContactStore.seed(sarah)
+        ClientStore.seed(emma)
+        ClientStore.seed(james)
+        ClientStore.seed(sarah)
 
         val leo = RelatedPerson(
             id = "sample-related-leo",
@@ -148,7 +148,7 @@ object SampleData {
         val emmaGroup = PeopleGroup(
             id = SAMPLE_CUSTOMER_EMMA,
             type = PeopleGroupType.CUSTOMER,
-            mainContactId = emma.id,
+            mainClientId = emma.id,
             relatedPersonIds = listOf(mia.id, noah.id, alex.id),
             status = PeopleGroupStatus.Contacted,
             planId = rollingPlan.id,
@@ -163,10 +163,10 @@ object SampleData {
         val jamesGroup = PeopleGroup(
             id = SAMPLE_CUSTOMER_JAMES,
             type = PeopleGroupType.CUSTOMER,
-            mainContactId = james.id,
+            mainClientId = james.id,
             relatedPersonIds = listOf(ivy.id, sam.id, alex.id),
             planId = rollingPlan.id,
-            mainContactAttendsClass = false,
+            mainClientAttendsClass = false,
             status = PeopleGroupStatus.Contacted,
             planStartDate = SAMPLE_PLAN_START_DATE,
             createdAtMillis = now - 8 * day,
@@ -186,7 +186,7 @@ object SampleData {
         val sarahGroup = PeopleGroup(
             id = SAMPLE_CUSTOMER_SARAH,
             type = PeopleGroupType.CUSTOMER,
-            mainContactId = sarah.id,
+            mainClientId = sarah.id,
             relatedPersonIds = listOf(leo.id, zoe.id),
             planId = rollingPlan.id,
             planStartDate = SAMPLE_PLAN_START_DATE,
@@ -231,7 +231,7 @@ object SampleData {
             PeopleGroup(
                 id = "sample-lead-mike",
                 type = PeopleGroupType.LEAD,
-                contactName = "Mike O'Brien",
+                clientName = "Mike O'Brien",
                 email = "mike.obrien@example.com",
                 phone = "07700 900 404",
                 relatedPersonIds = listOf(ella.id),
@@ -246,7 +246,7 @@ object SampleData {
             PeopleGroup(
                 id = "sample-lead-trial",
                 type = PeopleGroupType.LEAD,
-                contactName = "Priya Nair",
+                clientName = "Priya Nair",
                 status = PeopleGroupStatus.Contacted,
                 planId = singleLesson.id,
                 planStartDate = sampleToday.toString(),
@@ -323,7 +323,7 @@ object SampleData {
                 dayOfWeek = DayOfWeek.THURSDAY,
                 startTime = "17:30",
                 endTime = "18:30",
-                notes = "James household — main contact does not attend",
+                notes = "James household — main client does not attend",
                 createdAtMillis = now - 4 * day,
             ),
         )

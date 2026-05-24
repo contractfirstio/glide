@@ -65,7 +65,7 @@ import glide.data.PlanStore
 import glide.data.ScheduledClassStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
-import glide.data.resolveMainContact
+import glide.data.resolveMainClient
 import glide.data.toScheduleMessage
 import glide.data.toUserMessage
 import glide.model.ClassLocation
@@ -221,7 +221,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
     )
     val soldPlanFilterLabel = soldPlanFilterId?.let { groupId ->
         PeopleGroupStore.findById(groupId)?.let { group ->
-            group.resolveMainContact().name.takeIf { it.isNotBlank() }
+            group.resolveMainClient().name.takeIf { it.isNotBlank() }
                 ?: group.planId?.let { PlanStore.findById(it)?.name }?.takeIf { it.isNotBlank() }
         }
     }
@@ -783,13 +783,13 @@ private fun ClassCustomerGroupsSection(
                 classForValidation?.canAcceptRollingPlanEnrollments() == true
             }
             .filter { group ->
-                val main = group.resolveMainContact()
+                val main = group.resolveMainClient()
                 searchQuery.isBlank() ||
                     main.name.matchesEntitySearch(searchQuery) ||
                     main.email.matchesEntitySearch(searchQuery)
             }
             .map { group ->
-                val main = group.resolveMainContact()
+                val main = group.resolveMainClient()
                 SearchResultItem(
                     id = group.id,
                     primaryLabel = formatPersonLabel(main.name, main.dateOfBirth),
@@ -890,7 +890,7 @@ private fun ClassCustomerGroupsSection(
                 Spacer(modifier = Modifier.height(spacing.field))
                 assignedIds.forEachIndexed { index, groupId ->
                     val group = PeopleGroupStore.findById(groupId) ?: return@forEachIndexed
-                    val main = group.resolveMainContact()
+                    val main = group.resolveMainClient()
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -945,7 +945,7 @@ private fun ClassCustomerGroupsSection(
 
     pendingRemoveGroupId?.let { groupId ->
         val group = PeopleGroupStore.findById(groupId)
-        val label = group?.resolveMainContact()?.name?.takeIf { it.isNotBlank() } ?: "This customer group"
+        val label = group?.resolveMainClient()?.name?.takeIf { it.isNotBlank() } ?: "This customer group"
         DeleteConfirmDialog(
             title = "Remove from class?",
             message = "$label will be removed from this class.",

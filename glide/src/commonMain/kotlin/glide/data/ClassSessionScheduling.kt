@@ -213,7 +213,7 @@ fun validatePlanSchedulesForClass(
     for (groupId in customerGroupIds) {
         val check = planScheduleCheckForClass(groupId, scheduledClass) ?: continue
         if (!check.canFullySchedule) {
-            val label = PeopleGroupStore.findById(groupId)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+            val label = PeopleGroupStore.findById(groupId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
                 ?: "A customer group"
             return "$label: ${planCannotFullyScheduleMessage(check.requiredSessions, check.availableSessions)}"
         }
@@ -252,7 +252,7 @@ fun validateRollingPlanEnrollmentForClass(
 ): String? {
     if (!peopleGroupHasRollingPlan(peopleGroupId)) return null
     if (scheduledClass.canAcceptRollingPlanEnrollments()) return null
-    val label = PeopleGroupStore.findById(peopleGroupId)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+    val label = PeopleGroupStore.findById(peopleGroupId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
         ?: "This customer group"
     return "$label has a rolling plan. ${rollingPlanNotAllowedOnClassMessage(scheduledClass)}"
 }
@@ -273,7 +273,7 @@ fun validateTermDisablingRollingPlans(term: AcademicTerm): String? {
         if (term.id !in scheduledClass.termIds) continue
         for (groupId in scheduledClass.customerGroupIds) {
             if (!peopleGroupHasRollingPlan(groupId)) continue
-            val label = PeopleGroupStore.findById(groupId)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
+            val label = PeopleGroupStore.findById(groupId)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
                 ?: "A customer group"
             return "Cannot disable rolling plans on this term: \"$label\" on class \"${scheduledClass.name}\" " +
                 "has a rolling plan."

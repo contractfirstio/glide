@@ -189,7 +189,7 @@ fun classesOnDate(
         .filter { it.spansTerm(termId) && it.occursOn(date) }
         .sortedWith(compareBy({ it.startTime }, { it.endTime }, { it.name }))
 
-/** One line per customer group scheduled on this session: main contact and related names. */
+/** One line per customer group scheduled on this session: main client and related names. */
 fun rosterLinesForClass(scheduledClass: ScheduledClass, sessionDate: LocalDate): List<String> =
     scheduledClass.customerGroupIds
         .filter { groupId -> isPeopleGroupOnClassSession(groupId, scheduledClass, sessionDate) }

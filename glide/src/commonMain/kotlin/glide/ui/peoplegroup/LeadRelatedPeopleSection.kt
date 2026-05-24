@@ -51,7 +51,7 @@ fun LeadRelatedPeopleSection(
 
     LeadPanelSection(
         title = "Related people",
-        description = "Family or others on this lead — separate from the main contact.",
+        description = "Family or others on this lead — separate from the main client.",
         spacing = spacing,
         role = LeadPanelSectionRole.Secondary,
     ) {

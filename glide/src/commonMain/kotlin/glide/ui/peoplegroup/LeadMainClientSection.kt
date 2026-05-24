@@ -11,8 +11,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import glide.data.ContactStore
-import glide.model.Contact
+import glide.data.ClientStore
+import glide.model.Client
 import glide.ui.layout.GlideLayout
 import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
@@ -20,25 +20,25 @@ import glide.ui.theme.GlideOutlinedField
 import glide.ui.theme.GlideTextButton
 
 @Composable
-fun LeadMainContactSection(
-    mainContactId: String?,
-    contactName: String,
+fun LeadMainClientSection(
+    mainClientId: String?,
+    clientName: String,
     dateOfBirth: String,
     email: String,
     phone: String,
-    onStateChange: (mainContactId: String?, contactName: String, dateOfBirth: String, email: String, phone: String) -> Unit,
+    onStateChange: (mainClientId: String?, clientName: String, dateOfBirth: String, email: String, phone: String) -> Unit,
     spacing: GlideLayout.Spacing,
 ) {
-    var contactSearchQuery by remember { mutableStateOf("") }
+    var clientSearchQuery by remember { mutableStateOf("") }
 
-    val contactResults = remember(contactSearchQuery, ContactStore.all) {
-        val query = contactSearchQuery.trim()
+    val clientResults = remember(clientSearchQuery, ClientStore.all) {
+        val query = clientSearchQuery.trim()
         if (query.isEmpty()) {
             emptyList()
         } else {
-            ContactStore.all
-                .filter { contact ->
-                    listOf(contact.name, contact.email, contact.phone, contact.dateOfBirth)
+            ClientStore.all
+                .filter { client ->
+                    listOf(client.name, client.email, client.phone, client.dateOfBirth)
                         .any { it.matchesEntitySearch(query) }
                 }
                 .map { it.toSearchItem() }
@@ -46,72 +46,72 @@ fun LeadMainContactSection(
     }
 
     LeadPanelSection(
-        title = "Main contact",
+        title = "Main client",
         description = "The primary person for this lead — one per lead.",
         spacing = spacing,
         role = LeadPanelSectionRole.Primary,
     ) {
-        if (mainContactId != null) {
-            LeadMainContactSummaryCard {
-                ReadOnlyMainContactSection(contactId = mainContactId, showLabel = false)
+        if (mainClientId != null) {
+            LeadMainClientSummaryCard {
+                ReadOnlyMainClientSection(clientId = mainClientId, showLabel = false)
             }
             Spacer(modifier = Modifier.height(spacing.field))
             GlideTextButton(
                 onClick = {
                     onStateChange(null, "", "", "", "")
-                    contactSearchQuery = ""
+                    clientSearchQuery = ""
                 },
             ) {
-                Text("Choose a different contact")
+                Text("Choose a different client")
             }
         } else {
             LeadActionSubsection(
-                title = "Link existing contact",
-                description = "Search contacts already saved from previous customers.",
+                title = "Link existing client",
+                description = "Search clients already saved from previous customers.",
                 spacing = spacing,
             ) {
                 EntitySearchPicker(
-                    label = "Search saved contacts",
+                    label = "Search saved clients",
                     placeholder = "Type name, email, or phone…",
-                    query = contactSearchQuery,
-                    onQueryChange = { contactSearchQuery = it },
-                    results = contactResults,
+                    query = clientSearchQuery,
+                    onQueryChange = { clientSearchQuery = it },
+                    results = clientResults,
                     onSelect = { id ->
                         onStateChange(id, "", "", "", "")
                     },
-                    noResultsText = "No saved contacts match. Create a new contact below instead.",
+                    noResultsText = "No saved clients match. Create a new client below instead.",
                 )
             }
 
             Spacer(modifier = Modifier.height(spacing.section))
 
             LeadActionSubsection(
-                title = "Create new contact",
-                description = "For prospects who are not saved yet. They become a contact when you make a customer.",
+                title = "Create new client",
+                description = "For prospects who are not saved yet. They become a client when you make a customer.",
                 spacing = spacing,
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     GlideOutlinedField(
-                        value = contactName,
+                        value = clientName,
                         onValueChange = { onStateChange(null, it, dateOfBirth, email, phone) },
-                        label = "New contact name",
+                        label = "New client name",
                     )
                     Spacer(modifier = Modifier.height(spacing.field))
                     DateOfBirthField(
                         value = dateOfBirth,
-                        onValueChange = { onStateChange(null, contactName, it, email, phone) },
+                        onValueChange = { onStateChange(null, clientName, it, email, phone) },
                     )
                     Spacer(modifier = Modifier.height(spacing.field))
                     GlideOutlinedField(
                         value = email,
-                        onValueChange = { onStateChange(null, contactName, dateOfBirth, it, phone) },
-                        label = "New contact email",
+                        onValueChange = { onStateChange(null, clientName, dateOfBirth, it, phone) },
+                        label = "New client email",
                     )
                     Spacer(modifier = Modifier.height(spacing.field))
                     GlideOutlinedField(
                         value = phone,
-                        onValueChange = { onStateChange(null, contactName, dateOfBirth, email, it) },
-                        label = "New contact phone",
+                        onValueChange = { onStateChange(null, clientName, dateOfBirth, email, it) },
+                        label = "New client phone",
                     )
                 }
             }
@@ -119,7 +119,7 @@ fun LeadMainContactSection(
     }
 }
 
-private fun Contact.toSearchItem() = SearchResultItem(
+private fun Client.toSearchItem() = SearchResultItem(
     id = id,
     primaryLabel = formatPersonLabel(name, dateOfBirth),
     secondaryLabel = listOf(email, phone).filter { it.isNotBlank() }.joinToString(" · ").takeIf { it.isNotBlank() },

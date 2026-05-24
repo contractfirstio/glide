@@ -11,7 +11,7 @@ object PanelZOrder {
         PanelSlots.LEADS,
         PanelSlots.PLANS,
         PanelSlots.RELATED,
-        PanelSlots.PEOPLE,
+        PanelSlots.CLIENTS,
         PanelSlots.CUSTOMERS,
     )
 

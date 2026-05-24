@@ -46,8 +46,8 @@ import glide.data.AppViewMode
 import glide.data.AppViewState
 import glide.data.BillStore
 import glide.data.BillingPanelState
-import glide.data.ContactStore
-import glide.data.ContactsPanelState
+import glide.data.ClientStore
+import glide.data.ClientsPanelState
 import glide.data.LocationStore
 import glide.data.PlansPanelState
 import glide.data.RelatedPanelState
@@ -63,7 +63,7 @@ import glide.data.ScheduledClassStore
 import glide.model.formatMoney
 import glide.data.classAttendeeCount
 import glide.data.memberCount
-import glide.data.resolveMainContact
+import glide.data.resolveMainClient
 import glide.data.resolveRelatedPeople
 import glide.model.PeopleGroup
 import glide.model.PeopleGroupStatus
@@ -114,7 +114,7 @@ data class PeopleGroupPanelUi(
 
 private val LeadsPanelUi = PeopleGroupPanelUi(
     type = PeopleGroupType.LEAD,
-    subtitle = "Manage leads, link existing contacts, and search to add related people.",
+    subtitle = "Manage leads, link existing clients, and search to add related people.",
     emptyListMessage = "No leads yet.",
     newButtonLabel = "New lead",
     createFormTitle = "Create lead",
@@ -147,7 +147,7 @@ private val CustomersPanelUi = PeopleGroupPanelUi(
     noSelectionMessage = "Select a customer group to view.",
     deleteConfirmTitle = "Revert sold plan to lead?",
     deleteConfirmMessage = "Billing and class enrollment for this sold plan will be removed. " +
-        "The household will become a lead again with the same contact and plan selection.",
+        "The household will become a lead again with the same client and plan selection.",
     showClearSelection = true,
 )
 
@@ -162,8 +162,8 @@ fun CustomersPeopleGroupPanel(modifier: Modifier = Modifier) {
 }
 
 private data class PeopleGroupFormState(
-    val mainContactId: String? = null,
-    val contactName: String = "",
+    val mainClientId: String? = null,
+    val clientName: String = "",
     val dateOfBirth: String = "",
     val email: String = "",
     val phone: String = "",
@@ -171,12 +171,12 @@ private data class PeopleGroupFormState(
     val status: PeopleGroupStatus = PeopleGroupStatus.New,
     val planId: String? = null,
     val planStartDate: String = "",
-    val mainContactAttendsClass: Boolean = true,
+    val mainClientAttendsClass: Boolean = true,
     val notes: String = "",
 ) {
     fun isValidForLead(): Boolean =
-        (mainContactId != null && ContactStore.findById(mainContactId) != null) ||
-            contactName.isNotBlank()
+        (mainClientId != null && ClientStore.findById(mainClientId) != null) ||
+            clientName.isNotBlank()
 
     fun hasPlanSelected(): Boolean = !planId.isNullOrBlank()
 
@@ -186,20 +186,20 @@ private data class PeopleGroupFormState(
         createdAtMillis: Long = System.currentTimeMillis(),
     ): PeopleGroup {
         val isCustomer = type == PeopleGroupType.CUSTOMER
-        val linkedContact = !isCustomer && mainContactId != null
+        val linkedClient = !isCustomer && mainClientId != null
         return PeopleGroup(
             id = existingId ?: UUID.randomUUID().toString(),
             type = type,
-            mainContactId = if (isCustomer || linkedContact) mainContactId else null,
-            contactName = if (isCustomer || linkedContact) "" else contactName.trim(),
-            dateOfBirth = if (isCustomer || linkedContact) "" else dateOfBirth.trim(),
-            email = if (isCustomer || linkedContact) "" else email.trim(),
-            phone = if (isCustomer || linkedContact) "" else phone.trim(),
+            mainClientId = if (isCustomer || linkedClient) mainClientId else null,
+            clientName = if (isCustomer || linkedClient) "" else clientName.trim(),
+            dateOfBirth = if (isCustomer || linkedClient) "" else dateOfBirth.trim(),
+            email = if (isCustomer || linkedClient) "" else email.trim(),
+            phone = if (isCustomer || linkedClient) "" else phone.trim(),
             relatedPersonIds = relatedPersonIds,
             status = status,
             planId = planId,
             planStartDate = planStartDate.trim(),
-            mainContactAttendsClass = mainContactAttendsClass,
+            mainClientAttendsClass = mainClientAttendsClass,
             notes = notes.trim(),
             createdAtMillis = createdAtMillis,
         )
@@ -216,10 +216,10 @@ private fun soldDisabledReason(
         isDirty -> "Save changes before marking as sold."
         else -> {
             val group = groupId?.let { PeopleGroupStore.findById(it) }
-            val main = group?.resolveMainContact()
+            val main = group?.resolveMainClient()
             when {
                 main == null || main.name.isBlank() ->
-                    "Main contact name is required before marking as sold."
+                    "Main client name is required before marking as sold."
                 main.email.isBlank() || main.phone.isBlank() ->
                     "Email and phone are required before marking as sold."
                 !hasPlanSelected -> "Select a plan above to enable Sold."
@@ -249,8 +249,8 @@ private fun PeopleGroupPanel(
     var formError by remember { mutableStateOf<String?>(null) }
     var cloneMessage by remember { mutableStateOf<String?>(null) }
 
-    val contactFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
-        ContactsPanelState.selectedContactId
+    val clientFilterId = if (ui.type == PeopleGroupType.CUSTOMER) {
+        ClientsPanelState.selectedClientId
     } else {
         null
     }
@@ -296,9 +296,9 @@ private fun PeopleGroupPanel(
             locationId = soldPlansLocationFilterId,
         )
         ui.type == PeopleGroupType.LEAD -> PeopleGroupStore.leads
-        else -> PeopleGroupStore.forCustomersPanel(contactFilterId, relatedFilterId, planFilterId)
+        else -> PeopleGroupStore.forCustomersPanel(clientFilterId, relatedFilterId, planFilterId)
     }
-    val contactFilterLabel = contactFilterId?.let { ContactStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+    val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val relatedFilterLabel = relatedFilterId?.let {
         RelatedPersonStore.findById(it)?.name?.takeIf { it.isNotBlank() }
@@ -340,19 +340,19 @@ private fun PeopleGroupPanel(
     fun loadIntoForm(group: PeopleGroup) {
         selectedId = group.id
         isCreating = false
-        val main = group.resolveMainContact()
+        val main = group.resolveMainClient()
         form.load(
             PeopleGroupFormState(
-                mainContactId = group.mainContactId,
-                contactName = if (group.mainContactId != null) "" else main.name,
-                dateOfBirth = if (group.mainContactId != null) "" else main.dateOfBirth,
-                email = if (group.mainContactId != null) "" else main.email,
-                phone = if (group.mainContactId != null) "" else main.phone,
+                mainClientId = group.mainClientId,
+                clientName = if (group.mainClientId != null) "" else main.name,
+                dateOfBirth = if (group.mainClientId != null) "" else main.dateOfBirth,
+                email = if (group.mainClientId != null) "" else main.email,
+                phone = if (group.mainClientId != null) "" else main.phone,
                 relatedPersonIds = group.relatedPersonIds,
                 status = group.status,
                 planId = group.planId,
                 planStartDate = group.planStartDate.ifBlank { todayIsoDate() },
-                mainContactAttendsClass = group.mainContactAttendsClass,
+                mainClientAttendsClass = group.mainClientAttendsClass,
                 notes = group.notes,
             ),
         )
@@ -391,10 +391,10 @@ private fun PeopleGroupPanel(
         }
     }
 
-    LaunchedEffect(contactFilterId, planFilterId, relatedFilterId, classFilterId, soldPlanFilterId, soldPlansTermFilterId, soldPlansLocationFilterId) {
+    LaunchedEffect(clientFilterId, planFilterId, relatedFilterId, classFilterId, soldPlanFilterId, soldPlansTermFilterId, soldPlansLocationFilterId) {
         if (ui.type == PeopleGroupType.CUSTOMER && soldPlanFilterId != null) return@LaunchedEffect
         if (ui.type == PeopleGroupType.CUSTOMER &&
-            (contactFilterId != null || planFilterId != null || relatedFilterId != null ||
+            (clientFilterId != null || planFilterId != null || relatedFilterId != null ||
                 classFilterId != null || soldPlansTermFilterId != null || soldPlansLocationFilterId != null) &&
             selectedId != null
         ) {
@@ -403,7 +403,7 @@ private fun PeopleGroupPanel(
     }
 
     LaunchedEffect(
-        contactFilterId,
+        clientFilterId,
         planFilterId,
         relatedFilterId,
         classFilterId,
@@ -460,8 +460,8 @@ private fun PeopleGroupPanel(
                             val label = relatedFilterLabel ?: "this related person"
                             "Showing customer groups for $label. Use Clear filter in Related to reset."
                         }
-                        ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null -> {
-                            val label = contactFilterLabel ?: "this contact"
+                        ui.type == PeopleGroupType.CUSTOMER && clientFilterId != null -> {
+                            val label = clientFilterLabel ?: "this client"
                             "Showing customer groups for $label. Use Clear filter to reset."
                         }
                         schedulingSoldPlansPanel ->
@@ -511,8 +511,8 @@ private fun PeopleGroupPanel(
                                     Text("Clear filter")
                                 }
                             }
-                            if (ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null) {
-                                GlideTextButton(onClick = { ContactsPanelState.clearContactFilter() }) {
+                            if (ui.type == PeopleGroupType.CUSTOMER && clientFilterId != null) {
+                                GlideTextButton(onClick = { ClientsPanelState.clearClientFilter() }) {
                                     Text("Clear filter")
                                 }
                             }
@@ -553,8 +553,8 @@ private fun PeopleGroupPanel(
                                         "No customer groups on this plan."
                                     ui.type == PeopleGroupType.CUSTOMER && relatedFilterId != null ->
                                         "No customer groups for this related person."
-                                    ui.type == PeopleGroupType.CUSTOMER && contactFilterId != null ->
-                                        "No customer groups for this contact."
+                                    ui.type == PeopleGroupType.CUSTOMER && clientFilterId != null ->
+                                        "No customer groups for this client."
                                     schedulingSoldPlansPanel && classFilterId != null ->
                                         "No sold plans on this class."
                                     schedulingSoldPlansPanel && soldPlansTermFilterId != null ->
@@ -617,7 +617,7 @@ private fun PeopleGroupPanel(
                             }
                             isCreating -> ui.createFormTitle
                             schedulingSoldPlansPanel && selectedGroup != null -> {
-                                val main = selectedGroup.resolveMainContact()
+                                val main = selectedGroup.resolveMainClient()
                                 val plan = planNameForGroup(selectedGroup)
                                 if (main.name.isNotBlank()) "$plan · ${main.name}" else plan
                             }
@@ -744,7 +744,7 @@ private fun PeopleGroupPanel(
                                     onClick = {
                                         formError = null
                                         if (ui.type == PeopleGroupType.LEAD && !form.draft.isValidForLead()) {
-                                            formError = "Link a contact or enter a new contact name."
+                                            formError = "Link a client or enter a new client name."
                                             return@GlideButton
                                         }
                                         if (isCreating && ui.allowCreate) {
@@ -777,7 +777,7 @@ private fun PeopleGroupPanel(
                                     GlideOutlinedButton(
                                         onClick = {
                                             if (!form.draft.isValidForLead()) {
-                                                formError = "Main contact name is required."
+                                                formError = "Main client name is required."
                                                 return@GlideOutlinedButton
                                             }
                                             if (!form.draft.hasPlanSelected()) {
@@ -902,10 +902,10 @@ private fun PeopleGroupListItem(
                 vertical = spacing.listItemVertical,
             ),
     ) {
-        val main = group.resolveMainContact()
+        val main = group.resolveMainClient()
         if (emphasizePlan) {
             Text(
-                text = main.name.ifBlank { "Unknown contact" },
+                text = main.name.ifBlank { "Unknown client" },
                 style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 color = glideListItemTitleColor(selected),
@@ -1135,21 +1135,21 @@ private fun CustomerGroupDetailView(
         ReadOnlyPlanSection(planId = group.planId, prominent = false)
     }
 
-    FormPanelSectionsDivider(label = "People on this plan", spacing = spacing)
+    FormPanelSectionsDivider(label = "Clients on this plan", spacing = spacing)
 
     FormPanelSection(
-        title = "Main contact",
+        title = "Main client",
         description = "The primary person for billing and household identity.",
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {
-        ReadOnlyMainContactSection(contactId = group.mainContactId, showLabel = false)
+        ReadOnlyMainClientSection(clientId = group.mainClientId, showLabel = false)
         Spacer(modifier = Modifier.height(spacing.field))
         Text(
-            text = if (group.mainContactAttendsClass) {
-                "Main contact attends class"
+            text = if (group.mainClientAttendsClass) {
+                "Main client attends class"
             } else {
-                "Main contact does not attend class"
+                "Main client does not attend class"
             },
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
@@ -1165,7 +1165,7 @@ private fun CustomerGroupDetailView(
 
     FormPanelSection(
         title = "Related people",
-        description = "Others on this plan besides the main contact.",
+        description = "Others on this plan besides the main client.",
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
@@ -1240,7 +1240,7 @@ private fun CustomerGroupDetailView(
 }
 
 @Composable
-private fun LeadMainContactAttendsField(
+private fun LeadMainClientAttendsField(
     attends: Boolean,
     onAttendsChange: (Boolean) -> Unit,
 ) {
@@ -1257,15 +1257,15 @@ private fun LeadMainContactAttendsField(
         )
         Column(modifier = Modifier.padding(start = 4.dp)) {
             Text(
-                text = "Main contact attends class",
+                text = "Main client attends class",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium,
             )
             Text(
                 text = if (attends) {
-                    "Main contact counts toward room capacity when this group is on a class."
+                    "Main client counts toward room capacity when this group is on a class."
                 } else {
-                    "Only related people attend; main contact is not counted on classes."
+                    "Only related people attend; main client is not counted on classes."
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1288,19 +1288,19 @@ private fun PeopleGroupForm(
     var statusExpanded by remember { mutableStateOf(false) }
 
     if (isCustomerGroup) {
-        ReadOnlyMainContactSection(contactId = state.mainContactId)
+        ReadOnlyMainClientSection(clientId = state.mainClientId)
     } else {
-        LeadMainContactSection(
-            mainContactId = state.mainContactId,
-            contactName = state.contactName,
+        LeadMainClientSection(
+            mainClientId = state.mainClientId,
+            clientName = state.clientName,
             dateOfBirth = state.dateOfBirth,
             email = state.email,
             phone = state.phone,
-            onStateChange = { contactId, name, dob, email, phone ->
+            onStateChange = { clientId, name, dob, email, phone ->
                 onStateChange(
                     state.copy(
-                        mainContactId = contactId,
-                        contactName = name,
+                        mainClientId = clientId,
+                        clientName = name,
                         dateOfBirth = dob,
                         email = email,
                         phone = phone,
@@ -1347,17 +1347,17 @@ private fun PeopleGroupForm(
             )
             if (!isCustomerGroup) {
                 Spacer(modifier = Modifier.height(spacing.field))
-                LeadMainContactAttendsField(
-                    attends = state.mainContactAttendsClass,
-                    onAttendsChange = { onStateChange(state.copy(mainContactAttendsClass = it)) },
+                LeadMainClientAttendsField(
+                    attends = state.mainClientAttendsClass,
+                    onAttendsChange = { onStateChange(state.copy(mainClientAttendsClass = it)) },
                 )
             }
         }
     } else if (!isCustomerGroup) {
         Spacer(modifier = Modifier.height(spacing.field))
-        LeadMainContactAttendsField(
-            attends = state.mainContactAttendsClass,
-            onAttendsChange = { onStateChange(state.copy(mainContactAttendsClass = it)) },
+        LeadMainClientAttendsField(
+            attends = state.mainClientAttendsClass,
+            onAttendsChange = { onStateChange(state.copy(mainClientAttendsClass = it)) },
         )
     }
 

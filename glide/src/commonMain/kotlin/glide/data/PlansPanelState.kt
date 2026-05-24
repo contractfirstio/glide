@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 /**
- * Cross-panel state from the Plans panel — filters customer groups, contacts, and related
+ * Cross-panel state from the Plans panel — filters customer groups, clients, and related
  * people for [selectedPlanId].
  */
 object PlansPanelState {
@@ -15,7 +15,7 @@ object PlansPanelState {
     fun onPlanSelected(planId: String) {
         if (PlanStore.findById(planId) != null) {
             BillingPanelState.onCustomerGroupCleared()
-            ContactsPanelState.clearContactFilter()
+            ClientsPanelState.clearClientFilter()
             RelatedPanelState.clearRelatedPersonFilter()
             selectedPlanId = planId
         }

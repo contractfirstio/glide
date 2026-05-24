@@ -52,7 +52,7 @@ private fun PlanEnrollment.toUnassignedSoldPlanOrNull(): UnassignedSoldPlan? {
     val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
     if (group.type != PeopleGroupType.CUSTOMER) return null
     if (ScheduledClassStore.findClassContainingCustomerGroup(peopleGroupId) != null) return null
-    val main = group.resolveMainContact()
+    val main = group.resolveMainClient()
     val customerLabel = main.name.ifBlank { "Customer" }
     val planName = planSnapshot.planName.takeIf { it.isNotBlank() } ?: "Plan"
     return UnassignedSoldPlan(

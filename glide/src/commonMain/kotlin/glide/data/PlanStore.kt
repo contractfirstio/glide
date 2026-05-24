@@ -50,11 +50,11 @@ object PlanStore {
 
     /**
      * Plans for the Plans panel — all plans, the plan on [customerGroupId], or plans used on
-     * groups linked to [contactId] or [relatedPersonId].
+     * groups linked to [clientId] or [relatedPersonId].
      */
     fun forPlansPanel(
         customerGroupId: String? = null,
-        contactId: String? = null,
+        clientId: String? = null,
         relatedPersonId: String? = null,
     ): List<Plan> {
         val planIds = when {
@@ -63,9 +63,9 @@ object PlanStore {
                     ?.planId
                     ?.let { listOf(it) }
                     ?: emptyList()
-            contactId != null ->
+            clientId != null ->
                 PeopleGroupStore.all
-                    .filter { it.mainContactId == contactId }
+                    .filter { it.mainClientId == clientId }
                     .mapNotNull { it.planId }
                     .distinct()
             relatedPersonId != null ->

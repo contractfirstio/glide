@@ -20,7 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import glide.data.ContactStore
+import glide.data.ClientStore
 import glide.data.PlanStore
 import glide.data.RelatedPersonStore
 import glide.model.RelatedPerson
@@ -31,41 +31,41 @@ import glide.ui.theme.GlideFieldLabel
 import glide.ui.theme.GlideTextButton
 
 @Composable
-fun ReadOnlyMainContactSection(
-    contactId: String?,
+fun ReadOnlyMainClientSection(
+    clientId: String?,
     modifier: Modifier = Modifier,
     showLabel: Boolean = true,
 ) {
-    val contact = contactId?.let { ContactStore.findById(it) }
+    val client = clientId?.let { ClientStore.findById(it) }
     Column(modifier = modifier) {
         if (showLabel) {
-            GlideFieldLabel("Main contact")
+            GlideFieldLabel("Main client")
             Spacer(modifier = Modifier.height(2.dp))
         }
-        if (contact == null) {
+        if (client == null) {
             Text(
-                text = "No main contact linked.",
+                text = "No main client linked.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
             Text(
-                text = formatPersonLabel(contact.name, contact.dateOfBirth),
+                text = formatPersonLabel(client.name, client.dateOfBirth),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
             )
-            if (contact.email.isNotBlank()) {
+            if (client.email.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = contact.email,
+                    text = client.email,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (contact.phone.isNotBlank()) {
+            if (client.phone.isNotBlank()) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = contact.phone,
+                    text = client.phone,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -73,7 +73,7 @@ fun ReadOnlyMainContactSection(
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Edit this person's details in the People panel.",
+            text = "Edit this client's details in the Clients panel.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

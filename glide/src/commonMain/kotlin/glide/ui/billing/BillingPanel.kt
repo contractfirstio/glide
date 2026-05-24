@@ -56,7 +56,7 @@ import glide.data.PaymentStore
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
 import glide.data.memberCount
-import glide.data.resolveMainContact
+import glide.data.resolveMainClient
 import glide.model.Bill
 import glide.model.BillLineItem
 import glide.model.BillLineItemKind
@@ -90,7 +90,7 @@ import java.util.Locale
 
 fun billingPanelTitle(peopleGroupId: String): String {
     val group = PeopleGroupStore.findById(peopleGroupId) ?: return "Billing"
-    val main = group.resolveMainContact()
+    val main = group.resolveMainClient()
     val planName = group.planId?.let { PlanStore.findById(it)?.name }
     return when {
         planName != null -> "Billing — $planName"
@@ -147,7 +147,7 @@ fun BillingPanel(
             return@Column
         }
 
-        val main = group.resolveMainContact()
+        val main = group.resolveMainClient()
         Text(
             text = buildString {
                 append(main.name.ifBlank { "Customer group" })

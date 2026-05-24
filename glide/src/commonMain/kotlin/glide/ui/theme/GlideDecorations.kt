@@ -17,7 +17,7 @@ object GlideAccents {
     val Leads = Color(0xFF8CB4DC)
     val Plans = Color(0xFF9EB8C8)
     val Related = Color(0xFF9AAFD4)
-    val People = Color(0xFF8EC4D4)
+    val Clients = Color(0xFF8EC4D4)
     val Customers = Color(0xFFA8C0D0)
     val Billing = Color(0xFFB8C8A0)
     val Schedule = Color(0xFF9BC4B8)
@@ -32,7 +32,7 @@ object GlideAccents {
             PanelSlots.LEADS -> Leads
             PanelSlots.PLANS -> Plans
             PanelSlots.RELATED -> Related
-            PanelSlots.PEOPLE -> People
+            PanelSlots.CLIENTS -> Clients
             PanelSlots.CUSTOMERS -> Customers
             PanelSlots.BILLING -> Billing
             else -> Leads

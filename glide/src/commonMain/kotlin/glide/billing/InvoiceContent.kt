@@ -7,7 +7,7 @@ import glide.data.PeopleGroupStore
 import glide.data.ensureLineItems
 import glide.data.grossAmountMinorResolved
 import glide.data.planLineDescription
-import glide.data.resolveMainContact
+import glide.data.resolveMainClient
 import glide.model.Bill
 import glide.model.BillLineItemKind
 import glide.model.IssuedInvoiceClassSchedule
@@ -71,7 +71,7 @@ fun Bill.toInvoiceContent(): InvoiceContent? {
 /** Builds invoice content from current stores without reconciling credits or reading a stored snapshot. */
 fun Bill.toLiveInvoiceContent(): InvoiceContent? {
     val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
-    val main = group.resolveMainContact()
+    val main = group.resolveMainClient()
     val bill = ensureLineItems()
     val (debitLines, creditLines) = if (bill.lineItems.isNotEmpty()) {
         bill.lineItems.partition { it.kind == BillLineItemKind.DEBIT }.let { (debits, credits) ->
