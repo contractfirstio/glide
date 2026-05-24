@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -62,6 +63,7 @@ import glide.data.PlanStore
 import glide.data.ScheduledClassStore
 import glide.model.formatMoney
 import glide.data.classAttendeeCount
+import glide.data.hasResolvableMainClient
 import glide.data.memberCount
 import glide.data.resolveMainClient
 import glide.data.resolveStudents
@@ -465,7 +467,7 @@ private fun PeopleGroupPanel(
                             "Showing customer groups for $label. Use Clear filter to reset."
                         }
                         schedulingSoldPlansPanel ->
-                            "Select a sold plan to see class assignment and balance."
+                            "Select a sold plan to see its students."
                         else -> ui.subtitle
                     },
                     style = MaterialTheme.typography.bodySmall,
@@ -611,16 +613,12 @@ private fun PeopleGroupPanel(
                     Text(
                         text = when {
                             !showForm -> if (schedulingSoldPlansPanel) {
-                                "Sold plan details"
+                                "Students"
                             } else {
                                 ui.editFormTitle
                             }
                             isCreating -> ui.createFormTitle
-                            schedulingSoldPlansPanel && selectedGroup != null -> {
-                                val main = selectedGroup.resolveMainClient()
-                                val plan = planNameForGroup(selectedGroup)
-                                if (main.name.isNotBlank()) "$plan · ${main.name}" else plan
-                            }
+                            schedulingSoldPlansPanel && selectedGroup != null -> "Students"
                             else -> ui.editFormTitle
                         },
                         style = MaterialTheme.typography.titleSmall,
@@ -641,7 +639,7 @@ private fun PeopleGroupPanel(
                         ) {
                             Text(
                                 text = if (schedulingSoldPlansPanel) {
-                                    "Select a sold plan to see which class it is on and any outstanding balance."
+                                    "Select a sold plan to see its students."
                                 } else {
                                     ui.noSelectionMessage
                                 },
@@ -663,7 +661,6 @@ private fun PeopleGroupPanel(
                                         SchedulingSoldPlanDetailView(
                                             group = group,
                                             spacing = spacing,
-                                            onDelete = { showDeleteConfirm = true },
                                         )
                                     } else {
                                         CustomerGroupDetailView(
@@ -1062,57 +1059,59 @@ private fun SoldPlanDeleteSection(
 private fun SchedulingSoldPlanDetailView(
     group: PeopleGroup,
     spacing: GlideLayout.Spacing,
-    onDelete: () -> Unit,
 ) {
-    val enrollment = PlanEnrollmentStore.displayForPeopleGroup(group.id)
-    val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
-    val currencyCode = enrollment?.planSnapshot?.currencyCode
-    val scheduledClass = ScheduledClassStore.findClassContainingCustomerGroup(group.id)
-
     FormPanelSection(
-        title = planNameForGroup(group),
-        description = "Class assignment and plan balance.",
+        title = "Students",
+        description = "Students on this sold plan. The client is highlighted when they attend class too.",
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {
-        GlideFieldLabel("Class")
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = scheduledClass?.name?.takeIf { it.isNotBlank() } ?: "Not assigned to a class",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = if (scheduledClass != null) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
-        Spacer(modifier = Modifier.height(spacing.field))
-        GlideFieldLabel("Outstanding balance")
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = when {
-                enrollment == null -> "No billing enrollment"
-                outstanding > 0 -> formatMoney(
-                    outstanding,
-                    currencyCode ?: enrollment.planSnapshot.currencyCode,
-                )
-                else -> "No outstanding bills"
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = when {
-                enrollment == null -> MaterialTheme.colorScheme.onSurfaceVariant
-                outstanding > 0 -> MaterialTheme.colorScheme.error
-                else -> MaterialTheme.colorScheme.primary
-            },
-        )
+        SchedulingSoldPlanStudentsSection(group = group, spacing = spacing)
     }
-    SoldPlanDeleteSection(
-        groupId = group.id,
-        spacing = spacing,
-        onDelete = onDelete,
-    )
+}
+
+@Composable
+private fun SchedulingSoldPlanStudentsSection(
+    group: PeopleGroup,
+    spacing: GlideLayout.Spacing,
+) {
+    val clientAttends = group.mainClientAttendsClass && group.hasResolvableMainClient()
+    if (clientAttends) {
+        val main = group.resolveMainClient()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.small)
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .padding(
+                    horizontal = spacing.listItemHorizontal,
+                    vertical = spacing.listItemVertical,
+                ),
+        ) {
+            Text(
+                text = "Client",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = formatPersonLabel(main.name, main.dateOfBirth),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Also attends class",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Spacer(modifier = Modifier.height(spacing.field))
+    }
+    ReadOnlyStudentsSection(studentIds = group.studentIds, showLabel = false)
 }
 
 @Composable
