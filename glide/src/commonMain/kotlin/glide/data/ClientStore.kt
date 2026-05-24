@@ -46,11 +46,6 @@ object ClientStore {
         _clients.add(client)
     }
 
-    /** Sample / dev data only. */
-    internal fun seed(client: Client) {
-        _clients.add(client)
-    }
-
     fun update(client: Client) {
         val index = _clients.indexOfFirst { it.id == client.id }
         if (index >= 0) {

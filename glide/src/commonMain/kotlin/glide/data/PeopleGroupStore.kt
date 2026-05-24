@@ -54,18 +54,6 @@ object PeopleGroupStore {
         }
     }
 
-    /** Sample / dev data only — inserts an already-converted customer group. */
-    internal fun seedCustomer(group: PeopleGroup) {
-        require(group.type == PeopleGroupType.CUSTOMER) {
-            "Seed customer groups must have type CUSTOMER."
-        }
-        require(group.mainClientId != null) { "Seed customer groups need a main client." }
-        require(ClientStore.findById(group.mainClientId) != null) {
-            "Seed customer main client must exist."
-        }
-        _groups.add(group)
-    }
-
     fun create(group: PeopleGroup) {
         require(group.type == PeopleGroupType.LEAD) {
             "People groups must be created as leads first."

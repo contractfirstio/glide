@@ -1,5 +1,6 @@
 package glide.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -16,8 +17,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import glide.data.AppViewMode
 import glide.data.AppViewState
+import glide.generated.resources.Res
+import glide.generated.resources.glide_logo
 import glide.ui.layout.GlideLayout
 import glide.ui.theme.GlideOutlinedButton
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun AppChrome(modifier: Modifier = Modifier) {
@@ -38,10 +42,10 @@ fun AppChrome(modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(
-            text = "Glide",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+        Image(
+            painter = painterResource(Res.drawable.glide_logo),
+            contentDescription = "Glide",
+            modifier = Modifier.height(28.dp),
         )
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),

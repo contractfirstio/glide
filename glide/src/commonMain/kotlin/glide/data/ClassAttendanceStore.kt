@@ -130,15 +130,4 @@ object ClassAttendanceStore {
         _records.removeAll { it.scheduledClassId == scheduledClassId }
         _submittedSessions.removeAll { it.scheduledClassId == scheduledClassId }
     }
-
-    fun seed(record: ClassAttendanceRecord) {
-        if (_records.none {
-                it.scheduledClassId == record.scheduledClassId &&
-                    it.sessionDate == record.sessionDate &&
-                    it.attendeeKey == record.attendeeKey
-            }
-        ) {
-            _records.add(record)
-        }
-    }
 }
