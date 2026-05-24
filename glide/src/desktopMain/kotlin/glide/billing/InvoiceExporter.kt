@@ -1,15 +1,14 @@
 package glide.billing
 
 import glide.model.Bill
-import java.awt.Desktop
-import java.io.File
 
 actual object InvoiceExporter {
-    actual fun exportInvoice(bill: Bill) {
-        val content = bill.toInvoiceContent() ?: return
-        val file = runCatching { InvoicePdfWriter.write(content, bill.id) }.getOrNull() ?: return
-        if (Desktop.isDesktopSupported()) {
-            runCatching { Desktop.getDesktop().open(file) }
+    actual fun exportInvoice(bill: Bill): InvoiceExportResult {
+        val content = bill.toInvoiceContent()
+            ?: return InvoiceExportResult.Failure("Could not build invoice.")
+        val file = runCatching { InvoicePdfWriter.write(content, bill.id) }.getOrElse {
+            return InvoiceExportResult.Failure("Could not write invoice PDF.")
         }
+        return InvoiceEmailComposer.compose(content, file)
     }
 }

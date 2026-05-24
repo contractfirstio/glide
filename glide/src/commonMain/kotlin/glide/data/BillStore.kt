@@ -1,6 +1,7 @@
 package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
+import glide.billing.InvoiceExportResult
 import glide.billing.InvoiceExporter
 import glide.billing.toIssuedInvoiceSnapshot
 import glide.billing.toLiveInvoiceContent
@@ -161,18 +162,21 @@ object BillStore {
         return true
     }
 
-    fun generateInvoice(billId: String): Boolean {
-        if (!AppSettingsStore.isConfigured) return false
-        val bill = findById(billId) ?: return false
-        if (hasOutstandingAttendanceSubmissions()) return false
-        if (soldPackBlocksBillIssuance(bill.peopleGroupId)) return false
+    /** Returns an error message on failure, or null on success. */
+    fun generateInvoice(billId: String): String? {
+        if (!AppSettingsStore.isConfigured) return "Company settings are not configured."
+        val bill = findById(billId) ?: return "Bill not found."
+        if (hasOutstandingAttendanceSubmissions()) return "Could not generate invoice."
+        if (soldPackBlocksBillIssuance(bill.peopleGroupId)) return "Could not generate invoice."
         val exportBill = if (bill.issuedInvoiceSnapshot != null) {
             bill
         } else {
-            reconcileBillCredits(billId) ?: return false
+            reconcileBillCredits(billId) ?: return "Could not prepare invoice."
         }
-        InvoiceExporter.exportInvoice(exportBill)
-        return true
+        return when (val result = InvoiceExporter.exportInvoice(exportBill)) {
+            is InvoiceExportResult.Success -> null
+            is InvoiceExportResult.Failure -> result.message
+        }
     }
 
     fun markPaid(billId: String, paidAtMillis: Long = System.currentTimeMillis()): Boolean {

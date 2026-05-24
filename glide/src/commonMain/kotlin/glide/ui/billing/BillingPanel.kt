@@ -320,17 +320,7 @@ fun BillingPanel(
                                 billingActionMessage = soldPackBlocksBillIssuanceMessage()
                                 return@BillRow
                             }
-                            if (!BillStore.generateInvoice(bill.id)) {
-                                billingActionMessage = when {
-                                    billingBlockedByAttendance ->
-                                        attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                                    billingBlockedByUnassignedClass ->
-                                        soldPackBlocksBillIssuanceMessage()
-                                    else -> "Could not generate invoice."
-                                }
-                            } else {
-                                billingActionMessage = null
-                            }
+                            billingActionMessage = BillStore.generateInvoice(bill.id)
                         },
                     )
                     Spacer(modifier = Modifier.height(2.dp))
@@ -361,17 +351,7 @@ fun BillingPanel(
                                 billingActionMessage = soldPackBlocksBillIssuanceMessage()
                                 return@BillDetailActions
                             }
-                            if (!BillStore.generateInvoice(selectedBill.id)) {
-                                billingActionMessage = when {
-                                    billingBlockedByAttendance ->
-                                        attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                                    billingBlockedByUnassignedClass ->
-                                        soldPackBlocksBillIssuanceMessage()
-                                    else -> "Could not generate invoice."
-                                }
-                            } else {
-                                billingActionMessage = null
-                            }
+                            billingActionMessage = BillStore.generateInvoice(selectedBill.id)
                         },
                     )
                 }
