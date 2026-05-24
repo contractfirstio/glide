@@ -54,6 +54,11 @@ import glide.data.validatePackSchedulesForClass
 import glide.data.validateRollingPackEnrollmentsForClass
 import glide.data.peopleGroupHasRollingPack
 import glide.data.canAcceptRollingPackEnrollments
+import glide.data.PackScheduleAssignment
+import glide.data.assignWeeklyPackClassSchedule
+import glide.data.requiredClassSessionsForPack
+import glide.data.validateWeeklyPlanFitsClass
+import glide.model.isWeekly
 import glide.data.PackEnrollmentStore
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
@@ -61,6 +66,7 @@ import glide.data.ScheduledClassStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
 import glide.data.resolveMainContact
+import glide.data.toScheduleMessage
 import glide.data.toUserMessage
 import glide.model.ClassLocation
 import glide.model.PeopleGroup
@@ -591,7 +597,11 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                         }
                                         ScheduledClassStore.update(updated)
                                         updated.customerGroupIds.forEach { groupId ->
-                                            assignPackClassSchedule(groupId, updated)
+                                            if (!updated.isWeekly() ||
+                                                PackClassScheduleStore.sessionDatesFor(groupId, updated.id) == null
+                                            ) {
+                                                assignPackClassSchedule(groupId, updated)
+                                            }
                                             RollingPackBillingService.syncRollingPackBilling(groupId)
                                         }
                                         loadIntoForm(updated)
@@ -737,6 +747,13 @@ private fun ClassListItem(
     }
 }
 
+private data class PendingWeeklyPackLink(
+    val groupId: String,
+    val planName: String,
+    val requiredDays: Int,
+    val availableDays: List<DayOfWeek>,
+)
+
 @Composable
 private fun ClassCustomerGroupsSection(
     classId: String?,
@@ -749,6 +766,8 @@ private fun ClassCustomerGroupsSection(
     var searchQuery by remember { mutableStateOf("") }
     var enrollmentMessage by remember { mutableStateOf<String?>(null) }
     var pendingRemoveGroupId by remember { mutableStateOf<String?>(null) }
+    var pendingWeeklyLink by remember { mutableStateOf<PendingWeeklyPackLink?>(null) }
+    var weeklyLinkBlockedMessage by remember { mutableStateOf<String?>(null) }
 
     val classForValidation = scheduledClassForValidation
     val assignedIds = customerGroupIds
@@ -797,6 +816,37 @@ private fun ClassCustomerGroupsSection(
             onQueryChange = { searchQuery = it },
             results = searchResults,
             onSelect = { groupId ->
+                val cls = classForValidation
+                if (cls != null && cls.isWeekly()) {
+                    validateWeeklyPlanFitsClass(groupId, cls)?.let { message ->
+                        weeklyLinkBlockedMessage = message
+                        return@EntitySearchPicker
+                    }
+                    val enrollment = PackEnrollmentStore.forPeopleGroup(groupId)
+                    val requiredDays = enrollment?.let { requiredClassSessionsForPack(it.planSnapshot) }
+                    if (requiredDays == null) {
+                        enrollmentMessage = "Sold plan not found for this customer group."
+                        return@EntitySearchPicker
+                    }
+                    val preCheck = tryAddCustomerGroup(
+                        currentGroupIds = customerGroupIds,
+                        groupId = groupId,
+                        locationId = locationId,
+                        classId = classId,
+                        scheduledClass = cls,
+                    )
+                    if (preCheck != AddCustomerGroupResult.Success) {
+                        enrollmentMessage = preCheck.toUserMessage()
+                        return@EntitySearchPicker
+                    }
+                    pendingWeeklyLink = PendingWeeklyPackLink(
+                        groupId = groupId,
+                        planName = enrollment.planSnapshot.planName,
+                        requiredDays = requiredDays,
+                        availableDays = cls.weeklyDays.sortedBy { it.sortOrder },
+                    )
+                    return@EntitySearchPicker
+                }
                 val result = tryAddCustomerGroup(
                     currentGroupIds = customerGroupIds,
                     groupId = groupId,
@@ -824,7 +874,8 @@ private fun ClassCustomerGroupsSection(
                     message.contains("exceeded", ignoreCase = true) ||
                     message.contains("already", ignoreCase = true) ||
                     message.contains("Create a new term", ignoreCase = true) ||
-                    message.contains("rolling pack", ignoreCase = true)
+                    message.contains("rolling pack", ignoreCase = true) ||
+                    message.contains("requires", ignoreCase = true)
                 ) {
                     MaterialTheme.colorScheme.error
                 } else {
@@ -866,6 +917,17 @@ private fun ClassCustomerGroupsSection(
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                            classId?.let { cid ->
+                                PackClassScheduleStore.formatSessionDatesLabel(groupId, cid)?.let { scheduleLabel ->
+                                    Text(
+                                        text = scheduleLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
                         }
                         GlideTextButton(
                             onClick = { pendingRemoveGroupId = groupId },
@@ -895,6 +957,50 @@ private fun ClassCustomerGroupsSection(
                 onCustomerGroupIdsChange(customerGroupIds.filter { it != groupId })
                 enrollmentMessage = "Customer group removed from class."
                 pendingRemoveGroupId = null
+            },
+        )
+    }
+
+    weeklyLinkBlockedMessage?.let { message ->
+        WeeklyPackScheduleBlockedDialog(
+            message = message,
+            onDismiss = { weeklyLinkBlockedMessage = null },
+        )
+    }
+
+    pendingWeeklyLink?.let { pending ->
+        WeeklyPackScheduleDialog(
+            planName = pending.planName,
+            requiredDays = pending.requiredDays,
+            availableDays = pending.availableDays,
+            onDismiss = { pendingWeeklyLink = null },
+            onConfirm = { selectedDays ->
+                val cls = classForValidation ?: return@WeeklyPackScheduleDialog
+                val result = tryAddCustomerGroup(
+                    currentGroupIds = customerGroupIds,
+                    groupId = pending.groupId,
+                    locationId = locationId,
+                    classId = classId,
+                    scheduledClass = cls,
+                )
+                if (result != AddCustomerGroupResult.Success) {
+                    enrollmentMessage = result.toUserMessage()
+                    pendingWeeklyLink = null
+                    return@WeeklyPackScheduleDialog
+                }
+                val assignment = assignWeeklyPackClassSchedule(pending.groupId, cls, selectedDays)
+                if (assignment is PackScheduleAssignment.Partial ||
+                    assignment is PackScheduleAssignment.NoSessionsAvailable
+                ) {
+                    enrollmentMessage = assignment.toScheduleMessage()
+                        ?: "Could not schedule this plan on the selected days."
+                    pendingWeeklyLink = null
+                    return@WeeklyPackScheduleDialog
+                }
+                onCustomerGroupIdsChange(customerGroupIds + pending.groupId)
+                RollingPackBillingService.syncRollingPackBilling(pending.groupId)
+                enrollmentMessage = AddCustomerGroupResult.Success.toUserMessage()
+                pendingWeeklyLink = null
             },
         )
     }

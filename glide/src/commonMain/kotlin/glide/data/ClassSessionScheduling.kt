@@ -4,11 +4,15 @@ import glide.model.AcademicTerm
 import glide.model.PlanKind
 import glide.model.PlanSnapshot
 import glide.model.ScheduledClass
+import glide.model.DayOfWeek
 import glide.model.dateRange
+import glide.model.formatWeeklyDaysLabel
 import glide.model.isSingleDay
 import glide.model.isWeekly
 import glide.model.occursOn
 import glide.model.parseIsoLocalDate
+import glide.model.weekDateRangeFromIsoDate
+import glide.model.toJavaDayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -23,6 +27,65 @@ data class PackScheduleCheck(
 fun requiredClassSessionsForPack(snapshot: PlanSnapshot): Int = when (snapshot.kind) {
     PlanKind.SINGLE_LESSON_PACK -> 1
     else -> snapshot.lessonCount.coerceAtLeast(1)
+}
+
+fun validateWeeklyPlanFitsClass(peopleGroupId: String, scheduledClass: ScheduledClass): String? {
+    if (!scheduledClass.isWeekly()) return null
+    val enrollment = PackEnrollmentStore.forPeopleGroup(peopleGroupId) ?: return null
+    val required = requiredClassSessionsForPack(enrollment.planSnapshot)
+    val available = scheduledClass.weeklyDays.size
+    if (required <= available) return null
+    return "This plan requires $required days but this weekly class only runs on $available days " +
+        "(${formatWeeklyDaysLabel(scheduledClass.weeklyDays)})."
+}
+
+fun dateForDayInWeek(range: ClosedRange<LocalDate>, day: DayOfWeek): LocalDate? {
+    var date = range.start
+    while (!date.isAfter(range.endInclusive)) {
+        if (day.toJavaDayOfWeek() == date.dayOfWeek) return date
+        date = date.plusDays(1)
+    }
+    return null
+}
+
+fun weeklyClassSessionDates(
+    scheduledClass: ScheduledClass,
+    selectedDays: Collection<DayOfWeek>,
+    peopleGroupId: String? = null,
+    startFrom: LocalDate = peopleGroupId?.let { peopleGroupPackPeriodStartDate(it) } ?: packScheduleStartDate(),
+): List<String> {
+    if (!scheduledClass.isWeekly()) return emptyList()
+    val range = weekDateRangeFromIsoDate(scheduledClass.weekOfDate!!) ?: return emptyList()
+    return selectedDays
+        .sortedBy { it.sortOrder }
+        .mapNotNull { day -> dateForDayInWeek(range, day) }
+        .filter { !it.isBefore(startFrom) }
+        .map { it.toString() }
+}
+
+fun assignWeeklyPackClassSchedule(
+    peopleGroupId: String,
+    scheduledClass: ScheduledClass,
+    selectedDays: Set<DayOfWeek>,
+): PackScheduleAssignment {
+    val limit = sessionLimitForPeopleGroup(peopleGroupId)
+        ?: PackEnrollmentStore.forPeopleGroup(peopleGroupId)?.let { requiredClassSessionsForPack(it.planSnapshot) }
+        ?: return PackScheduleAssignment.NoSessionsAvailable(0)
+    if (selectedDays.size != limit) {
+        PackClassScheduleStore.remove(peopleGroupId, scheduledClass.id)
+        return PackScheduleAssignment.Partial(limit, selectedDays.size)
+    }
+    val dates = weeklyClassSessionDates(scheduledClass, selectedDays, peopleGroupId)
+    if (dates.size < limit) {
+        PackClassScheduleStore.remove(peopleGroupId, scheduledClass.id)
+        return if (dates.isEmpty()) {
+            PackScheduleAssignment.NoSessionsAvailable(limit)
+        } else {
+            PackScheduleAssignment.Partial(limit, dates.size)
+        }
+    }
+    PackClassScheduleStore.set(peopleGroupId, scheduledClass.id, dates)
+    return PackScheduleAssignment.Fixed(limit)
 }
 
 /** Earliest date a pack may be scheduled on a class (today and later). */
