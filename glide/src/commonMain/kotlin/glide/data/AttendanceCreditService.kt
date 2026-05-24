@@ -3,6 +3,7 @@ package glide.data
 import glide.model.AttendanceStatus
 import glide.model.AttendanceAttendee
 import glide.model.AttendanceSessionKey
+import glide.model.DEFAULT_CURRENCY_CODE
 import glide.model.formatMoney
 
 data class AbsentCreditPreview(
@@ -143,4 +144,4 @@ object AttendanceCreditService {
     }
 }
 
-private const val DEFAULT_CURRENCY_FALLBACK = "GBP"
+private val DEFAULT_CURRENCY_FALLBACK = DEFAULT_CURRENCY_CODE

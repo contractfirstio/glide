@@ -2,11 +2,14 @@ package glide.model
 
 import java.util.UUID
 
+import kotlinx.serialization.Serializable
+@Serializable
 enum class BillLineItemKind(val label: String) {
     DEBIT("Debit"),
     CREDIT("Credit"),
 }
 
+@Serializable
 enum class BillLineItemSource {
     /** Plan charge seeded when the bill is created. */
     PLAN,
@@ -18,6 +21,7 @@ enum class BillLineItemSource {
     LOCKED,
 }
 
+@Serializable
 data class BillLineItem(
     val id: String = UUID.randomUUID().toString(),
     val description: String,

@@ -9,12 +9,19 @@ object LocationStore {
 
     fun create(location: Location) {
         _locations.add(location)
+        persistAppData()
+    }
+
+    internal fun replaceAll(locations: List<Location>) {
+        _locations.clear()
+        _locations.addAll(locations)
     }
 
     fun update(location: Location) {
         val index = _locations.indexOfFirst { it.id == location.id }
         if (index >= 0) {
             _locations[index] = location
+            persistAppData()
         }
     }
 
@@ -26,6 +33,7 @@ object LocationStore {
     fun delete(id: String): Boolean {
         if (!canDelete(id)) return false
         _locations.removeAll { it.id == id }
+        persistAppData()
         return true
     }
 

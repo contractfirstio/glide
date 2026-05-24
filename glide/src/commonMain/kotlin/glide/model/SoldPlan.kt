@@ -2,10 +2,12 @@ package glide.model
 
 import java.util.UUID
 
+import kotlinx.serialization.Serializable
 /**
  * A sold plan is the customer unit (household / package) after lead conversion.
  * References [mainClientId] and [studentIds].
  */
+@Serializable
 data class SoldPlan(
     val id: String = UUID.randomUUID().toString(),
     val mainClientId: String,

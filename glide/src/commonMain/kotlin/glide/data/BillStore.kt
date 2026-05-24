@@ -22,6 +22,11 @@ object BillStore {
 
     val all: List<Bill> get() = _bills
 
+    internal fun replaceAll(bills: List<Bill>) {
+        _bills.clear()
+        _bills.addAll(bills)
+    }
+
     fun forEnrollment(enrollmentId: String): List<Bill> =
         _bills.filter { it.enrollmentId == enrollmentId }.sortedByDescending { it.createdAtMillis }
 
@@ -29,7 +34,8 @@ object BillStore {
         _bills.filter { it.soldPlanId == soldPlanId }.sortedByDescending { it.createdAtMillis }
 
     fun removeAllForSoldPlan(soldPlanId: String) {
-        _bills.removeAll { it.soldPlanId == soldPlanId && it.canBeVoided() }
+        val removed = _bills.removeAll { it.soldPlanId == soldPlanId && it.canBeVoided() }
+        if (removed) persistAppData()
     }
 
     fun billVoidBlockReason(billId: String): String? {
@@ -77,7 +83,9 @@ object BillStore {
             ),
         )
         _bills.add(bill)
-        return reconcileBillCredits(bill.id) ?: bill
+        val reconciled = reconcileBillCredits(bill.id) ?: bill
+        persistAppData()
+        return reconciled
     }
 
     /** Applies any unallocated credits to a scheduled bill and updates the net amount due. */
@@ -99,6 +107,7 @@ object BillStore {
         val updated = bill.recomputeFromLineItems(applied)
         if (updated != _bills[index]) {
             _bills[index] = updated
+            persistAppData()
         }
         return _bills[index]
     }
@@ -153,6 +162,7 @@ object BillStore {
         if (nextBaseItems.isEmpty()) return false
         _bills[index] = ensured.copy(lineItems = nextBaseItems)
         reconcileBillCredits(billId)
+        persistAppData()
         return true
     }
 
@@ -178,6 +188,7 @@ object BillStore {
         )
         val snapshot = issuedBill.toLiveInvoiceContent()?.toIssuedInvoiceSnapshot()
         _bills[index] = issuedBill.copy(issuedInvoiceSnapshot = snapshot)
+        persistAppData()
         return true
     }
 
@@ -216,6 +227,7 @@ object BillStore {
         if (bill.status != BillStatus.ISSUED) return false
         _bills[index] = bill.copy(status = BillStatus.PAID, paidAtMillis = paidAtMillis)
         RollingPlanBillingService.onPlanBillPaid(bill.enrollmentId, paidAtMillis)
+        persistAppData()
         return true
     }
 
@@ -229,6 +241,7 @@ object BillStore {
             .forEach { bill ->
                 if (voidBill(bill.id)) voided++
             }
+        if (voided > 0) persistAppData()
         return voided
     }
 
@@ -237,6 +250,7 @@ object BillStore {
         val index = _bills.indexOfFirst { it.id == billId }
         if (index < 0) return false
         _bills[index] = _bills[index].copy(status = BillStatus.VOID)
+        persistAppData()
         return true
     }
 

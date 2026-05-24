@@ -31,6 +31,12 @@ object SoldPlanEnrollmentStore {
             "This sold plan already has an ongoing enrollment."
         }
         _enrollments.add(enrollment)
+        persistAppData()
+    }
+
+    internal fun replaceAll(enrollments: List<SoldPlanEnrollment>) {
+        _enrollments.clear()
+        _enrollments.addAll(enrollments)
     }
 
     fun setStatus(
@@ -45,6 +51,7 @@ object SoldPlanEnrollmentStore {
             status = status,
             renewalStoppedAtMillis = renewalStoppedAtMillis ?: current.renewalStoppedAtMillis,
         )
+        persistAppData()
         return true
     }
 
@@ -69,9 +76,11 @@ object SoldPlanEnrollmentStore {
         val index = _enrollments.indexOfFirst { it.id == enrollmentId }
         if (index < 0) return
         _enrollments[index] = _enrollments[index].copy(planPeriodStartedAtMillis = startMillis)
+        persistAppData()
     }
 
     fun removeAllForSoldPlan(soldPlanId: String) {
-        _enrollments.removeAll { it.soldPlanId == soldPlanId }
+        val removed = _enrollments.removeAll { it.soldPlanId == soldPlanId }
+        if (removed) persistAppData()
     }
 }

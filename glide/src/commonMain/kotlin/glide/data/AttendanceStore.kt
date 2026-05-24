@@ -13,6 +13,18 @@ object AttendanceStore {
 
     private val _submittedSessions = mutableStateListOf<AttendanceSessionKey>()
 
+    val submittedSessions: List<AttendanceSessionKey> get() = _submittedSessions
+
+    internal fun replaceAll(
+        records: List<AttendanceRecord>,
+        submittedSessions: List<AttendanceSessionKey>,
+    ) {
+        _records.clear()
+        _records.addAll(records)
+        _submittedSessions.clear()
+        _submittedSessions.addAll(submittedSessions)
+    }
+
     fun isSessionSubmitted(session: AttendanceSessionKey): Boolean =
         _submittedSessions.any {
             it.classId == session.classId && it.sessionDate == session.sessionDate
@@ -21,6 +33,7 @@ object AttendanceStore {
     fun markSessionSubmitted(session: AttendanceSessionKey) {
         if (isSessionSubmitted(session)) return
         _submittedSessions.add(session)
+        persistAppData()
     }
 
     fun statusFor(session: AttendanceSessionKey, attendeeKey: String): AttendanceStatus? =
@@ -52,6 +65,7 @@ object AttendanceStore {
         } else {
             _records.add(record)
         }
+        persistAppData()
     }
 
     fun clearStatus(session: AttendanceSessionKey, attendeeKey: String) {
@@ -61,6 +75,7 @@ object AttendanceStore {
                 it.sessionDate == session.sessionDate &&
                 it.attendeeKey == attendeeKey
         }
+        persistAppData()
     }
 
     fun recordsForSession(session: AttendanceSessionKey): List<AttendanceRecord> =
@@ -123,11 +138,13 @@ object AttendanceStore {
             }
         }
         markSessionSubmitted(session)
+        persistAppData()
         return true
     }
 
     fun clearForClass(classId: String) {
-        _records.removeAll { it.classId == classId }
-        _submittedSessions.removeAll { it.classId == classId }
+        val recordsRemoved = _records.removeAll { it.classId == classId }
+        val sessionsRemoved = _submittedSessions.removeAll { it.classId == classId }
+        if (recordsRemoved || sessionsRemoved) persistAppData()
     }
 }

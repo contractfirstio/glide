@@ -8,12 +8,15 @@ import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import java.util.UUID
 
+import kotlinx.serialization.Serializable
+@Serializable
 enum class ClassScheduleKind(val label: String) {
     RECURRING("Recurring weekly"),
     WEEKLY("Weekly"),
     SINGLE_DAY("Single day"),
 }
 
+@Serializable
 enum class DayOfWeek(val label: String, val shortLabel: String, val sortOrder: Int) {
     MONDAY("Monday", "Mon", 1),
     TUESDAY("Tuesday", "Tue", 2),
@@ -24,6 +27,7 @@ enum class DayOfWeek(val label: String, val shortLabel: String, val sortOrder: I
     SUNDAY("Sunday", "Sun", 7),
 }
 
+@Serializable
 data class Class(
     val id: String = UUID.randomUUID().toString(),
     val name: String,

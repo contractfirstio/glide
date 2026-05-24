@@ -55,6 +55,12 @@ object SoldPlanStore {
             "Linked client not found."
         }
         _soldPlans.add(soldPlan)
+        persistAppData()
+    }
+
+    internal fun replaceAll(soldPlans: List<SoldPlan>) {
+        _soldPlans.clear()
+        _soldPlans.addAll(soldPlans)
     }
 
     fun findById(id: String): SoldPlan? = _soldPlans.find { it.id == id }
@@ -86,6 +92,7 @@ object SoldPlanStore {
         )
         _soldPlans.removeAt(index)
         LeadStore.create(lead)
+        persistAppData()
         return true
     }
 

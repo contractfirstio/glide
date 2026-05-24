@@ -37,6 +37,12 @@ object AttendanceCreditStore {
         }
         _credits.add(credit)
         BillStore.applyPendingCreditsToOpenBills(credit.enrollmentId)
+        persistAppData()
+    }
+
+    internal fun replaceAll(credits: List<AttendanceCredit>) {
+        _credits.clear()
+        _credits.addAll(credits)
     }
 
     /**
@@ -60,10 +66,12 @@ object AttendanceCreditStore {
         indicesToUpdate.forEach { (index, updated) ->
             _credits[index] = updated
         }
+        if (indicesToUpdate.isNotEmpty()) persistAppData()
         return applied
     }
 
     fun removeAllForEnrollment(enrollmentId: String) {
-        _credits.removeAll { it.enrollmentId == enrollmentId }
+        val removed = _credits.removeAll { it.enrollmentId == enrollmentId }
+        if (removed) persistAppData()
     }
 }

@@ -207,7 +207,7 @@ object ReceiptPdfWriter {
     }
 
     private fun receiptDirectory(): File {
-        val documents = File(System.getProperty("user.home"), "Documents")
-        return File(documents, "Glide/receipts")
+        val dir = File(glide.data.persistence.glideDocumentsExportDir())
+        return File(dir, "receipts")
     }
 }

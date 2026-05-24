@@ -13,7 +13,13 @@ object PaymentStore {
     fun forBill(billId: String): Payment? = _payments.find { it.billId == billId }
 
     fun removeAllForSoldPlan(soldPlanId: String) {
-        _payments.removeAll { it.soldPlanId == soldPlanId }
+        val removed = _payments.removeAll { it.soldPlanId == soldPlanId }
+        if (removed) persistAppData()
+    }
+
+    internal fun replaceAll(payments: List<Payment>) {
+        _payments.clear()
+        _payments.addAll(payments)
     }
 
     fun recordFullPayment(
@@ -36,6 +42,8 @@ object PaymentStore {
                 receivedAtMillis = receivedAtMillis,
             ),
         )
-        return BillStore.markPaid(bill.id, receivedAtMillis)
+        val paid = BillStore.markPaid(bill.id, receivedAtMillis)
+        if (paid) persistAppData()
+        return paid
     }
 }

@@ -23,6 +23,12 @@ object LeadStore {
             "Link a client or enter a main client name."
         }
         _leads.add(lead)
+        persistAppData()
+    }
+
+    internal fun replaceAll(leads: List<Lead>) {
+        _leads.clear()
+        _leads.addAll(leads)
     }
 
     fun update(lead: Lead): Boolean {
@@ -34,11 +40,13 @@ object LeadStore {
             email = if (lead.mainClientId != null) "" else lead.email,
             phone = if (lead.mainClientId != null) "" else lead.phone,
         )
+        persistAppData()
         return true
     }
 
     fun delete(id: String): Boolean {
         val removed = _leads.removeAll { it.id == id }
+        if (removed) persistAppData()
         return removed
     }
 
@@ -52,6 +60,7 @@ object LeadStore {
                 )
             }
         }
+        persistAppData()
     }
 
     /** Converts a lead to a sold plan: creates a [Client] if needed, removes lead, adds sold plan. */
@@ -87,6 +96,7 @@ object LeadStore {
         if (!delete(id)) return false
         SoldPlanStore.create(soldPlan)
         BillingService.onCustomerConverted(id)
+        persistAppData()
         return true
     }
 }

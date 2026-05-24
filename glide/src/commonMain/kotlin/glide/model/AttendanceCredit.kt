@@ -2,7 +2,9 @@ package glide.model
 
 import java.util.UUID
 
+import kotlinx.serialization.Serializable
 /** Credit toward the next plan bill for a sold plan enrollment. */
+@Serializable
 data class AttendanceCredit(
     val id: String = UUID.randomUUID().toString(),
     val enrollmentId: String,

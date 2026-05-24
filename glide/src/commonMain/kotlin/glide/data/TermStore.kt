@@ -17,7 +17,13 @@ object TermStore {
         if (overlappingTerm(term, excludeTermId = null) != null) return false
         _terms.add(term)
         extendClassesWithRollingGroupsForNewTerm(term)
+        persistAppData()
         return true
+    }
+
+    internal fun replaceAll(terms: List<Term>) {
+        _terms.clear()
+        _terms.addAll(terms)
     }
 
     fun update(term: Term): Boolean {
@@ -26,6 +32,7 @@ object TermStore {
         val index = _terms.indexOfFirst { it.id == term.id }
         if (index >= 0) {
             _terms[index] = term
+            persistAppData()
             return true
         }
         return false
@@ -51,6 +58,7 @@ object TermStore {
     fun delete(id: String): Boolean {
         if (!canDelete(id)) return false
         _terms.removeAll { it.id == id }
+        persistAppData()
         return true
     }
 

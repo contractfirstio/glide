@@ -5,6 +5,8 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.util.UUID
 
+import kotlinx.serialization.Serializable
+@Serializable
 data class Term(
     val id: String = UUID.randomUUID().toString(),
     val name: String,

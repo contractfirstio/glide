@@ -40,15 +40,21 @@ object ClientStore {
             else -> all
         }
 
-    /** Only call from lead conversion — clients are not created elsewhere. */
+    /** Only call from lead conversion; callers persist after the full conversion completes. */
     fun createFromLeadConversion(client: Client) {
         _clients.add(client)
+    }
+
+    internal fun replaceAll(clients: List<Client>) {
+        _clients.clear()
+        _clients.addAll(clients)
     }
 
     fun update(client: Client) {
         val index = _clients.indexOfFirst { it.id == client.id }
         if (index >= 0) {
             _clients[index] = client
+            persistAppData()
         }
     }
 
@@ -62,7 +68,8 @@ object ClientStore {
 
     fun delete(id: String) {
         if (isOnSoldPlan(id)) return
-        _clients.removeAll { it.id == id }
+        val removed = _clients.removeAll { it.id == id }
+        if (removed) persistAppData()
     }
 
     fun findById(id: String): Client? = _clients.find { it.id == id }

@@ -9,6 +9,12 @@ object PlanStore {
 
     fun create(plan: Plan) {
         _plans.add(plan)
+        persistAppData()
+    }
+
+    internal fun replaceAll(plans: List<Plan>) {
+        _plans.clear()
+        _plans.addAll(plans)
     }
 
     fun update(plan: Plan): Boolean {
@@ -16,6 +22,7 @@ object PlanStore {
         val index = _plans.indexOfFirst { it.id == plan.id }
         if (index < 0) return false
         _plans[index] = plan
+        persistAppData()
         return true
     }
 
@@ -43,6 +50,7 @@ object PlanStore {
     fun delete(id: String): Boolean {
         if (!canDelete(id)) return false
         _plans.removeAll { it.id == id }
+        persistAppData()
         return true
     }
 

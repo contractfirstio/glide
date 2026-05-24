@@ -1,5 +1,7 @@
 package glide.model
 
+import kotlinx.serialization.Serializable
+@Serializable
 data class SoldPlanClassSchedule(
     val soldPlanId: String,
     val classId: String,

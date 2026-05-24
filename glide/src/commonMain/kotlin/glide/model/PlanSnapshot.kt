@@ -1,6 +1,8 @@
 package glide.model
 
+import kotlinx.serialization.Serializable
 /** Frozen catalog fields at enrollment time — survives plan edits later. */
+@Serializable
 data class PlanSnapshot(
     val planId: String,
     val planName: String,

@@ -2,6 +2,8 @@ package glide.model
 
 import java.util.UUID
 
+import kotlinx.serialization.Serializable
+@Serializable
 enum class PaymentMethod(val label: String) {
     CASH("Cash"),
     BANK_TRANSFER("Bank transfer"),
@@ -9,6 +11,7 @@ enum class PaymentMethod(val label: String) {
     OTHER("Other"),
 }
 
+@Serializable
 data class Payment(
     val id: String = UUID.randomUUID().toString(),
     val billId: String,

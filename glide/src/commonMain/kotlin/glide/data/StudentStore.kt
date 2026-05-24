@@ -60,19 +60,29 @@ object StudentStore {
 
     fun create(person: Student) {
         _people.add(person)
+        persistAppData()
+    }
+
+    internal fun replaceAll(students: List<Student>) {
+        _people.clear()
+        _people.addAll(students)
     }
 
     fun update(person: Student) {
         val index = _people.indexOfFirst { it.id == person.id }
         if (index >= 0) {
             _people[index] = person
+            persistAppData()
         }
     }
 
     fun delete(id: String) {
         if (SoldPlanStore.all.any { id in it.studentIds }) return
-        _people.removeAll { it.id == id }
-        LeadStore.removeStudentFromAllLeads(id)
+        val removed = _people.removeAll { it.id == id }
+        if (removed) {
+            LeadStore.removeStudentFromAllLeads(id)
+            persistAppData()
+        }
     }
 
     fun findById(id: String): Student? = _people.find { it.id == id }

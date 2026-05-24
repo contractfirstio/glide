@@ -8,6 +8,13 @@ import java.time.LocalDate
 object SoldPlanClassScheduleStore {
     private val _schedules = mutableStateListOf<SoldPlanClassSchedule>()
 
+    val all: List<SoldPlanClassSchedule> get() = _schedules
+
+    internal fun replaceAll(schedules: List<SoldPlanClassSchedule>) {
+        _schedules.clear()
+        _schedules.addAll(schedules)
+    }
+
     fun sessionDatesFor(soldPlanId: String, classId: String): List<String>? =
         _schedules.find { it.soldPlanId == soldPlanId && it.classId == classId }
             ?.sessionDates
@@ -23,18 +30,22 @@ object SoldPlanClassScheduleStore {
                 sessionDates = futureDates,
             ),
         )
+        persistAppData()
     }
 
     fun remove(soldPlanId: String, classId: String) {
-        _schedules.removeAll { it.soldPlanId == soldPlanId && it.classId == classId }
+        val removed = _schedules.removeAll { it.soldPlanId == soldPlanId && it.classId == classId }
+        if (removed) persistAppData()
     }
 
     fun clearForClass(classId: String) {
-        _schedules.removeAll { it.classId == classId }
+        val removed = _schedules.removeAll { it.classId == classId }
+        if (removed) persistAppData()
     }
 
     fun clearForSoldPlan(soldPlanId: String) {
-        _schedules.removeAll { it.soldPlanId == soldPlanId }
+        val removed = _schedules.removeAll { it.soldPlanId == soldPlanId }
+        if (removed) persistAppData()
     }
 
     fun isScheduledForSession(

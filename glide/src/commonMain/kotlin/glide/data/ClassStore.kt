@@ -13,12 +13,19 @@ object ClassStore {
 
     fun create(cls: Class) {
         _classes.add(cls)
+        persistAppData()
+    }
+
+    internal fun replaceAll(classes: List<Class>) {
+        _classes.clear()
+        _classes.addAll(classes)
     }
 
     fun update(cls: Class) {
         val index = _classes.indexOfFirst { it.id == cls.id }
         if (index >= 0) {
             _classes[index] = cls
+            persistAppData()
         }
     }
 
@@ -44,6 +51,7 @@ object ClassStore {
         _classes.removeAll { it.id == id }
         AttendanceStore.clearForClass(id)
         SoldPlanClassScheduleStore.clearForClass(id)
+        persistAppData()
         return true
     }
 
@@ -56,31 +64,40 @@ object ClassStore {
         _classes.firstOrNull { soldPlanId in it.soldPlanIds && it.id != excludeClassId }
 
     fun clearTermReference(termId: String) {
+        var changed = false
         for (index in _classes.indices) {
             val item = _classes[index]
             if (item.spansTerm(termId)) {
                 _classes[index] = item.copy(termIds = item.termIds - termId)
+                changed = true
             }
         }
+        if (changed) persistAppData()
     }
 
     fun clearLocationReference(locationId: String) {
+        var changed = false
         for (index in _classes.indices) {
             val item = _classes[index]
             if (item.usesLocation(locationId)) {
                 _classes[index] = item.copy(locationId = null)
+                changed = true
             }
         }
+        if (changed) persistAppData()
     }
 
     fun clearSoldPlanReference(soldPlanId: String) {
+        var changed = false
         for (index in _classes.indices) {
             val item = _classes[index]
             if (item.hasSoldPlan(soldPlanId)) {
                 _classes[index] = item.copy(soldPlanIds = item.soldPlanIds - soldPlanId)
                 SoldPlanClassScheduleStore.remove(soldPlanId, item.id)
+                changed = true
             }
         }
+        if (changed) persistAppData()
     }
 
     fun forSchedulePanel(termFilterId: String? = null): List<Class> {

@@ -2,6 +2,8 @@ package glide.model
 
 import java.util.UUID
 
+import kotlinx.serialization.Serializable
+@Serializable
 enum class LeadStatus(val label: String) {
     New("New"),
     Contacted("Contacted"),
@@ -12,6 +14,7 @@ enum class LeadStatus(val label: String) {
  * A lead is a draft household / package before conversion to a [SoldPlan].
  * Keeps draft main-client fields until [mainClientId] is linked at conversion.
  */
+@Serializable
 data class Lead(
     val id: String = UUID.randomUUID().toString(),
     val mainClientId: String? = null,

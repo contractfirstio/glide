@@ -2,6 +2,8 @@ package glide.model
 
 import java.util.UUID
 
+import kotlinx.serialization.Serializable
+@Serializable
 enum class SoldPlanEnrollmentStatus(val label: String) {
     ACTIVE("Active"),
     /** Finishing the current plan period; renewal is stopped. */
@@ -12,6 +14,7 @@ enum class SoldPlanEnrollmentStatus(val label: String) {
 fun SoldPlanEnrollmentStatus.isOngoing(): Boolean =
     this == SoldPlanEnrollmentStatus.ACTIVE || this == SoldPlanEnrollmentStatus.CANCELLING
 
+@Serializable
 data class SoldPlanEnrollment(
     val id: String = UUID.randomUUID().toString(),
     val soldPlanId: String,
