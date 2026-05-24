@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -40,6 +42,7 @@ import glide.ui.theme.GlideTheme
 fun App() {
     GlideTheme {
         val appSettings by AppSettingsStore.settingsState
+        var showCompanySettings by remember { mutableStateOf(false) }
         val focusRequester = remember { FocusRequester() }
         val viewMode = AppViewState.mode
         val pendingAttendance = rememberPendingAttendanceSessions()
@@ -75,7 +78,11 @@ fun App() {
         ) {
             GlideCanvasBackground()
             Column(modifier = Modifier.fillMaxSize()) {
-                AppChrome(modifier = Modifier.fillMaxWidth())
+                AppChrome(
+                    modifier = Modifier.fillMaxWidth(),
+                    companySettingsNeedSetup = !appSettings.isConfigured,
+                    onOpenCompanySettings = { showCompanySettings = true },
+                )
                 if (viewMode != AppViewMode.SCHEDULING) {
                     PendingAttendanceAlertBanner(pending = pendingAttendance)
                 }
@@ -86,10 +93,19 @@ fun App() {
             }
         }
 
-        if (!appSettings.isConfigured) {
+        if (!appSettings.isConfigured || showCompanySettings) {
             CompanySetupDialog(
                 initial = appSettings,
-                onConfirm = AppSettingsStore::save,
+                mode = if (!appSettings.isConfigured) {
+                    CompanySetupDialogMode.FIRST_RUN
+                } else {
+                    CompanySetupDialogMode.EDIT
+                },
+                onConfirm = { settings ->
+                    AppSettingsStore.save(settings)
+                    showCompanySettings = false
+                },
+                onDismiss = { showCompanySettings = false },
             )
         }
     }

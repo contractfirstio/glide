@@ -3,13 +3,21 @@ package glide.ui.components
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -24,7 +32,11 @@ import glide.ui.theme.GlideOutlinedButton
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
-fun AppChrome(modifier: Modifier = Modifier) {
+fun AppChrome(
+    modifier: Modifier = Modifier,
+    companySettingsNeedSetup: Boolean = false,
+    onOpenCompanySettings: () -> Unit = {},
+) {
     val mode = AppViewState.mode
     Row(
         modifier = modifier
@@ -60,6 +72,50 @@ fun AppChrome(modifier: Modifier = Modifier) {
                 label = "Scheduling",
                 selected = mode == AppViewMode.SCHEDULING,
                 onClick = { AppViewState.switchTo(AppViewMode.SCHEDULING) },
+            )
+            AppMenu(
+                companySettingsNeedSetup = companySettingsNeedSetup,
+                onOpenCompanySettings = onOpenCompanySettings,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppMenu(
+    companySettingsNeedSetup: Boolean,
+    onOpenCompanySettings: () -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Box {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (companySettingsNeedSetup) {
+                TextButton(onClick = onOpenCompanySettings) {
+                    Text(
+                        text = "Set up company",
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            TextButton(onClick = { menuExpanded = true }) {
+                Text(
+                    text = "⋯",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text("Company settings…") },
+                onClick = {
+                    menuExpanded = false
+                    onOpenCompanySettings()
+                },
             )
         }
     }
