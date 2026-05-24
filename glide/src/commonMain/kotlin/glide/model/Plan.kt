@@ -5,6 +5,7 @@ import java.util.UUID
 enum class PlanKind(val label: String) {
     MULTI_LESSON_PACK("Multi Lesson Pack"),
     SINGLE_LESSON_PACK("Single Lesson Pack"),
+    CAMP("Camp"),
 }
 
 data class Plan(
@@ -26,4 +27,5 @@ fun Plan.summaryLine(): String = when (kind) {
         "$lessonCount classes · $rollingLabel"
     }
     PlanKind.SINGLE_LESSON_PACK -> "1 class"
+    PlanKind.CAMP -> "$lessonCount days"
 }

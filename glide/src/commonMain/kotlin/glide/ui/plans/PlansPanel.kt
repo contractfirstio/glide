@@ -85,6 +85,7 @@ private data class PlanFormState(
         return when (kind) {
             PlanKind.SINGLE_LESSON_PACK -> true
             PlanKind.MULTI_LESSON_PACK -> lessonCount.toIntOrNull()?.let { it > 0 } == true
+            PlanKind.CAMP -> lessonCount.toIntOrNull()?.let { it > 0 } == true
         }
     }
 
@@ -96,6 +97,7 @@ private data class PlanFormState(
         val count = when (kind) {
             PlanKind.SINGLE_LESSON_PACK -> 1
             PlanKind.MULTI_LESSON_PACK -> lessonCount.toIntOrNull() ?: return null
+            PlanKind.CAMP -> lessonCount.toIntOrNull() ?: return null
         }
         val priceMajorAmount = parseMajorAmount(priceMajor) ?: return null
         return Plan(
@@ -103,7 +105,7 @@ private data class PlanFormState(
             kind = kind,
             name = name.trim(),
             lessonCount = count,
-            rolling = kind != PlanKind.SINGLE_LESSON_PACK && rolling,
+            rolling = kind == PlanKind.MULTI_LESSON_PACK && rolling,
             priceAmountMinor = majorToMinor(priceMajorAmount),
             currencyCode = existingCurrency,
             notes = notes.trim(),
@@ -386,12 +388,13 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                                     formError = when (form.draft.kind) {
                                         PlanKind.SINGLE_LESSON_PACK -> "Name and a valid price per person are required."
                                         PlanKind.MULTI_LESSON_PACK -> "Name, class count, and a valid price per person are required."
+                                        PlanKind.CAMP -> "Name, day count, and a valid price per person are required."
                                     }
                                     return@GlideButton
                                 }
                                 val plan = form.draft.toPlan()
                                 if (plan == null) {
-                                    formError = "Class count must be a positive number."
+                                    formError = "Count must be a positive number."
                                     return@GlideButton
                                 }
                                 formError = null
@@ -595,6 +598,11 @@ private fun PlanForm(
                                             rolling = false,
                                         )
                                         PlanKind.MULTI_LESSON_PACK -> state.copy(kind = kind)
+                                        PlanKind.CAMP -> state.copy(
+                                            kind = kind,
+                                            rolling = false,
+                                            lessonCount = if (state.lessonCount == "1") "5" else state.lessonCount,
+                                        )
                                     },
                                 )
                                 kindExpanded = false
@@ -606,11 +614,23 @@ private fun PlanForm(
         }
     }
 
-    FormPanelSectionsDivider(label = "Pack configuration", spacing = spacing)
+    FormPanelSectionsDivider(
+        label = when (state.kind) {
+            PlanKind.CAMP -> "Camp configuration"
+            else -> "Pack configuration"
+        },
+        spacing = spacing,
+    )
 
     FormPanelSection(
-        title = "Classes in pack",
-        description = "How many lessons are included and whether they roll over.",
+        title = when (state.kind) {
+            PlanKind.CAMP -> "Camp duration"
+            else -> "Classes in pack"
+        },
+        description = when (state.kind) {
+            PlanKind.CAMP -> "How many days the camp runs for. Camps are always fixed and never roll over."
+            else -> "How many lessons are included and whether they roll over."
+        },
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
@@ -645,6 +665,15 @@ private fun PlanForm(
                         )
                     }
                 }
+            }
+            PlanKind.CAMP -> {
+                GlideOutlinedField(
+                    value = state.lessonCount,
+                    onValueChange = { onStateChange(state.copy(lessonCount = it.filter { c -> c.isDigit() })) },
+                    label = "Number of days",
+                    placeholder = "5",
+                    readOnly = readOnly,
+                )
             }
             PlanKind.SINGLE_LESSON_PACK -> {
                 Text(

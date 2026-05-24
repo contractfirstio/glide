@@ -24,6 +24,7 @@ fun Plan.toPackFlyerContent(): PackFlyerContent {
             "Fixed pack — use your classes within the pack period."
         }
         PlanKind.SINGLE_LESSON_PACK -> null
+        PlanKind.CAMP -> "Fixed camp — runs over $lessonCount consecutive days."
     }
     return PackFlyerContent(
         studioName = AppSettingsStore.legalCompanyName,

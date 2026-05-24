@@ -467,6 +467,7 @@ private fun EnrollmentSummary(
                     "${snapshot.lessonCount} classes · $rolling"
                 }
                 glide.model.PlanKind.SINGLE_LESSON_PACK -> "1 class"
+                glide.model.PlanKind.CAMP -> "${snapshot.lessonCount} days"
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
