@@ -4,22 +4,24 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
+import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import java.util.UUID
 
 enum class ClassScheduleKind(val label: String) {
-    RECURRING("Weekly (recurring)"),
+    RECURRING("Recurring weekly"),
+    WEEKLY("Weekly"),
     SINGLE_DAY("Single day"),
 }
 
-enum class DayOfWeek(val label: String, val sortOrder: Int) {
-    MONDAY("Monday", 1),
-    TUESDAY("Tuesday", 2),
-    WEDNESDAY("Wednesday", 3),
-    THURSDAY("Thursday", 4),
-    FRIDAY("Friday", 5),
-    SATURDAY("Saturday", 6),
-    SUNDAY("Sunday", 7),
+enum class DayOfWeek(val label: String, val shortLabel: String, val sortOrder: Int) {
+    MONDAY("Monday", "Mon", 1),
+    TUESDAY("Tuesday", "Tue", 2),
+    WEDNESDAY("Wednesday", "Wed", 3),
+    THURSDAY("Thursday", "Thu", 4),
+    FRIDAY("Friday", "Fri", 5),
+    SATURDAY("Saturday", "Sat", 6),
+    SUNDAY("Sunday", "Sun", 7),
 }
 
 data class ScheduledClass(
@@ -29,8 +31,12 @@ data class ScheduledClass(
     val customerGroupIds: List<String> = emptyList(),
     val locationId: String? = null,
     val dayOfWeek: DayOfWeek,
-    /** ISO yyyy-MM-dd when this class runs once; null means weekly on [dayOfWeek]. */
+    /** ISO yyyy-MM-dd when this class runs once; null for recurring or weekly classes. */
     val singleDate: String? = null,
+    /** ISO yyyy-MM-dd for any day in a one-off week; set with [weeklyDays] for weekly classes. */
+    val weekOfDate: String? = null,
+    /** Days within [weekOfDate]'s week when this class runs (non-recurring weekly). */
+    val weeklyDays: List<DayOfWeek> = emptyList(),
     /** 24-hour time, e.g. 09:00 */
     val startTime: String,
     val endTime: String,
@@ -42,17 +48,38 @@ data class ScheduledClass(
 
 fun ScheduledClass.usesLocation(locationId: String): Boolean = this.locationId == locationId
 
-fun ScheduledClass.isSingleDay(): Boolean = !singleDate.isNullOrBlank()
+fun ScheduledClass.isSingleDay(): Boolean = scheduleKind() == ClassScheduleKind.SINGLE_DAY
 
-fun ScheduledClass.scheduleKind(): ClassScheduleKind =
-    if (isSingleDay()) ClassScheduleKind.SINGLE_DAY else ClassScheduleKind.RECURRING
+fun ScheduledClass.isWeekly(): Boolean = scheduleKind() == ClassScheduleKind.WEEKLY
+
+fun ScheduledClass.scheduleKind(): ClassScheduleKind = when {
+    !singleDate.isNullOrBlank() -> ClassScheduleKind.SINGLE_DAY
+    !weekOfDate.isNullOrBlank() && weeklyDays.isNotEmpty() -> ClassScheduleKind.WEEKLY
+    else -> ClassScheduleKind.RECURRING
+}
+
+fun weekDateRangeFromIsoDate(isoDate: String): ClosedRange<LocalDate>? {
+    val anchor = parseScheduleIsoDate(isoDate) ?: return null
+    val start = anchor.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+    return start..start.plusDays(6)
+}
+
+fun formatWeeklyDaysLabel(days: List<DayOfWeek>): String =
+    days.sortedBy { it.sortOrder }.joinToString(", ") { it.shortLabel }
 
 fun ScheduledClass.scheduleLine(): String {
     val time = "$startTime–$endTime"
-    return if (isSingleDay()) {
-        "${formatScheduleIsoDate(singleDate!!)} · $time"
-    } else {
-        "${dayOfWeek.label} · $time"
+    return when (scheduleKind()) {
+        ClassScheduleKind.SINGLE_DAY -> "${formatScheduleIsoDate(singleDate!!)} · $time"
+        ClassScheduleKind.WEEKLY -> {
+            val daysLabel = formatWeeklyDaysLabel(weeklyDays)
+            val weekLabel = weekDateRangeFromIsoDate(weekOfDate!!)?.let { range ->
+                "${formatScheduleIsoDate(range.start.toString())} – " +
+                    formatScheduleIsoDate(range.endInclusive.toString())
+            } ?: formatScheduleIsoDate(weekOfDate!!)
+            "$daysLabel · $weekLabel · $time"
+        }
+        ClassScheduleKind.RECURRING -> "${dayOfWeek.label} · $time"
     }
 }
 
@@ -115,11 +142,13 @@ fun java.time.DayOfWeek.toModelDayOfWeek(): DayOfWeek = when (this) {
     java.time.DayOfWeek.SUNDAY -> DayOfWeek.SUNDAY
 }
 
-fun ScheduledClass.occursOn(date: LocalDate): Boolean {
-    if (isSingleDay()) {
-        return parseScheduleIsoDate(singleDate!!) == date
+fun ScheduledClass.occursOn(date: LocalDate): Boolean = when (scheduleKind()) {
+    ClassScheduleKind.SINGLE_DAY -> parseScheduleIsoDate(singleDate!!) == date
+    ClassScheduleKind.WEEKLY -> {
+        val range = weekDateRangeFromIsoDate(weekOfDate!!)
+        range != null && date in range && weeklyDays.any { it.toJavaDayOfWeek() == date.dayOfWeek }
     }
-    return dayOfWeek.toJavaDayOfWeek() == date.dayOfWeek
+    ClassScheduleKind.RECURRING -> dayOfWeek.toJavaDayOfWeek() == date.dayOfWeek
 }
 
 /** True when [sessionDate] is in the past, or it is today and [endTime] has been reached. */
@@ -145,9 +174,13 @@ private fun formatTime24h(time: LocalTime): String =
     "${time.hour.toString().padStart(2, '0')}:${time.minute.toString().padStart(2, '0')}"
 
 fun compareScheduledClasses(): Comparator<ScheduledClass> = compareBy(
-    { !it.isSingleDay() },
-    { it.singleDate ?: "" },
-    { it.dayOfWeek.sortOrder },
+    { when (it.scheduleKind()) {
+        ClassScheduleKind.RECURRING -> 0
+        ClassScheduleKind.WEEKLY -> 1
+        ClassScheduleKind.SINGLE_DAY -> 2
+    } },
+    { it.singleDate ?: it.weekOfDate ?: "" },
+    { it.weeklyDays.minOfOrNull { day -> day.sortOrder } ?: it.dayOfWeek.sortOrder },
     { it.startTime },
     { it.name.lowercase(Locale.UK) },
 )

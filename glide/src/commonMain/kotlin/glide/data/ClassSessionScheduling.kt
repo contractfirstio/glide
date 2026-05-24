@@ -6,6 +6,7 @@ import glide.model.PlanSnapshot
 import glide.model.ScheduledClass
 import glide.model.dateRange
 import glide.model.isSingleDay
+import glide.model.isWeekly
 import glide.model.occursOn
 import glide.model.parseIsoLocalDate
 import java.time.Instant
@@ -218,6 +219,7 @@ fun shouldAutoLinkNewTermToClass(scheduledClass: ScheduledClass, newTerm: Academ
     if (newTerm.id in scheduledClass.termIds) return false
     if (!newTerm.acceptsRollingPlans) return false
     if (scheduledClass.isSingleDay()) return false
+    if (scheduledClass.isWeekly()) return false
     if (!scheduledClassHasRollingCustomerGroup(scheduledClass)) return false
 
     val newRange = newTerm.dateRange() ?: return false

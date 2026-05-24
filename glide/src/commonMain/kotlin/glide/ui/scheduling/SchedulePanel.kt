@@ -70,6 +70,9 @@ import glide.model.ScheduledClass
 import glide.model.compareTime24h
 import glide.model.isValidTime24h
 import glide.model.parseScheduleIsoDate
+import glide.model.formatScheduleIsoDate
+import glide.model.formatWeeklyDaysLabel
+import glide.model.weekDateRangeFromIsoDate
 import glide.model.scheduleKind
 import glide.model.scheduleLine
 import glide.model.toModelDayOfWeek
@@ -105,6 +108,8 @@ private data class ClassFormState(
     val scheduleKind: ClassScheduleKind = ClassScheduleKind.RECURRING,
     val dayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
     val singleDate: String = "",
+    val weekOfDate: String = "",
+    val weeklyDays: Set<DayOfWeek> = emptySet(),
     val startTime: String = "09:00",
     val endTime: String = "10:00",
     val notes: String = "",
@@ -117,6 +122,8 @@ private data class ClassFormState(
         if (compareTime24h(startTime, endTime) >= 0) return false
         return when (scheduleKind) {
             ClassScheduleKind.RECURRING -> true
+            ClassScheduleKind.WEEKLY ->
+                parseIsoDateToMillis(weekOfDate) != null && weeklyDays.isNotEmpty()
             ClassScheduleKind.SINGLE_DAY -> parseIsoDateToMillis(singleDate) != null
         }
     }
@@ -126,12 +133,24 @@ private data class ClassFormState(
         createdAtMillis: Long = System.currentTimeMillis(),
     ): ScheduledClass {
         val resolvedSingleDate = when (scheduleKind) {
-            ClassScheduleKind.RECURRING -> null
+            ClassScheduleKind.RECURRING, ClassScheduleKind.WEEKLY -> null
             ClassScheduleKind.SINGLE_DAY -> singleDate.trim().takeIf { it.isNotBlank() }
         }
-        val resolvedDayOfWeek = resolvedSingleDate?.let { iso ->
-            parseScheduleIsoDate(iso)?.dayOfWeek?.toModelDayOfWeek()
-        } ?: dayOfWeek
+        val resolvedWeekOfDate = when (scheduleKind) {
+            ClassScheduleKind.WEEKLY -> weekOfDate.trim().takeIf { it.isNotBlank() }
+            else -> null
+        }
+        val resolvedWeeklyDays = when (scheduleKind) {
+            ClassScheduleKind.WEEKLY -> weeklyDays.sortedBy { it.sortOrder }
+            else -> emptyList()
+        }
+        val resolvedDayOfWeek = when (scheduleKind) {
+            ClassScheduleKind.SINGLE_DAY -> resolvedSingleDate?.let { iso ->
+                parseScheduleIsoDate(iso)?.dayOfWeek?.toModelDayOfWeek()
+            } ?: dayOfWeek
+            ClassScheduleKind.WEEKLY -> resolvedWeeklyDays.firstOrNull() ?: dayOfWeek
+            ClassScheduleKind.RECURRING -> dayOfWeek
+        }
         return ScheduledClass(
             id = existingId ?: UUID.randomUUID().toString(),
             name = name.trim(),
@@ -140,6 +159,8 @@ private data class ClassFormState(
             locationId = locationId,
             dayOfWeek = resolvedDayOfWeek,
             singleDate = resolvedSingleDate,
+            weekOfDate = resolvedWeekOfDate,
+            weeklyDays = resolvedWeeklyDays,
             startTime = startTime,
             endTime = endTime,
             notes = notes.trim(),
@@ -153,6 +174,19 @@ private data class ClassFormState(
         if (singleDate.isBlank()) return copy(termIds = emptySet())
         val term = findTermContainingIsoDate(terms, singleDate)
         return copy(termIds = term?.let { setOf(it.id) } ?: emptySet())
+    }
+
+    fun withAutoTermForWeekly(terms: List<glide.model.AcademicTerm>): ClassFormState {
+        if (scheduleKind != ClassScheduleKind.WEEKLY) return this
+        if (weekOfDate.isBlank()) return copy(termIds = emptySet())
+        val term = findTermContainingIsoDate(terms, weekOfDate)
+        return copy(termIds = term?.let { setOf(it.id) } ?: emptySet())
+    }
+
+    fun withAutoTerms(terms: List<glide.model.AcademicTerm>): ClassFormState = when (scheduleKind) {
+        ClassScheduleKind.SINGLE_DAY -> withAutoTermForSingleDay(terms)
+        ClassScheduleKind.WEEKLY -> withAutoTermForWeekly(terms)
+        ClassScheduleKind.RECURRING -> this
     }
 
     companion object {
@@ -218,6 +252,8 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                 scheduleKind = scheduledClass.scheduleKind(),
                 dayOfWeek = scheduledClass.dayOfWeek,
                 singleDate = scheduledClass.singleDate.orEmpty(),
+                weekOfDate = scheduledClass.weekOfDate.orEmpty(),
+                weeklyDays = scheduledClass.weeklyDays.toSet(),
                 startTime = scheduledClass.startTime,
                 endTime = scheduledClass.endTime,
                 notes = scheduledClass.notes,
@@ -241,6 +277,8 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                 scheduleKind = scheduledClass.scheduleKind(),
                 dayOfWeek = scheduledClass.dayOfWeek,
                 singleDate = scheduledClass.singleDate.orEmpty(),
+                weekOfDate = scheduledClass.weekOfDate.orEmpty(),
+                weeklyDays = scheduledClass.weeklyDays.toSet(),
                 startTime = scheduledClass.startTime,
                 endTime = scheduledClass.endTime,
                 notes = scheduledClass.notes,
@@ -498,13 +536,15 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                     formError = when (form.draft.scheduleKind) {
                                         ClassScheduleKind.RECURRING ->
                                             "Name, valid start/end times (HH:MM), and end after start are required."
+                                        ClassScheduleKind.WEEKLY ->
+                                            "Name, week date, at least one day, valid start/end times (HH:MM), and end after start are required."
                                         ClassScheduleKind.SINGLE_DAY ->
                                             "Name, class date, valid start/end times (HH:MM), and end after start are required."
                                     }
                                     return@GlideButton
                                 }
                                 formError = null
-                                val stateToSave = form.draft.withAutoTermForSingleDay(terms)
+                                val stateToSave = form.draft.withAutoTerms(terms)
                                 if (stateToSave != form.draft) {
                                     form.draft = stateToSave
                                 }
@@ -1097,7 +1137,7 @@ private fun ClassForm(
 
     FormPanelSection(
         title = "Schedule",
-        description = "Weekly or one-off timing for this class.",
+        description = "Recurring weekly, one-week multi-day, or single-day timing for this class.",
         spacing = spacing,
         role = FormPanelSectionRole.Tertiary,
     ) {
@@ -1141,6 +1181,8 @@ private fun ClassForm(
                                         val recurring = state.copy(
                                             scheduleKind = kind,
                                             singleDate = "",
+                                            weekOfDate = "",
+                                            weeklyDays = emptySet(),
                                         )
                                         if (isCreating) {
                                             recurring.copy(termIds = defaultRecurringClassTermIds(terms))
@@ -1148,8 +1190,18 @@ private fun ClassForm(
                                             recurring
                                         }
                                     }
+                                    ClassScheduleKind.WEEKLY -> state.copy(
+                                        scheduleKind = kind,
+                                        singleDate = "",
+                                        weekOfDate = state.weekOfDate,
+                                        weeklyDays = state.weeklyDays.ifEmpty { setOf(state.dayOfWeek) },
+                                    ).withAutoTermForWeekly(terms)
                                     ClassScheduleKind.SINGLE_DAY ->
-                                        state.copy(scheduleKind = kind).withAutoTermForSingleDay(terms)
+                                        state.copy(
+                                            scheduleKind = kind,
+                                            weekOfDate = "",
+                                            weeklyDays = emptySet(),
+                                        ).withAutoTermForSingleDay(terms)
                                 },
                             )
                             scheduleKindExpanded = false
@@ -1202,6 +1254,109 @@ private fun ClassForm(
                                 },
                             )
                         }
+                    }
+                }
+            }
+        }
+        ClassScheduleKind.WEEKLY -> {
+            IsoDateField(
+                label = "Week of",
+                value = state.weekOfDate,
+                onValueChange = { isoDate ->
+                    onStateChange(
+                        state.copy(weekOfDate = isoDate).withAutoTermForWeekly(terms),
+                    )
+                },
+                readOnly = termsReadOnly,
+            )
+            Spacer(modifier = Modifier.height(spacing.field))
+            GlideFieldLabel("Days in week")
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                DayOfWeek.entries.forEach { day ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .weight(1f)
+                            .then(
+                                if (termsReadOnly) {
+                                    Modifier
+                                } else {
+                                    Modifier.clickable {
+                                        val next = if (day in state.weeklyDays) {
+                                            state.weeklyDays - day
+                                        } else {
+                                            state.weeklyDays + day
+                                        }
+                                        onStateChange(state.copy(weeklyDays = next))
+                                    }
+                                },
+                            ),
+                    ) {
+                        Checkbox(
+                            checked = day in state.weeklyDays,
+                            onCheckedChange = { checked ->
+                                if (termsReadOnly) return@Checkbox
+                                val next = if (checked) {
+                                    state.weeklyDays + day
+                                } else {
+                                    state.weeklyDays - day
+                                }
+                                onStateChange(state.copy(weeklyDays = next))
+                            },
+                            enabled = !termsReadOnly,
+                        )
+                        Text(
+                            text = day.shortLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            val autoTerm = state.termIds.singleOrNull()?.let { id -> terms.find { it.id == id } }
+            when {
+                state.weekOfDate.isBlank() -> {
+                    Text(
+                        text = "Pick a date in the week and select which days the class runs (e.g. Mon, Wed, Fri).",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                state.weeklyDays.isEmpty() -> {
+                    Text(
+                        text = "Select at least one day in the week.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                else -> {
+                    val weekLabel = weekDateRangeFromIsoDate(state.weekOfDate)?.let { range ->
+                        "${formatScheduleIsoDate(range.start.toString())} – " +
+                            formatScheduleIsoDate(range.endInclusive.toString())
+                    } ?: formatScheduleIsoDate(state.weekOfDate)
+                    Text(
+                        text = "${formatWeeklyDaysLabel(state.weeklyDays.toList())} · $weekLabel",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (autoTerm != null) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Term set automatically: ${autoTerm.name}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "No term includes this week. Adjust term dates in the Terms panel.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }
