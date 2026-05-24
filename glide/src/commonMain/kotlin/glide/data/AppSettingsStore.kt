@@ -17,6 +17,11 @@ object AppSettingsStore {
 
     val isConfigured: Boolean get() = settings.isConfigured
 
+    val hasCompletedFirstSession: Boolean get() = settings.hasCompletedFirstSession
+
+    fun shouldOfferBackupPrompt(): Boolean =
+        isConfigured && hasCompletedFirstSession
+
     fun load() {
         _settings.value = readPersistedAppSettings()
     }
@@ -27,10 +32,18 @@ object AppSettingsStore {
             fpsNumber = settings.fpsNumber.trim(),
             companyEmail = settings.companyEmail.trim(),
             companyPhone = settings.companyPhone.trim(),
+            hasCompletedFirstSession = _settings.value.hasCompletedFirstSession,
         )
         if (!trimmed.isConfigured) return
         _settings.value = trimmed
         persistAppSettings(trimmed)
+    }
+
+    fun markFirstSessionCompleted() {
+        if (hasCompletedFirstSession) return
+        val updated = _settings.value.copy(hasCompletedFirstSession = true)
+        _settings.value = updated
+        persistAppSettings(updated)
     }
 }
 

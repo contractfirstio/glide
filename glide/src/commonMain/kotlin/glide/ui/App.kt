@@ -41,11 +41,18 @@ import glide.ui.theme.GlideCanvasBackground
 import glide.ui.theme.GlideTheme
 
 @Composable
-fun App() {
+fun App(
+    closeRequested: Boolean = false,
+    onCloseRequestHandled: () -> Unit = {},
+    onExitApplication: () -> Unit = {},
+) {
     GlideTheme {
         val appSettings by AppSettingsStore.settingsState
         var showCompanySettings by remember { mutableStateOf(false) }
         var backupErrorMessage by remember { mutableStateOf<String?>(null) }
+        var showOpenBackupOffer by remember { mutableStateOf(false) }
+        var showCloseBackupOffer by remember { mutableStateOf(false) }
+        var exitAfterBackupErrorDismiss by remember { mutableStateOf(false) }
         val focusRequester = remember { FocusRequester() }
         val viewMode = AppViewState.mode
         val pendingAttendance = rememberPendingAttendanceSessions()
@@ -55,6 +62,18 @@ fun App() {
         LaunchedEffect(Unit) {
             focusRequester.requestFocus()
             RollingPlanBillingService.syncAllActiveRollingPlanBilling()
+            if (AppSettingsStore.shouldOfferBackupPrompt()) {
+                showOpenBackupOffer = true
+            }
+        }
+
+        LaunchedEffect(closeRequested) {
+            if (!closeRequested) return@LaunchedEffect
+            onCloseRequestHandled()
+            handleAppCloseRequest(
+                onExitApplication = onExitApplication,
+                onShowCloseBackupOffer = { showCloseBackupOffer = true },
+            )
         }
 
         Box(
@@ -103,10 +122,47 @@ fun App() {
             }
         }
 
+        if (showOpenBackupOffer) {
+            BackupOfferDialog(
+                title = "Create a data backup?",
+                message = "Email a zip of your Glide data to ${appSettings.companyEmail}.",
+                onCreateBackup = {
+                    showOpenBackupOffer = false
+                    runEmailDataBackup { backupErrorMessage = it }
+                },
+                onSkip = { showOpenBackupOffer = false },
+            )
+        }
+
+        if (showCloseBackupOffer) {
+            BackupOfferDialog(
+                title = "Back up before closing?",
+                message = "Email a zip of your Glide data to ${appSettings.companyEmail} before you quit.",
+                onCreateBackup = {
+                    showCloseBackupOffer = false
+                    if (runEmailDataBackup { backupErrorMessage = it }) {
+                        onExitApplication()
+                    } else {
+                        exitAfterBackupErrorDismiss = true
+                    }
+                },
+                onSkip = {
+                    showCloseBackupOffer = false
+                    onExitApplication()
+                },
+            )
+        }
+
         backupErrorMessage?.let { message ->
             BackupResultDialog(
                 message = message,
-                onDismiss = { backupErrorMessage = null },
+                onDismiss = {
+                    backupErrorMessage = null
+                    if (exitAfterBackupErrorDismiss) {
+                        exitAfterBackupErrorDismiss = false
+                        onExitApplication()
+                    }
+                },
             )
         }
 

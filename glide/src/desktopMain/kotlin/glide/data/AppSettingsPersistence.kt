@@ -30,16 +30,34 @@ internal actual fun persistAppSettings(settings: AppSettings) {
     properties.setProperty(PROPERTY_FPS_NUMBER, settings.fpsNumber)
     properties.setProperty(PROPERTY_COMPANY_EMAIL, settings.companyEmail)
     properties.setProperty(PROPERTY_COMPANY_PHONE, settings.companyPhone)
+    properties.setProperty(
+        PROPERTY_HAS_COMPLETED_FIRST_SESSION,
+        settings.hasCompletedFirstSession.toString(),
+    )
     file.outputStream().use { properties.store(it, "Glide app settings") }
 }
 
 private fun readProperties(file: File): AppSettings = runCatching {
     val properties = Properties().apply { file.inputStream().use { load(it) } }
+    val legalCompanyName = properties.getProperty(PROPERTY_LEGAL_COMPANY_NAME, "").orEmpty()
+    val fpsNumber = properties.getProperty(PROPERTY_FPS_NUMBER, "").orEmpty()
+    val companyEmail = properties.getProperty(PROPERTY_COMPANY_EMAIL, "").orEmpty()
+    val companyPhone = properties.getProperty(PROPERTY_COMPANY_PHONE, "").orEmpty()
+    val hasCompletedFirstSession = when (properties.getProperty(PROPERTY_HAS_COMPLETED_FIRST_SESSION)) {
+        "true" -> true
+        "false" -> false
+        null -> legalCompanyName.isNotBlank() &&
+            fpsNumber.isNotBlank() &&
+            companyEmail.isNotBlank() &&
+            companyPhone.isNotBlank()
+        else -> false
+    }
     AppSettings(
-        legalCompanyName = properties.getProperty(PROPERTY_LEGAL_COMPANY_NAME, "").orEmpty(),
-        fpsNumber = properties.getProperty(PROPERTY_FPS_NUMBER, "").orEmpty(),
-        companyEmail = properties.getProperty(PROPERTY_COMPANY_EMAIL, "").orEmpty(),
-        companyPhone = properties.getProperty(PROPERTY_COMPANY_PHONE, "").orEmpty(),
+        legalCompanyName = legalCompanyName,
+        fpsNumber = fpsNumber,
+        companyEmail = companyEmail,
+        companyPhone = companyPhone,
+        hasCompletedFirstSession = hasCompletedFirstSession,
     )
 }.getOrDefault(AppSettings())
 
@@ -47,6 +65,7 @@ private const val PROPERTY_LEGAL_COMPANY_NAME = "legalCompanyName"
 private const val PROPERTY_FPS_NUMBER = "fpsNumber"
 private const val PROPERTY_COMPANY_EMAIL = "companyEmail"
 private const val PROPERTY_COMPANY_PHONE = "companyPhone"
+private const val PROPERTY_HAS_COMPLETED_FIRST_SESSION = "hasCompletedFirstSession"
 
 private fun settingsFile(): File = File(glideApplicationSupportDir(), "settings.properties")
 
