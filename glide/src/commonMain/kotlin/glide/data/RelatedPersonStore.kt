@@ -14,7 +14,7 @@ object RelatedPersonStore {
         _people.filter { isOnSoldPlan(it.id) }
 
     /**
-     * Related people for the Related panel — all on customer packs, those in
+     * Related people for the Related panel — all on customer plans, those in
      * [customerGroupId] when a customer group is selected, or everyone linked to [contactId]
      * across that contact's leads and customer groups.
      */

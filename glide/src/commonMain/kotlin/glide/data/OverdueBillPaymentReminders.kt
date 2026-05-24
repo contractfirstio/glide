@@ -73,7 +73,7 @@ private fun Bill.toOverdueBillPaymentOrNull(nowMillis: Long): OverdueBillPayment
         billId = id,
         peopleGroupId = peopleGroupId,
         customerLabel = main.name.ifBlank { "Customer" },
-        billDescription = packLineDescription(),
+        billDescription = planLineDescription(),
         formattedAmount = formatMoney(amountMinor, currencyCode),
         daysPastDue = daysPastDue,
         dueDateLabel = dueDateFormat.format(Date(dueMillis)),

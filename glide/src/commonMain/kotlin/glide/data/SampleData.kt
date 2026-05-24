@@ -31,8 +31,8 @@ object SampleData {
     /** Fixed "today" for stable demo data (summer term 2026). */
     private val sampleToday = LocalDate.of(2026, 5, 23)
 
-    /** Sold-pack start for sample customers — summer term start so past class sessions count. */
-    private const val SAMPLE_PACK_START_DATE = "2026-04-20"
+    /** Sold-plan start for sample customers — summer term start so past class sessions count. */
+    private const val SAMPLE_PLAN_START_DATE = "2026-04-20"
 
     private val deferredBillingActions = mutableListOf<() -> Unit>()
 
@@ -42,26 +42,26 @@ object SampleData {
         val now = System.currentTimeMillis()
         val day = 24L * 60 * 60 * 1000
 
-        val rollingPack = Plan(
+        val rollingPlan = Plan(
             id = "sample-plan-rolling-10",
-            kind = PlanKind.MULTI_LESSON_PACK,
-            name = "10 Class Rolling Pack",
+            kind = PlanKind.MULTI_LESSON_PLAN,
+            name = "10 Class Rolling Plan",
             lessonCount = 10,
             rolling = true,
             priceAmountMinor = majorToMinor(120.0),
-            notes = "Standard term pack",
+            notes = "Standard term plan",
             createdAtMillis = now - 30 * day,
         )
         val singleLesson = Plan(
             id = "sample-plan-single",
-            kind = PlanKind.SINGLE_LESSON_PACK,
+            kind = PlanKind.SINGLE_LESSON_PLAN,
             name = "Single Trial Lesson",
             lessonCount = 1,
             rolling = false,
             priceAmountMinor = majorToMinor(15.0),
             createdAtMillis = now - 30 * day,
         )
-        PlanStore.create(rollingPack)
+        PlanStore.create(rollingPlan)
         PlanStore.create(singleLesson)
 
         val emma = Contact(
@@ -137,7 +137,7 @@ object SampleData {
             id = "sample-related-alex",
             name = "Alex Morgan",
             dateOfBirth = "11/02/2010",
-            notes = "Related on Emma and James packs — different classes",
+            notes = "Related on Emma and James plans — different classes",
             createdAtMillis = now - 10 * day,
         )
         listOf(leo, mia, noah, ivy, sam, zoe, alex).forEach { RelatedPersonStore.create(it) }
@@ -151,12 +151,12 @@ object SampleData {
             mainContactId = emma.id,
             relatedPersonIds = listOf(mia.id, noah.id, alex.id),
             status = PeopleGroupStatus.Contacted,
-            planId = rollingPack.id,
-            planStartDate = SAMPLE_PACK_START_DATE,
+            planId = rollingPlan.id,
+            planStartDate = SAMPLE_PLAN_START_DATE,
             createdAtMillis = now - 10 * day,
         )
-        registerCustomerBilling(emmaGroup, rollingPack) { enrollment ->
-            BillStore.createInitialPackBill(enrollment)
+        registerCustomerBilling(emmaGroup, rollingPlan) { enrollment ->
+            BillStore.createInitialPlanBill(enrollment)
         }
 
         // Customer 2: fully paid — test paid bill display
@@ -165,14 +165,14 @@ object SampleData {
             type = PeopleGroupType.CUSTOMER,
             mainContactId = james.id,
             relatedPersonIds = listOf(ivy.id, sam.id, alex.id),
-            planId = rollingPack.id,
+            planId = rollingPlan.id,
             mainContactAttendsClass = false,
             status = PeopleGroupStatus.Contacted,
-            planStartDate = SAMPLE_PACK_START_DATE,
+            planStartDate = SAMPLE_PLAN_START_DATE,
             createdAtMillis = now - 8 * day,
         )
-        registerCustomerBilling(jamesGroup, rollingPack) { enrollment ->
-            val bill = BillStore.createInitialPackBill(enrollment)
+        registerCustomerBilling(jamesGroup, rollingPlan) { enrollment ->
+            val bill = BillStore.createInitialPlanBill(enrollment)
             BillStore.setIssued(bill.id, issued = true, issuedAtMillis = now - 8 * day)
             PaymentStore.recordFullPayment(
                 bill = BillStore.findById(bill.id)!!,
@@ -188,14 +188,14 @@ object SampleData {
             type = PeopleGroupType.CUSTOMER,
             mainContactId = sarah.id,
             relatedPersonIds = listOf(leo.id, zoe.id),
-            planId = rollingPack.id,
-            planStartDate = SAMPLE_PACK_START_DATE,
+            planId = rollingPlan.id,
+            planStartDate = SAMPLE_PLAN_START_DATE,
             status = PeopleGroupStatus.Contacted,
-            notes = "Family pack",
+            notes = "Family plan",
             createdAtMillis = now - 6 * day,
         )
-        registerCustomerBilling(sarahGroup, rollingPack) { enrollment ->
-            val first = BillStore.createInitialPackBill(enrollment)
+        registerCustomerBilling(sarahGroup, rollingPlan) { enrollment ->
+            val first = BillStore.createInitialPlanBill(enrollment)
             BillStore.setIssued(first.id, issued = true, issuedAtMillis = now - 6 * day)
             PaymentStore.recordFullPayment(
                 bill = BillStore.findById(first.id)!!,
@@ -206,10 +206,10 @@ object SampleData {
             BillStore.createRenewalBill(enrollment)
         }
 
-        assignPackSchedulesForRollingGroups()
+        assignPlanSchedulesForRollingGroups()
         seedPastAttendance(now)
         deferredBillingActions.forEach { it() }
-        RollingPackBillingService.syncAllActiveRollingPackBilling()
+        RollingPlanBillingService.syncAllActiveRollingPlanBilling()
 
         // Issued renewal overdue for payment alert testing
         BillStore.forPeopleGroup(SAMPLE_CUSTOMER_SARAH)
@@ -222,7 +222,7 @@ object SampleData {
             id = "sample-related-ella",
             name = "Ella O'Brien",
             dateOfBirth = "25/03/2013",
-            notes = "On Mike's lead only — not on a customer pack yet",
+            notes = "On Mike's lead only — not on a customer plan yet",
             createdAtMillis = now - 2 * day,
         )
         RelatedPersonStore.create(ella)
@@ -236,7 +236,7 @@ object SampleData {
                 phone = "07700 900 404",
                 relatedPersonIds = listOf(ella.id),
                 status = PeopleGroupStatus.WaitingReply,
-                planId = rollingPack.id,
+                planId = rollingPlan.id,
                 planStartDate = sampleToday.toString(),
                 notes = "Interested in evening classes",
                 createdAtMillis = now - 2 * day,
@@ -309,7 +309,7 @@ object SampleData {
                 dayOfWeek = DayOfWeek.TUESDAY,
                 startTime = "16:00",
                 endTime = "17:00",
-                notes = "Emma's household — rolling pack",
+                notes = "Emma's household — rolling plan",
                 createdAtMillis = now - 4 * day,
             ),
         )
@@ -359,22 +359,22 @@ object SampleData {
     private fun registerCustomerBilling(
         group: PeopleGroup,
         plan: Plan,
-        configureBills: (glide.model.PackEnrollment) -> Unit,
+        configureBills: (glide.model.PlanEnrollment) -> Unit,
     ) {
         PeopleGroupStore.seedCustomer(group)
-        val enrollment = PackEnrollmentStore.createForCustomerGroup(
+        val enrollment = PlanEnrollmentStore.createForCustomerGroup(
             group = group,
             planSnapshot = PlanSnapshot.from(plan),
         ) ?: return
         deferredBillingActions.add { configureBills(enrollment) }
     }
 
-    private fun assignPackSchedulesForRollingGroups() {
+    private fun assignPlanSchedulesForRollingGroups() {
         ScheduledClassStore.classes.forEach { scheduledClass ->
             scheduledClass.customerGroupIds.forEach { groupId ->
-                val rolling = PackEnrollmentStore.forPeopleGroup(groupId)?.planSnapshot?.rolling == true
+                val rolling = PlanEnrollmentStore.forPeopleGroup(groupId)?.planSnapshot?.rolling == true
                 if (rolling) {
-                    assignPackClassSchedule(groupId, scheduledClass)
+                    assignPlanClassSchedule(groupId, scheduledClass)
                 }
             }
         }

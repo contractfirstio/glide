@@ -6,9 +6,9 @@ import glide.model.PlanKind
 import glide.model.formatMoney
 import glide.model.summaryLine
 
-data class PackFlyerContent(
+data class PlanFlyerContent(
     val studioName: String,
-    val packName: String,
+    val planName: String,
     val planTypeLabel: String,
     val summaryLine: String,
     val priceLabel: String,
@@ -16,19 +16,19 @@ data class PackFlyerContent(
     val notes: String,
 )
 
-fun Plan.toPackFlyerContent(): PackFlyerContent {
+fun Plan.toPlanFlyerContent(): PlanFlyerContent {
     val rollingDetail = when (kind) {
-        PlanKind.MULTI_LESSON_PACK -> if (rolling) {
-            "Rolling pack — unused classes stay on your balance within the pack."
+        PlanKind.MULTI_LESSON_PLAN -> if (rolling) {
+            "Rolling plan — unused classes stay on your balance within the plan."
         } else {
-            "Fixed pack — use your classes within the pack period."
+            "Fixed plan — use your classes within the plan period."
         }
-        PlanKind.SINGLE_LESSON_PACK -> null
+        PlanKind.SINGLE_LESSON_PLAN -> null
         PlanKind.CAMP -> "Fixed camp — runs over $lessonCount consecutive days."
     }
-    return PackFlyerContent(
+    return PlanFlyerContent(
         studioName = AppSettingsStore.legalCompanyName,
-        packName = name.ifBlank { "Dance pack" },
+        planName = name.ifBlank { "Dance plan" },
         planTypeLabel = kind.label,
         summaryLine = summaryLine(),
         priceLabel = "${formatMoney(priceAmountMinor, currencyCode)} per person",

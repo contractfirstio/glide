@@ -7,8 +7,8 @@ import glide.model.isIssuedToCustomer
 fun Bill.grossAmountMinorResolved(): Long =
     grossAmountMinor ?: (amountMinor + BillingCreditStore.appliedTotalMinorForBill(id))
 
-/** Pack line label without legacy credit suffix in [Bill.description]. */
-fun Bill.packLineDescription(): String {
+/** Plan line label without legacy credit suffix in [Bill.description]. */
+fun Bill.planLineDescription(): String {
     val marker = " ("
     val creditSuffix = "credit applied)"
     if (description.contains(creditSuffix)) {

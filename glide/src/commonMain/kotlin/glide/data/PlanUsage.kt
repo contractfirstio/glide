@@ -6,10 +6,10 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * Class sessions on the customer's calendar in the current pack period (not attendance).
+ * Class sessions on the customer's calendar in the current plan period (not attendance).
  * Each scheduled class date counts toward the plan's class count; absences are handled via credits.
  */
-fun countScheduledPackSessionsInPeriod(
+fun countScheduledPlanSessionsInPeriod(
     peopleGroupId: String,
     periodStartedAtMillis: Long,
     throughDate: LocalDate = LocalDate.now(),

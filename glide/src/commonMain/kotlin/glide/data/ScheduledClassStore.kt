@@ -43,7 +43,7 @@ object ScheduledClassStore {
         if (!canDelete(id)) return false
         _classes.removeAll { it.id == id }
         ClassAttendanceStore.clearForClass(id)
-        PackClassScheduleStore.clearForClass(id)
+        PlanClassScheduleStore.clearForClass(id)
         return true
     }
 
@@ -78,7 +78,7 @@ object ScheduledClassStore {
             val item = _classes[index]
             if (item.hasCustomerGroup(groupId)) {
                 _classes[index] = item.copy(customerGroupIds = item.customerGroupIds - groupId)
-                PackClassScheduleStore.remove(groupId, item.id)
+                PlanClassScheduleStore.remove(groupId, item.id)
             }
         }
     }

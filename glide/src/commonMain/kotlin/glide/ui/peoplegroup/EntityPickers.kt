@@ -112,7 +112,7 @@ fun ReadOnlyRelatedPeopleSection(
 }
 
 @Composable
-fun ReadOnlyPackSection(
+fun ReadOnlyPlanSection(
     planId: String?,
     prominent: Boolean = false,
 ) {
@@ -159,7 +159,7 @@ fun ReadOnlyPackSection(
                 )
             } else {
                 Text(
-                    text = "No pack assigned",
+                    text = "No plan assigned",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -167,7 +167,7 @@ fun ReadOnlyPackSection(
             }
         }
     } else {
-        GlideFieldLabel("Pack")
+        GlideFieldLabel("Plan")
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = plan?.let { "${it.name} (${it.summaryLine()})" } ?: "—",
@@ -261,7 +261,7 @@ fun RelatedPersonLinkSection(
 
     Spacer(modifier = Modifier.height(4.dp))
     Text(
-        text = "Edit details in the Related panel once they are on a customer pack.",
+        text = "Edit details in the Related panel once they are on a customer plan.",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

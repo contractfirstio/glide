@@ -8,8 +8,8 @@ enum class BillLineItemKind(val label: String) {
 }
 
 enum class BillLineItemSource {
-    /** Pack charge seeded when the bill is created. */
-    PACK,
+    /** Plan charge seeded when the bill is created. */
+    PLAN,
     /** Auto-synced from an attendance [BillingCredit]. */
     ATTENDANCE_CREDIT,
     /** Added or edited manually before issue. */

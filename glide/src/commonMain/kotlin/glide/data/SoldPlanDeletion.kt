@@ -11,7 +11,7 @@ fun soldPlanDeletionBlockReason(peopleGroupId: String): String? {
     if (group.type != PeopleGroupType.CUSTOMER) return null
 
     val blockers = buildList {
-        if (isSoldPackAssignedToClass(peopleGroupId)) {
+        if (isSoldPlanAssignedToClass(peopleGroupId)) {
             add("assigned to a class")
         }
         if (hasIssuedOrPaidBill(peopleGroupId)) {
@@ -32,15 +32,15 @@ fun hasIssuedOrPaidBill(peopleGroupId: String): Boolean =
 
 internal fun purgeSoldPlanData(peopleGroupId: String) {
     ScheduledClassStore.clearCustomerGroupReference(peopleGroupId)
-    PackClassScheduleStore.clearForGroup(peopleGroupId)
+    PlanClassScheduleStore.clearForGroup(peopleGroupId)
 
-    val enrollmentIds = PackEnrollmentStore.all
+    val enrollmentIds = PlanEnrollmentStore.all
         .filter { it.peopleGroupId == peopleGroupId }
         .map { it.id }
     enrollmentIds.forEach { enrollmentId ->
         BillingCreditStore.removeAllForEnrollment(enrollmentId)
     }
-    PackEnrollmentStore.removeAllForPeopleGroup(peopleGroupId)
+    PlanEnrollmentStore.removeAllForPeopleGroup(peopleGroupId)
     BillStore.removeAllForPeopleGroup(peopleGroupId)
     PaymentStore.removeAllForPeopleGroup(peopleGroupId)
 

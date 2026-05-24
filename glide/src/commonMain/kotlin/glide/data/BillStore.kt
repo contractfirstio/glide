@@ -11,7 +11,7 @@ import glide.model.BillLineItem
 import glide.model.BillLineItemKind
 import glide.model.BillLineItemSource
 import glide.model.BillStatus
-import glide.model.PackEnrollment
+import glide.model.PlanEnrollment
 import glide.model.billPaymentDueAtMillis
 import glide.model.canBeVoided
 import glide.model.isBillingEditable
@@ -45,16 +45,16 @@ object BillStore {
 
     fun findById(id: String): Bill? = _bills.find { it.id == id }
 
-    fun createInitialPackBill(enrollment: PackEnrollment): Bill =
-        addPackBill(enrollment = enrollment, description = enrollment.planSnapshot.planName)
+    fun createInitialPlanBill(enrollment: PlanEnrollment): Bill =
+        addPlanBill(enrollment = enrollment, description = enrollment.planSnapshot.planName)
 
-    fun createRenewalBill(enrollment: PackEnrollment): Bill =
-        addPackBill(
+    fun createRenewalBill(enrollment: PlanEnrollment): Bill =
+        addPlanBill(
             enrollment = enrollment,
             description = "${enrollment.planSnapshot.planName} (renewal)",
         )
 
-    private fun addPackBill(enrollment: PackEnrollment, description: String): Bill {
+    private fun addPlanBill(enrollment: PlanEnrollment, description: String): Bill {
         val snapshot = enrollment.planSnapshot
         val householdSize = PeopleGroupStore.findById(enrollment.peopleGroupId)?.memberCount() ?: 1
         val grossMinor = snapshot.totalAmountMinor(householdSize)
@@ -71,7 +71,7 @@ object BillStore {
                     description = description,
                     amountMinor = grossMinor,
                     kind = BillLineItemKind.DEBIT,
-                    source = BillLineItemSource.PACK,
+                    source = BillLineItemSource.PLAN,
                 ),
             ),
         )
@@ -167,7 +167,7 @@ object BillStore {
         if (index < 0) return false
         val bill = _bills[index]
         if (hasOutstandingAttendanceSubmissions()) return false
-        if (soldPackBlocksBillIssuance(bill.peopleGroupId)) return false
+        if (soldPlanBlocksBillIssuance(bill.peopleGroupId)) return false
         if (bill.status != BillStatus.SCHEDULED) return false
         val reconciled = reconcileBillCredits(billId) ?: return false
         val issuedBill = reconciled.copy(
@@ -185,7 +185,7 @@ object BillStore {
         if (!AppSettingsStore.isConfigured) return "Company settings are not configured."
         val bill = findById(billId) ?: return "Bill not found."
         if (hasOutstandingAttendanceSubmissions()) return "Could not generate invoice."
-        if (soldPackBlocksBillIssuance(bill.peopleGroupId)) return "Could not generate invoice."
+        if (soldPlanBlocksBillIssuance(bill.peopleGroupId)) return "Could not generate invoice."
         val exportBill = if (bill.issuedInvoiceSnapshot != null) {
             bill
         } else {
@@ -214,7 +214,7 @@ object BillStore {
         val bill = _bills[index]
         if (bill.status != BillStatus.ISSUED) return false
         _bills[index] = bill.copy(status = BillStatus.PAID, paidAtMillis = paidAtMillis)
-        RollingPackBillingService.onPackBillPaid(bill.enrollmentId, paidAtMillis)
+        RollingPlanBillingService.onPlanBillPaid(bill.enrollmentId, paidAtMillis)
         return true
     }
 

@@ -23,7 +23,7 @@ import glide.model.DayOfWeek
 import glide.ui.theme.GlideTextButton
 
 @Composable
-fun WeeklyPackScheduleDialog(
+fun WeeklyPlanScheduleDialog(
     planName: String,
     requiredDays: Int,
     availableDays: List<DayOfWeek>,
@@ -110,7 +110,7 @@ fun WeeklyPackScheduleDialog(
 }
 
 @Composable
-fun WeeklyPackScheduleBlockedDialog(
+fun WeeklyPlanScheduleBlockedDialog(
     message: String,
     onDismiss: () -> Unit,
 ) {

@@ -207,7 +207,7 @@ private fun InvoiceContent.classScheduleCard(schedule: InvoiceClassSchedule): St
             add("Location" to schedule.locationAddressLines.joinToString(", "))
         }
         add("Students" to schedule.studentNamesLabel)
-        add("Pack period starts" to schedule.billingWindowStartLabel)
+        add("Plan period starts" to schedule.billingWindowStartLabel)
     }
     val sessionList = sessions.joinToString("") { session ->
         """<li style="margin:0 0 6px 0;color:#3d4452;">${session.htmlEscape()}</li>"""

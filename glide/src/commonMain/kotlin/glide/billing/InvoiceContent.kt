@@ -6,7 +6,7 @@ import glide.data.BillingCreditStore
 import glide.data.PeopleGroupStore
 import glide.data.ensureLineItems
 import glide.data.grossAmountMinorResolved
-import glide.data.packLineDescription
+import glide.data.planLineDescription
 import glide.data.resolveMainContact
 import glide.model.Bill
 import glide.model.BillLineItemKind
@@ -80,7 +80,7 @@ fun Bill.toLiveInvoiceContent(): InvoiceContent? {
         }
     } else {
         val gross = grossAmountMinorResolved()
-        listOf(InvoiceDebitLine(packLineDescription(), gross)) to
+        listOf(InvoiceDebitLine(planLineDescription(), gross)) to
             BillingCreditStore.appliedToBill(id).map { credit ->
                 InvoiceCreditLine(description = credit.description, amountMinor = credit.amountMinor)
             }

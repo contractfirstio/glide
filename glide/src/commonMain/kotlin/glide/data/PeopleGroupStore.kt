@@ -177,7 +177,7 @@ object PeopleGroupStore {
         return true
     }
 
-    /** Copies a locked customer group into a new editable lead (same contact, related people, and pack). */
+    /** Copies a locked customer group into a new editable lead (same contact, related people, and plan). */
     fun cloneToLead(customerGroupId: String): PeopleGroup? {
         val source = findById(customerGroupId) ?: return null
         if (source.type != PeopleGroupType.CUSTOMER) return null

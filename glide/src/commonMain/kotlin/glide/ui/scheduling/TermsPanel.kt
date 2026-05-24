@@ -551,7 +551,7 @@ private fun TermForm(
 
     FormPanelSection(
         title = "Rolling plans",
-        description = "Whether rolling pack classes can extend into this term.",
+        description = "Whether rolling plan classes can extend into this term.",
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
@@ -570,7 +570,7 @@ private fun TermForm(
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Text(
-                    text = "Rolling pack schedules may span into this term when a new term is added.",
+                    text = "Rolling plan schedules may span into this term when a new term is added.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

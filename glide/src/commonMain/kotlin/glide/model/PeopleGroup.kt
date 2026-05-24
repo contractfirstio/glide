@@ -29,7 +29,7 @@ data class PeopleGroup(
     val relatedPersonIds: List<String> = emptyList(),
     val status: PeopleGroupStatus = PeopleGroupStatus.New,
     val planId: String? = null,
-    /** ISO date (yyyy-MM-dd) when the selected pack starts; required before marking a lead as sold. */
+    /** ISO date (yyyy-MM-dd) when the selected plan starts; required before marking a lead as sold. */
     val planStartDate: String = "",
     /** When false, the main contact is not counted on classes; related people always attend. */
     val mainContactAttendsClass: Boolean = true,

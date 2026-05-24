@@ -38,14 +38,14 @@ fun openPendingBillIssuance(pending: PendingBillIssuance) {
 private fun Bill.toPendingBillIssuanceOrNull(): PendingBillIssuance? {
     val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
     if (group.type != PeopleGroupType.CUSTOMER) return null
-    if (soldPackBlocksBillIssuance(peopleGroupId)) return null
+    if (soldPlanBlocksBillIssuance(peopleGroupId)) return null
     val main = group.resolveMainContact()
     val customerLabel = main.name.ifBlank { "Customer" }
     return PendingBillIssuance(
         billId = id,
         peopleGroupId = peopleGroupId,
         customerLabel = customerLabel,
-        billDescription = packLineDescription(),
+        billDescription = planLineDescription(),
         formattedAmount = formatMoney(amountMinor, currencyCode),
     )
 }

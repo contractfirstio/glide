@@ -22,7 +22,7 @@ import androidx.compose.ui.input.key.type
 import glide.data.AppSettingsStore
 import glide.data.AppViewMode
 import glide.data.AppViewState
-import glide.data.RollingPackBillingService
+import glide.data.RollingPlanBillingService
 import glide.ui.components.AppChrome
 import glide.ui.components.FloatingPanelsHost
 import glide.ui.billing.OverdueBillPaymentAlertBanner
@@ -30,9 +30,9 @@ import glide.ui.billing.PendingBillIssuanceAlertBanner
 import glide.ui.billing.rememberOverdueBillPayments
 import glide.ui.billing.rememberPendingBillsToIssue
 import glide.ui.scheduling.PendingAttendanceAlertBanner
-import glide.ui.scheduling.UnassignedSoldPackAlertBanner
+import glide.ui.scheduling.UnassignedSoldPlanAlertBanner
 import glide.ui.scheduling.rememberPendingAttendanceSessions
-import glide.ui.scheduling.rememberUnassignedSoldPacks
+import glide.ui.scheduling.rememberUnassignedSoldPlans
 import glide.ui.theme.GlideCanvasBackground
 import glide.ui.theme.GlideTheme
 
@@ -45,10 +45,10 @@ fun App() {
         val pendingAttendance = rememberPendingAttendanceSessions()
         val pendingBillsToIssue = rememberPendingBillsToIssue()
         val overdueBillPayments = rememberOverdueBillPayments()
-        val unassignedSoldPacks = rememberUnassignedSoldPacks()
+        val unassignedSoldPlans = rememberUnassignedSoldPlans()
         LaunchedEffect(Unit) {
             focusRequester.requestFocus()
-            RollingPackBillingService.syncAllActiveRollingPackBilling()
+            RollingPlanBillingService.syncAllActiveRollingPlanBilling()
         }
 
         Box(
@@ -81,7 +81,7 @@ fun App() {
                 }
                 PendingBillIssuanceAlertBanner(pending = pendingBillsToIssue)
                 OverdueBillPaymentAlertBanner(overdue = overdueBillPayments)
-                UnassignedSoldPackAlertBanner(unassigned = unassignedSoldPacks)
+                UnassignedSoldPlanAlertBanner(unassigned = unassignedSoldPlans)
                 FloatingPanelsHost(modifier = Modifier.weight(1f))
             }
         }

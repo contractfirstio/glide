@@ -74,7 +74,7 @@ fun LeadRelatedPeopleSection(
 
         LeadActionSubsection(
             title = "Link existing related person",
-            description = "Search people already added on other leads or customer packs.",
+            description = "Search people already added on other leads or customer plans.",
             spacing = spacing,
         ) {
             EntitySearchPicker(
@@ -141,7 +141,7 @@ fun LeadRelatedPeopleSection(
 
         Spacer(modifier = Modifier.height(spacing.field))
         Text(
-            text = "Edit names and details in the Related panel once they are on a customer pack.",
+            text = "Edit names and details in the Related panel once they are on a customer plan.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -162,7 +162,7 @@ internal object BillingPdfSupport {
                     bodyFontSize,
                     textX,
                     innerY - 2f,
-                    "Pack period starts: ${schedule.billingWindowStartLabel}",
+                    "Plan period starts: ${schedule.billingWindowStartLabel}",
                     color = colorInk,
                 )
                 innerY -= 4f

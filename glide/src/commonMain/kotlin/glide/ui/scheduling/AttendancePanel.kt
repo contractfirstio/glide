@@ -127,7 +127,7 @@ fun AttendancePanel(
             saveMessage = when {
                 result.creditsAdded > 0 -> {
                     val creditLabel = formatMoney(result.totalCreditMinor, result.currencyCode)
-                    "Attendance submitted. $creditLabel credited toward next pack bill."
+                    "Attendance submitted. $creditLabel credited toward next plan bill."
                 }
                 result.creditsSkipped > 0 ->
                     "Attendance submitted. No billing credits were added (enrollment missing or already credited)."

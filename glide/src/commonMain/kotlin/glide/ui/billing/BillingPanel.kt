@@ -42,16 +42,16 @@ import glide.data.isEditableBeforeIssue
 import glide.data.displayBillingLineItems
 import glide.data.displayBillingTotalMinor
 import glide.data.openPendingAttendanceSession
-import glide.data.openSoldPackClassAssignment
-import glide.data.soldPackBlocksBillIssuance
-import glide.data.soldPackBlocksBillIssuanceMessage
+import glide.data.openSoldPlanClassAssignment
+import glide.data.soldPlanBlocksBillIssuance
+import glide.data.soldPlanBlocksBillIssuanceMessage
 import glide.ui.scheduling.rememberPendingAttendanceSessions
-import glide.data.PackEnrollmentStore
-import glide.data.RollingPackBillingService
-import glide.data.RollingPackCancellationService
+import glide.data.PlanEnrollmentStore
+import glide.data.RollingPlanBillingService
+import glide.data.RollingPlanCancellationService
 import glide.data.ScheduledClassStore
-import glide.data.countScheduledPackSessionsInPeriod
-import glide.model.PackEnrollmentStatus
+import glide.data.countScheduledPlanSessionsInPeriod
+import glide.model.PlanEnrollmentStatus
 import glide.data.PaymentStore
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
@@ -64,7 +64,7 @@ import glide.model.BillStatus
 import glide.model.majorToMinor
 import glide.model.minorToMajorString
 import glide.model.parseMajorAmount
-import glide.model.PackEnrollment
+import glide.model.PlanEnrollment
 import glide.model.displayDateMillis
 import glide.model.canBeVoided
 import glide.model.isBillingEditable
@@ -91,9 +91,9 @@ import java.util.Locale
 fun billingPanelTitle(peopleGroupId: String): String {
     val group = PeopleGroupStore.findById(peopleGroupId) ?: return "Billing"
     val main = group.resolveMainContact()
-    val packName = group.planId?.let { PlanStore.findById(it)?.name }
+    val planName = group.planId?.let { PlanStore.findById(it)?.name }
     return when {
-        packName != null -> "Billing — $packName"
+        planName != null -> "Billing — $planName"
         main.name.isNotBlank() -> "Billing — ${main.name}"
         else -> "Billing"
     }
@@ -105,8 +105,8 @@ fun BillingPanel(
     modifier: Modifier = Modifier,
 ) {
     val group = PeopleGroupStore.findById(peopleGroupId)
-    val enrollment = PackEnrollmentStore.displayForPeopleGroup(peopleGroupId)
-    val ongoingEnrollment = PackEnrollmentStore.forPeopleGroup(peopleGroupId)
+    val enrollment = PlanEnrollmentStore.displayForPeopleGroup(peopleGroupId)
+    val ongoingEnrollment = PlanEnrollmentStore.forPeopleGroup(peopleGroupId)
     ScheduledClassStore.classes
     val bills = enrollment?.let { e ->
         BillStore.forEnrollment(e.id)
@@ -117,19 +117,19 @@ fun BillingPanel(
     var showPaymentDialog by remember(peopleGroupId) { mutableStateOf(false) }
     var paymentError by remember(peopleGroupId) { mutableStateOf<String?>(null) }
     var billingActionMessage by remember(peopleGroupId) { mutableStateOf<String?>(null) }
-    var showCancelPackDialog by remember(peopleGroupId) { mutableStateOf(false) }
+    var showCancelPlanDialog by remember(peopleGroupId) { mutableStateOf(false) }
     var showVoidBillConfirm by remember(peopleGroupId) { mutableStateOf(false) }
 
     val pendingAttendance = rememberPendingAttendanceSessions()
     val billingBlockedByAttendance = pendingAttendance.isNotEmpty()
-    val billingBlockedByUnassignedClass = soldPackBlocksBillIssuance(peopleGroupId)
+    val billingBlockedByUnassignedClass = soldPlanBlocksBillIssuance(peopleGroupId)
     val billingBlocked = billingBlockedByAttendance || billingBlockedByUnassignedClass
 
     val spacing = GlideLayout.comfortable
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
 
     LaunchedEffect(ongoingEnrollment?.id, ongoingEnrollment?.status) {
-        ongoingEnrollment?.let { RollingPackBillingService.syncRollingPackBilling(it.peopleGroupId) }
+        ongoingEnrollment?.let { RollingPlanBillingService.syncRollingPlanBilling(it.peopleGroupId) }
     }
 
     Column(
@@ -160,7 +160,7 @@ fun BillingPanel(
 
         if (enrollment == null) {
             Text(
-                text = "No billing enrollment for this pack yet. Enrollment is created when a lead becomes a customer.",
+                text = "No billing enrollment for this plan yet. Enrollment is created when a lead becomes a customer.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -168,7 +168,7 @@ fun BillingPanel(
         }
 
         FormPanelSection(
-            title = "Pack enrollment",
+            title = "Plan enrollment",
             description = "Agreed plan, pricing, and billing period for this customer group.",
             spacing = spacing,
             role = FormPanelSectionRole.Primary,
@@ -178,14 +178,14 @@ fun BillingPanel(
             if (
                 ongoingEnrollment != null &&
                 enrollment.planSnapshot.rolling &&
-                enrollment.status == PackEnrollmentStatus.ACTIVE
+                enrollment.status == PlanEnrollmentStatus.ACTIVE
             ) {
                 Spacer(modifier = Modifier.height(spacing.field))
                 GlideOutlinedButton(
-                    onClick = { showCancelPackDialog = true },
+                    onClick = { showCancelPlanDialog = true },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Cancel pack", color = MaterialTheme.colorScheme.error)
+                    Text("Cancel plan", color = MaterialTheme.colorScheme.error)
                 }
             }
 
@@ -204,11 +204,11 @@ fun BillingPanel(
             if (billingBlockedByUnassignedClass) {
                 Spacer(modifier = Modifier.height(spacing.field))
                 Text(
-                    text = soldPackBlocksBillIssuanceMessage(),
+                    text = soldPlanBlocksBillIssuanceMessage(),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
                 )
-                GlideTextButton(onClick = { openSoldPackClassAssignment(peopleGroupId) }) {
+                GlideTextButton(onClick = { openSoldPlanClassAssignment(peopleGroupId) }) {
                     Text("Assign to class")
                 }
             }
@@ -256,8 +256,8 @@ fun BillingPanel(
                     onClick = {
                         if (!BillingService.addRenewalBill(peopleGroupId)) {
                             billingActionMessage = when (ongoingEnrollment?.status) {
-                                PackEnrollmentStatus.CANCELLING ->
-                                    "Renewal is stopped while this pack finishes."
+                                PlanEnrollmentStatus.CANCELLING ->
+                                    "Renewal is stopped while this plan finishes."
                                 else -> "Could not add a renewal bill."
                             }
                         } else {
@@ -265,7 +265,7 @@ fun BillingPanel(
                         }
                         selectedBillId = null
                     },
-                    enabled = ongoingEnrollment?.status == PackEnrollmentStatus.ACTIVE,
+                    enabled = ongoingEnrollment?.status == PlanEnrollmentStatus.ACTIVE,
                 ) {
                     Text("Add bill")
                 }
@@ -276,7 +276,7 @@ fun BillingPanel(
 
         FormPanelSection(
             title = "Bills",
-            description = "Scheduled, issued, and paid billing lines for this pack.",
+            description = "Scheduled, issued, and paid billing lines for this plan.",
             spacing = spacing,
             role = FormPanelSectionRole.Tertiary,
         ) {
@@ -301,14 +301,14 @@ fun BillingPanel(
                                 return@BillRow
                             }
                             if (issued && billingBlockedByUnassignedClass) {
-                                billingActionMessage = soldPackBlocksBillIssuanceMessage()
+                                billingActionMessage = soldPlanBlocksBillIssuanceMessage()
                                 return@BillRow
                             }
                             if (!BillStore.setIssued(bill.id, issued = true)) {
                                 if (issued && billingBlockedByAttendance) {
                                     billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
                                 } else if (issued && billingBlockedByUnassignedClass) {
-                                    billingActionMessage = soldPackBlocksBillIssuanceMessage()
+                                    billingActionMessage = soldPlanBlocksBillIssuanceMessage()
                                 }
                                 return@BillRow
                             }
@@ -320,7 +320,7 @@ fun BillingPanel(
                                 return@BillRow
                             }
                             if (billingBlockedByUnassignedClass) {
-                                billingActionMessage = soldPackBlocksBillIssuanceMessage()
+                                billingActionMessage = soldPlanBlocksBillIssuanceMessage()
                                 return@BillRow
                             }
                             billingActionMessage = BillStore.generateInvoice(bill.id)
@@ -348,7 +348,7 @@ fun BillingPanel(
                                 return@BillDetailActions
                             }
                             if (billingBlockedByUnassignedClass) {
-                                billingActionMessage = soldPackBlocksBillIssuanceMessage()
+                                billingActionMessage = soldPlanBlocksBillIssuanceMessage()
                                 return@BillDetailActions
                             }
                             billingActionMessage = BillStore.generateInvoice(selectedBill.id)
@@ -410,16 +410,16 @@ fun BillingPanel(
         )
     }
 
-    if (showCancelPackDialog && enrollment != null) {
-        CancelRollingPackDialog(
+    if (showCancelPlanDialog && enrollment != null) {
+        CancelRollingPlanDialog(
             enrollment = enrollment,
-            onDismiss = { showCancelPackDialog = false },
+            onDismiss = { showCancelPlanDialog = false },
             onConfirm = {
-                if (RollingPackCancellationService.cancelRenewal(enrollment.id)) {
+                if (RollingPlanCancellationService.cancelRenewal(enrollment.id)) {
                     billingActionMessage = null
-                    showCancelPackDialog = false
+                    showCancelPlanDialog = false
                 } else {
-                    billingActionMessage = "Could not cancel pack renewal."
+                    billingActionMessage = "Could not cancel plan renewal."
                 }
             },
         )
@@ -428,7 +428,7 @@ fun BillingPanel(
 
 @Composable
 private fun EnrollmentSummary(
-    enrollment: PackEnrollment,
+    enrollment: PlanEnrollment,
     dateFormat: SimpleDateFormat,
     showBackground: Boolean = true,
 ) {
@@ -462,11 +462,11 @@ private fun EnrollmentSummary(
         )
         Text(
             text = when (snapshot.kind) {
-                glide.model.PlanKind.MULTI_LESSON_PACK -> {
+                glide.model.PlanKind.MULTI_LESSON_PLAN -> {
                     val rolling = if (snapshot.rolling) "Rolling" else "Fixed"
                     "${snapshot.lessonCount} classes · $rolling"
                 }
-                glide.model.PlanKind.SINGLE_LESSON_PACK -> "1 class"
+                glide.model.PlanKind.SINGLE_LESSON_PLAN -> "1 class"
                 glide.model.PlanKind.CAMP -> "${snapshot.lessonCount} days"
             },
             style = MaterialTheme.typography.bodySmall,
@@ -477,7 +477,7 @@ private fun EnrollmentSummary(
             style = MaterialTheme.typography.bodySmall,
         )
         Text(
-            text = "Pack total: ${formatMoney(snapshot.totalAmountMinor(householdSize), snapshot.currencyCode)} " +
+            text = "Plan total: ${formatMoney(snapshot.totalAmountMinor(householdSize), snapshot.currencyCode)} " +
                 "($householdSize ${if (householdSize == 1) "person" else "people"})",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -496,25 +496,25 @@ private fun EnrollmentSummary(
             )
         }
         if (snapshot.rolling) {
-            val packSize = snapshot.lessonCount.coerceAtLeast(1)
-            val scheduled = countScheduledPackSessionsInPeriod(
+            val planSize = snapshot.lessonCount.coerceAtLeast(1)
+            val scheduled = countScheduledPlanSessionsInPeriod(
                 peopleGroupId = enrollment.peopleGroupId,
-                periodStartedAtMillis = enrollment.packPeriodStartedAtMillis,
+                periodStartedAtMillis = enrollment.planPeriodStartedAtMillis,
             )
-            val remaining = (packSize - scheduled).coerceAtLeast(0)
+            val remaining = (planSize - scheduled).coerceAtLeast(0)
             val billingLine = when (enrollment.status) {
-                PackEnrollmentStatus.CANCELLING ->
-                    "Finishing current pack: $scheduled of $packSize scheduled classes · renewal stopped"
-                PackEnrollmentStatus.CANCELLED ->
-                    "Pack completed: $scheduled of $packSize scheduled classes in last period"
+                PlanEnrollmentStatus.CANCELLING ->
+                    "Finishing current plan: $scheduled of $planSize scheduled classes · renewal stopped"
+                PlanEnrollmentStatus.CANCELLED ->
+                    "Plan completed: $scheduled of $planSize scheduled classes in last period"
                 else ->
-                    "Pack billing: $scheduled of $packSize scheduled classes · $remaining until renewal"
+                    "Plan billing: $scheduled of $planSize scheduled classes · $remaining until renewal"
             }
             Text(
                 text = billingLine,
                 style = MaterialTheme.typography.labelSmall,
                 color = when (enrollment.status) {
-                    PackEnrollmentStatus.CANCELLING -> MaterialTheme.colorScheme.primary
+                    PlanEnrollmentStatus.CANCELLING -> MaterialTheme.colorScheme.primary
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
@@ -1089,22 +1089,22 @@ private fun AddBillLineItemDialog(
 }
 
 @Composable
-private fun CancelRollingPackDialog(
-    enrollment: PackEnrollment,
+private fun CancelRollingPlanDialog(
+    enrollment: PlanEnrollment,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
     val snapshot = enrollment.planSnapshot
-    val packSize = snapshot.lessonCount.coerceAtLeast(1)
-    val scheduled = countScheduledPackSessionsInPeriod(
+    val planSize = snapshot.lessonCount.coerceAtLeast(1)
+    val scheduled = countScheduledPlanSessionsInPeriod(
         peopleGroupId = enrollment.peopleGroupId,
-        periodStartedAtMillis = enrollment.packPeriodStartedAtMillis,
+        periodStartedAtMillis = enrollment.planPeriodStartedAtMillis,
     )
-    val remaining = (packSize - scheduled).coerceAtLeast(0)
+    val remaining = (planSize - scheduled).coerceAtLeast(0)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Cancel pack") },
+        title = { Text("Cancel plan") },
         text = {
             Column {
                 Text(
@@ -1114,8 +1114,8 @@ private fun CancelRollingPackDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = buildString {
-                        append("This customer will finish their current pack ")
-                        append("($scheduled of $packSize classes scheduled")
+                        append("This customer will finish their current plan ")
+                        append("($scheduled of $planSize classes scheduled")
                         if (remaining > 0) {
                             append(", $remaining more to schedule in this period")
                         }
@@ -1128,12 +1128,12 @@ private fun CancelRollingPackDialog(
         },
         confirmButton = {
             GlideTextButton(onClick = onConfirm) {
-                Text("Cancel pack", color = MaterialTheme.colorScheme.error)
+                Text("Cancel plan", color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
             GlideTextButton(onClick = onDismiss) {
-                Text("Keep pack")
+                Text("Keep plan")
             }
         },
     )

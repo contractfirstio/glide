@@ -73,7 +73,7 @@ import java.util.UUID
 
 private data class PlanFormState(
     val name: String = "",
-    val kind: PlanKind = PlanKind.MULTI_LESSON_PACK,
+    val kind: PlanKind = PlanKind.MULTI_LESSON_PLAN,
     val lessonCount: String = "10",
     val rolling: Boolean = true,
     val priceMajor: String = "",
@@ -83,8 +83,8 @@ private data class PlanFormState(
         if (name.isBlank()) return false
         if (parseMajorAmount(priceMajor) == null) return false
         return when (kind) {
-            PlanKind.SINGLE_LESSON_PACK -> true
-            PlanKind.MULTI_LESSON_PACK -> lessonCount.toIntOrNull()?.let { it > 0 } == true
+            PlanKind.SINGLE_LESSON_PLAN -> true
+            PlanKind.MULTI_LESSON_PLAN -> lessonCount.toIntOrNull()?.let { it > 0 } == true
             PlanKind.CAMP -> lessonCount.toIntOrNull()?.let { it > 0 } == true
         }
     }
@@ -95,8 +95,8 @@ private data class PlanFormState(
         existingCurrency: String = DEFAULT_CURRENCY_CODE,
     ): Plan? {
         val count = when (kind) {
-            PlanKind.SINGLE_LESSON_PACK -> 1
-            PlanKind.MULTI_LESSON_PACK -> lessonCount.toIntOrNull() ?: return null
+            PlanKind.SINGLE_LESSON_PLAN -> 1
+            PlanKind.MULTI_LESSON_PLAN -> lessonCount.toIntOrNull() ?: return null
             PlanKind.CAMP -> lessonCount.toIntOrNull() ?: return null
         }
         val priceMajorAmount = parseMajorAmount(priceMajor) ?: return null
@@ -105,7 +105,7 @@ private data class PlanFormState(
             kind = kind,
             name = name.trim(),
             lessonCount = count,
-            rolling = kind == PlanKind.MULTI_LESSON_PACK && rolling,
+            rolling = kind == PlanKind.MULTI_LESSON_PLAN && rolling,
             priceAmountMinor = majorToMinor(priceMajorAmount),
             currencyCode = existingCurrency,
             notes = notes.trim(),
@@ -229,7 +229,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             val label = outboundPlanFilterLabel ?: "this plan"
                             "Filtering customer groups, contacts, and related people for $label. Use Clear filter to reset."
                         }
-                        else -> "Define plan types and packs offered to customers."
+                        else -> "Define plan types and plans offered to customers."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -386,8 +386,8 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             onClick = {
                                 if (!form.draft.isValid()) {
                                     formError = when (form.draft.kind) {
-                                        PlanKind.SINGLE_LESSON_PACK -> "Name and a valid price per person are required."
-                                        PlanKind.MULTI_LESSON_PACK -> "Name, class count, and a valid price per person are required."
+                                        PlanKind.SINGLE_LESSON_PLAN -> "Name and a valid price per person are required."
+                                        PlanKind.MULTI_LESSON_PLAN -> "Name, class count, and a valid price per person are required."
                                         PlanKind.CAMP -> "Name, day count, and a valid price per person are required."
                                     }
                                     return@GlideButton
@@ -544,7 +544,7 @@ private fun PlanForm(
 
     FormPanelSection(
         title = "Plan identity",
-        description = "Name and type of pack you offer to customers.",
+        description = "Name and type of plan you offer to customers.",
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {
@@ -552,7 +552,7 @@ private fun PlanForm(
             value = state.name,
             onValueChange = { onStateChange(state.copy(name = it)) },
             label = "Plan name",
-            placeholder = "e.g. 10 Class Rolling Pack",
+            placeholder = "e.g. 10 Class Rolling Plan",
             readOnly = readOnly,
         )
         Spacer(modifier = Modifier.height(spacing.field))
@@ -592,12 +592,12 @@ private fun PlanForm(
                             onClick = {
                                 onStateChange(
                                     when (kind) {
-                                        PlanKind.SINGLE_LESSON_PACK -> state.copy(
+                                        PlanKind.SINGLE_LESSON_PLAN -> state.copy(
                                             kind = kind,
                                             lessonCount = "1",
                                             rolling = false,
                                         )
-                                        PlanKind.MULTI_LESSON_PACK -> state.copy(kind = kind)
+                                        PlanKind.MULTI_LESSON_PLAN -> state.copy(kind = kind)
                                         PlanKind.CAMP -> state.copy(
                                             kind = kind,
                                             rolling = false,
@@ -617,7 +617,7 @@ private fun PlanForm(
     FormPanelSectionsDivider(
         label = when (state.kind) {
             PlanKind.CAMP -> "Camp configuration"
-            else -> "Pack configuration"
+            else -> "Plan configuration"
         },
         spacing = spacing,
     )
@@ -625,7 +625,7 @@ private fun PlanForm(
     FormPanelSection(
         title = when (state.kind) {
             PlanKind.CAMP -> "Camp duration"
-            else -> "Classes in pack"
+            else -> "Classes in plan"
         },
         description = when (state.kind) {
             PlanKind.CAMP -> "How many days the camp runs for. Camps are always fixed and never roll over."
@@ -635,7 +635,7 @@ private fun PlanForm(
         role = FormPanelSectionRole.Secondary,
     ) {
         when (state.kind) {
-            PlanKind.MULTI_LESSON_PACK -> {
+            PlanKind.MULTI_LESSON_PLAN -> {
                 GlideOutlinedField(
                     value = state.lessonCount,
                     onValueChange = { onStateChange(state.copy(lessonCount = it.filter { c -> c.isDigit() })) },
@@ -659,7 +659,7 @@ private fun PlanForm(
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Text(
-                            text = "Classes roll over within the pack (e.g. 10-class rolling pack).",
+                            text = "Classes roll over within the plan (e.g. 10-class rolling plan).",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -675,7 +675,7 @@ private fun PlanForm(
                     readOnly = readOnly,
                 )
             }
-            PlanKind.SINGLE_LESSON_PACK -> {
+            PlanKind.SINGLE_LESSON_PLAN -> {
                 Text(
                     text = "Number of classes",
                     style = MaterialTheme.typography.labelLarge,

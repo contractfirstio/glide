@@ -15,13 +15,13 @@ fun BillLineItem.isEditableBeforeIssue(): Boolean =
 fun Bill.ensureLineItems(): Bill {
     if (isIssuedToCustomer() && lineItems.isNotEmpty()) return this
     if (lineItems.isNotEmpty()) return this
-    val packLine = BillLineItem(
-        description = packLineDescription(),
+    val planLine = BillLineItem(
+        description = planLineDescription(),
         amountMinor = grossAmountMinorResolved(),
         kind = BillLineItemKind.DEBIT,
-        source = BillLineItemSource.PACK,
+        source = BillLineItemSource.PLAN,
     )
-    return copy(lineItems = listOf(packLine) + attendanceCreditLineItems())
+    return copy(lineItems = listOf(planLine) + attendanceCreditLineItems())
 }
 
 /** Line items and total for UI display; locked bills read from the issue-time snapshot. */

@@ -163,7 +163,7 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                             "Filtering contacts and customer groups for $label. Use Clear filter to reset."
                         }
                         else ->
-                            "Edit related people on customer packs. They appear here after a lead becomes a customer."
+                            "Edit related people on customer plans. They appear here after a lead becomes a customer."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -235,7 +235,7 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                                     relatedFilterId != null ->
                                         "Related person not found."
                                     else ->
-                                        "No one on a customer pack yet. Add related people on a lead, then make the lead a customer."
+                                        "No one on a customer plan yet. Add related people on a lead, then make the lead a customer."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -286,7 +286,7 @@ fun RelatedPeoplePanel(modifier: Modifier = Modifier) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "Select someone on a customer pack to edit. Add them on a lead and convert to customer first.",
+                                text = "Select someone on a customer plan to edit. Add them on a lead and convert to customer first.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(spacing.outer),

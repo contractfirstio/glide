@@ -44,22 +44,22 @@ import glide.data.LocationStore
 import glide.data.enrolledHeadcount
 import glide.data.headcountForCustomerGroups
 import glide.data.AddCustomerGroupResult
-import glide.data.PackClassScheduleStore
-import glide.data.RollingPackBillingService
-import glide.data.assignPackClassSchedule
+import glide.data.PlanClassScheduleStore
+import glide.data.RollingPlanBillingService
+import glide.data.assignPlanClassSchedule
 import glide.data.isCustomerGroupAvailableForClass
 import glide.data.tryAddCustomerGroup
 import glide.data.validateCustomerGroupsForClass
-import glide.data.validatePackSchedulesForClass
-import glide.data.validateRollingPackEnrollmentsForClass
-import glide.data.peopleGroupHasRollingPack
-import glide.data.canAcceptRollingPackEnrollments
-import glide.data.PackScheduleAssignment
-import glide.data.assignWeeklyPackClassSchedule
-import glide.data.requiredClassSessionsForPack
+import glide.data.validatePlanSchedulesForClass
+import glide.data.validateRollingPlanEnrollmentsForClass
+import glide.data.peopleGroupHasRollingPlan
+import glide.data.canAcceptRollingPlanEnrollments
+import glide.data.PlanScheduleAssignment
+import glide.data.assignWeeklyPlanClassSchedule
+import glide.data.requiredClassSessionsForPlan
 import glide.data.validateWeeklyPlanFitsClass
 import glide.model.isWeekly
-import glide.data.PackEnrollmentStore
+import glide.data.PlanEnrollmentStore
 import glide.data.PeopleGroupStore
 import glide.data.PlanStore
 import glide.data.ScheduledClassStore
@@ -581,14 +581,14 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                                 ?: "This class has sold plans and its terms cannot be changed."
                                             return@GlideButton
                                         }
-                                        validatePackSchedulesForClass(
+                                        validatePlanSchedulesForClass(
                                             updated.customerGroupIds,
                                             updated,
                                         )?.let { message ->
                                             formError = message
                                             return@GlideButton
                                         }
-                                        validateRollingPackEnrollmentsForClass(
+                                        validateRollingPlanEnrollmentsForClass(
                                             updated.customerGroupIds,
                                             updated,
                                         )?.let { message ->
@@ -598,11 +598,11 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                         ScheduledClassStore.update(updated)
                                         updated.customerGroupIds.forEach { groupId ->
                                             if (!updated.isWeekly() ||
-                                                PackClassScheduleStore.sessionDatesFor(groupId, updated.id) == null
+                                                PlanClassScheduleStore.sessionDatesFor(groupId, updated.id) == null
                                             ) {
-                                                assignPackClassSchedule(groupId, updated)
+                                                assignPlanClassSchedule(groupId, updated)
                                             }
-                                            RollingPackBillingService.syncRollingPackBilling(groupId)
+                                            RollingPlanBillingService.syncRollingPlanBilling(groupId)
                                         }
                                         loadIntoForm(updated)
                                     }
@@ -747,7 +747,7 @@ private fun ClassListItem(
     }
 }
 
-private data class PendingWeeklyPackLink(
+private data class PendingWeeklyPlanLink(
     val groupId: String,
     val planName: String,
     val requiredDays: Int,
@@ -766,7 +766,7 @@ private fun ClassCustomerGroupsSection(
     var searchQuery by remember { mutableStateOf("") }
     var enrollmentMessage by remember { mutableStateOf<String?>(null) }
     var pendingRemoveGroupId by remember { mutableStateOf<String?>(null) }
-    var pendingWeeklyLink by remember { mutableStateOf<PendingWeeklyPackLink?>(null) }
+    var pendingWeeklyLink by remember { mutableStateOf<PendingWeeklyPlanLink?>(null) }
     var weeklyLinkBlockedMessage by remember { mutableStateOf<String?>(null) }
 
     val classForValidation = scheduledClassForValidation
@@ -779,8 +779,8 @@ private fun ClassCustomerGroupsSection(
             .filter { it.id !in assignedIds }
             .filter { group -> isCustomerGroupAvailableForClass(group.id, classId) }
             .filter { group ->
-                if (!peopleGroupHasRollingPack(group.id)) return@filter true
-                classForValidation?.canAcceptRollingPackEnrollments() == true
+                if (!peopleGroupHasRollingPlan(group.id)) return@filter true
+                classForValidation?.canAcceptRollingPlanEnrollments() == true
             }
             .filter { group ->
                 val main = group.resolveMainContact()
@@ -793,14 +793,14 @@ private fun ClassCustomerGroupsSection(
                 SearchResultItem(
                     id = group.id,
                     primaryLabel = formatPersonLabel(main.name, main.dateOfBirth),
-                    secondaryLabel = soldPackSearchSecondaryLabel(group),
+                    secondaryLabel = soldPlanSearchSecondaryLabel(group),
                 )
             }
     }
 
     FormPanelSection(
         title = "Customer groups",
-        description = "Customer packs enrolled on this class. Each group can only be on one class.",
+        description = "Customer plans enrolled on this class. Each group can only be on one class.",
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
@@ -810,7 +810,7 @@ private fun ClassCustomerGroupsSection(
         )
         Spacer(modifier = Modifier.height(spacing.section))
         EntitySearchPicker(
-            label = "Sold Packs",
+            label = "Sold Plans",
             placeholder = "Search by name or email…",
             query = searchQuery,
             onQueryChange = { searchQuery = it },
@@ -822,8 +822,8 @@ private fun ClassCustomerGroupsSection(
                         weeklyLinkBlockedMessage = message
                         return@EntitySearchPicker
                     }
-                    val enrollment = PackEnrollmentStore.forPeopleGroup(groupId)
-                    val requiredDays = enrollment?.let { requiredClassSessionsForPack(it.planSnapshot) }
+                    val enrollment = PlanEnrollmentStore.forPeopleGroup(groupId)
+                    val requiredDays = enrollment?.let { requiredClassSessionsForPlan(it.planSnapshot) }
                     if (requiredDays == null) {
                         enrollmentMessage = "Sold plan not found for this customer group."
                         return@EntitySearchPicker
@@ -839,7 +839,7 @@ private fun ClassCustomerGroupsSection(
                         enrollmentMessage = preCheck.toUserMessage()
                         return@EntitySearchPicker
                     }
-                    pendingWeeklyLink = PendingWeeklyPackLink(
+                    pendingWeeklyLink = PendingWeeklyPlanLink(
                         groupId = groupId,
                         planName = enrollment.planSnapshot.planName,
                         requiredDays = requiredDays,
@@ -856,14 +856,14 @@ private fun ClassCustomerGroupsSection(
                 )
                 if (result == AddCustomerGroupResult.Success) {
                     onCustomerGroupIdsChange(customerGroupIds + groupId)
-                    classForValidation?.let { cls -> assignPackClassSchedule(groupId, cls) }
-                    RollingPackBillingService.syncRollingPackBilling(groupId)
+                    classForValidation?.let { cls -> assignPlanClassSchedule(groupId, cls) }
+                    RollingPlanBillingService.syncRollingPlanBilling(groupId)
                     enrollmentMessage = result.toUserMessage()
                 } else {
                     enrollmentMessage = result.toUserMessage()
                 }
             },
-            noResultsText = "No available sold packs (each pack can only be on one class).",
+            noResultsText = "No available sold plans (each plan can only be on one class).",
         )
         enrollmentMessage?.let { message ->
             Spacer(modifier = Modifier.height(spacing.field))
@@ -874,7 +874,7 @@ private fun ClassCustomerGroupsSection(
                     message.contains("exceeded", ignoreCase = true) ||
                     message.contains("already", ignoreCase = true) ||
                     message.contains("Create a new term", ignoreCase = true) ||
-                    message.contains("rolling pack", ignoreCase = true) ||
+                    message.contains("rolling plan", ignoreCase = true) ||
                     message.contains("requires", ignoreCase = true)
                 ) {
                     MaterialTheme.colorScheme.error
@@ -911,14 +911,14 @@ private fun ClassCustomerGroupsSection(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = soldPackSearchSecondaryLabel(group),
+                                text = soldPlanSearchSecondaryLabel(group),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             classId?.let { cid ->
-                                PackClassScheduleStore.formatSessionDatesLabel(groupId, cid)?.let { scheduleLabel ->
+                                PlanClassScheduleStore.formatSessionDatesLabel(groupId, cid)?.let { scheduleLabel ->
                                     Text(
                                         text = scheduleLabel,
                                         style = MaterialTheme.typography.labelSmall,
@@ -952,7 +952,7 @@ private fun ClassCustomerGroupsSection(
             onDismiss = { pendingRemoveGroupId = null },
             onContinue = {
                 if (classId != null) {
-                    PackClassScheduleStore.remove(groupId, classId)
+                    PlanClassScheduleStore.remove(groupId, classId)
                 }
                 onCustomerGroupIdsChange(customerGroupIds.filter { it != groupId })
                 enrollmentMessage = "Customer group removed from class."
@@ -962,20 +962,20 @@ private fun ClassCustomerGroupsSection(
     }
 
     weeklyLinkBlockedMessage?.let { message ->
-        WeeklyPackScheduleBlockedDialog(
+        WeeklyPlanScheduleBlockedDialog(
             message = message,
             onDismiss = { weeklyLinkBlockedMessage = null },
         )
     }
 
     pendingWeeklyLink?.let { pending ->
-        WeeklyPackScheduleDialog(
+        WeeklyPlanScheduleDialog(
             planName = pending.planName,
             requiredDays = pending.requiredDays,
             availableDays = pending.availableDays,
             onDismiss = { pendingWeeklyLink = null },
             onConfirm = { selectedDays ->
-                val cls = classForValidation ?: return@WeeklyPackScheduleDialog
+                val cls = classForValidation ?: return@WeeklyPlanScheduleDialog
                 val result = tryAddCustomerGroup(
                     currentGroupIds = customerGroupIds,
                     groupId = pending.groupId,
@@ -986,19 +986,19 @@ private fun ClassCustomerGroupsSection(
                 if (result != AddCustomerGroupResult.Success) {
                     enrollmentMessage = result.toUserMessage()
                     pendingWeeklyLink = null
-                    return@WeeklyPackScheduleDialog
+                    return@WeeklyPlanScheduleDialog
                 }
-                val assignment = assignWeeklyPackClassSchedule(pending.groupId, cls, selectedDays)
-                if (assignment is PackScheduleAssignment.Partial ||
-                    assignment is PackScheduleAssignment.NoSessionsAvailable
+                val assignment = assignWeeklyPlanClassSchedule(pending.groupId, cls, selectedDays)
+                if (assignment is PlanScheduleAssignment.Partial ||
+                    assignment is PlanScheduleAssignment.NoSessionsAvailable
                 ) {
                     enrollmentMessage = assignment.toScheduleMessage()
                         ?: "Could not schedule this plan on the selected days."
                     pendingWeeklyLink = null
-                    return@WeeklyPackScheduleDialog
+                    return@WeeklyPlanScheduleDialog
                 }
                 onCustomerGroupIdsChange(customerGroupIds + pending.groupId)
-                RollingPackBillingService.syncRollingPackBilling(pending.groupId)
+                RollingPlanBillingService.syncRollingPlanBilling(pending.groupId)
                 enrollmentMessage = AddCustomerGroupResult.Success.toUserMessage()
                 pendingWeeklyLink = null
             },
@@ -1006,20 +1006,20 @@ private fun ClassCustomerGroupsSection(
     }
 }
 
-private fun soldPackSearchSecondaryLabel(group: PeopleGroup): String {
-    val packName = PackEnrollmentStore.forPeopleGroup(group.id)?.planSnapshot?.planName
+private fun soldPlanSearchSecondaryLabel(group: PeopleGroup): String {
+    val planName = PlanEnrollmentStore.forPeopleGroup(group.id)?.planSnapshot?.planName
         ?: group.planId?.let { PlanStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() } }
-        ?: "No pack"
+        ?: "No plan"
     val startDate = group.planStartDate.takeIf { it.isNotBlank() }
         ?.let { formatIsoDateForDisplay(it) }
         ?.takeIf { it.isNotBlank() }
-        ?: PackEnrollmentStore.forPeopleGroup(group.id)?.packPeriodStartedAtMillis
+        ?: PlanEnrollmentStore.forPeopleGroup(group.id)?.planPeriodStartedAtMillis
             ?.let { formatIsoDateForDisplay(millisToIsoDate(it)) }
             ?.takeIf { it.isNotBlank() }
     return if (startDate != null) {
-        "$packName · Starts $startDate"
+        "$planName · Starts $startDate"
     } else {
-        packName
+        planName
     }
 }
 

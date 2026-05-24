@@ -54,7 +54,7 @@ import glide.data.RelatedPanelState
 import glide.data.RelatedPersonStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
-import glide.data.PackEnrollmentStore
+import glide.data.PlanEnrollmentStore
 import glide.data.PeopleGroupNavigation
 import glide.data.PeopleGroupStore
 import glide.data.soldPlanDeletionBlockReason
@@ -133,7 +133,7 @@ private val LeadsPanelUi = PeopleGroupPanelUi(
 
 private val CustomersPanelUi = PeopleGroupPanelUi(
     type = PeopleGroupType.CUSTOMER,
-    subtitle = "Customer groups are locked after creation. Clone one to a new lead to build another pack.",
+    subtitle = "Customer groups are locked after creation. Clone one to a new lead to build another plan.",
     emptyListMessage = "No customers yet. Use Make customer on a lead.",
     newButtonLabel = "",
     createFormTitle = "Customer group",
@@ -147,7 +147,7 @@ private val CustomersPanelUi = PeopleGroupPanelUi(
     noSelectionMessage = "Select a customer group to view.",
     deleteConfirmTitle = "Revert sold plan to lead?",
     deleteConfirmMessage = "Billing and class enrollment for this sold plan will be removed. " +
-        "The household will become a lead again with the same contact and pack selection.",
+        "The household will become a lead again with the same contact and plan selection.",
     showClearSelection = true,
 )
 
@@ -212,7 +212,7 @@ private fun soldDisabledReason(
     hasPlanSelected: Boolean,
 ): String? =
     when {
-        PlanStore.plans.isEmpty() -> "Create a pack in the Plans panel first."
+        PlanStore.plans.isEmpty() -> "Create a plan in the Plans panel first."
         isDirty -> "Save changes before marking as sold."
         else -> {
             val group = groupId?.let { PeopleGroupStore.findById(it) }
@@ -222,7 +222,7 @@ private fun soldDisabledReason(
                     "Main contact name is required before marking as sold."
                 main.email.isBlank() || main.phone.isBlank() ->
                     "Email and phone are required before marking as sold."
-                !hasPlanSelected -> "Select a pack above to enable Sold."
+                !hasPlanSelected -> "Select a plan above to enable Sold."
                 group?.planStartDate.isNullOrBlank() ||
                     parseIsoLocalDate(group.planStartDate) == null ->
                     "Plan start date is required before marking as sold."
@@ -781,7 +781,7 @@ private fun PeopleGroupPanel(
                                                 return@GlideOutlinedButton
                                             }
                                             if (!form.draft.hasPlanSelected()) {
-                                                formError = "Select a pack before marking as sold."
+                                                formError = "Select a plan before marking as sold."
                                                 return@GlideOutlinedButton
                                             }
                                             if (form.draft.planStartDate.isBlank() ||
@@ -799,7 +799,7 @@ private fun PeopleGroupPanel(
                                             )
                                             PeopleGroupStore.update(updated)
                                             if (!PeopleGroupStore.convertToCustomer(selectedId!!)) {
-                                                formError = "Select a pack before marking as sold."
+                                                formError = "Select a plan before marking as sold."
                                                 return@GlideOutlinedButton
                                             }
                                             formError = null
@@ -957,9 +957,9 @@ private fun PeopleGroupListItem(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            planLabelForGroup(group)?.let { packLabel ->
+            planLabelForGroup(group)?.let { planLabel ->
                 Text(
-                    text = packLabel,
+                    text = planLabel,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -1004,7 +1004,7 @@ private fun planStartDateLabelForGroup(group: PeopleGroup): String {
         ?.takeIf { it.isNotBlank() }
     if (fromGroup != null) return fromGroup
 
-    return PackEnrollmentStore.forPeopleGroup(group.id)
+    return PlanEnrollmentStore.forPeopleGroup(group.id)
         ?.startedAtMillis
         ?.let { formatIsoDateForDisplay(millisToIsoDate(it)) }
         ?.takeIf { it.isNotBlank() }
@@ -1014,7 +1014,7 @@ private fun planStartDateLabelForGroup(group: PeopleGroup): String {
 private fun planLabelForGroup(group: PeopleGroup): String? {
     val planId = group.planId ?: return null
     val plan = PlanStore.findById(planId) ?: return null
-    return "Pack: ${plan.name}"
+    return "Plan: ${plan.name}"
 }
 
 private fun PeopleGroup.relatedPeopleSummary(compact: Boolean): String? {
@@ -1064,14 +1064,14 @@ private fun SchedulingSoldPlanDetailView(
     spacing: GlideLayout.Spacing,
     onDelete: () -> Unit,
 ) {
-    val enrollment = PackEnrollmentStore.displayForPeopleGroup(group.id)
+    val enrollment = PlanEnrollmentStore.displayForPeopleGroup(group.id)
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
     val currencyCode = enrollment?.planSnapshot?.currencyCode
     val scheduledClass = ScheduledClassStore.findClassContainingCustomerGroup(group.id)
 
     FormPanelSection(
         title = planNameForGroup(group),
-        description = "Class assignment and pack balance.",
+        description = "Class assignment and plan balance.",
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {
@@ -1123,19 +1123,19 @@ private fun CustomerGroupDetailView(
     onDelete: () -> Unit,
     onCloneToLead: () -> Unit,
 ) {
-    val enrollment = PackEnrollmentStore.forPeopleGroup(group.id)
+    val enrollment = PlanEnrollmentStore.forPeopleGroup(group.id)
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
 
     FormPanelSection(
-        title = "Pack",
+        title = "Plan",
         description = "The plan assigned to this customer group.",
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {
-        ReadOnlyPackSection(planId = group.planId, prominent = false)
+        ReadOnlyPlanSection(planId = group.planId, prominent = false)
     }
 
-    FormPanelSectionsDivider(label = "People on this pack", spacing = spacing)
+    FormPanelSectionsDivider(label = "People on this plan", spacing = spacing)
 
     FormPanelSection(
         title = "Main contact",
@@ -1165,7 +1165,7 @@ private fun CustomerGroupDetailView(
 
     FormPanelSection(
         title = "Related people",
-        description = "Others on this pack besides the main contact.",
+        description = "Others on this plan besides the main contact.",
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
@@ -1220,7 +1220,7 @@ private fun CustomerGroupDetailView(
         }
         Spacer(modifier = Modifier.height(spacing.field))
         Text(
-            text = "This customer group is locked. Clone to a lead to create another pack with the same people.",
+            text = "This customer group is locked. Clone to a lead to create another plan with the same people.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1336,12 +1336,12 @@ private fun PeopleGroupForm(
 
     if (showPlanPicker) {
         FormPanelSection(
-            title = "Pack",
+            title = "Plan",
             description = "Select the plan before converting this lead to a customer.",
             spacing = spacing,
             role = FormPanelSectionRole.Tertiary,
         ) {
-            PlanPackDropdown(
+            PlanDropdown(
                 selectedPlanId = state.planId,
                 onPlanSelected = { onStateChange(state.copy(planId = it)) },
             )
@@ -1434,7 +1434,7 @@ private fun PeopleGroupForm(
         Spacer(modifier = Modifier.height(spacing.section))
         FormPanelSection(
             title = "Plan start",
-            description = "When this pack begins for the customer.",
+            description = "When this plan begins for the customer.",
             spacing = spacing,
             role = FormPanelSectionRole.Tertiary,
         ) {
@@ -1449,7 +1449,7 @@ private fun PeopleGroupForm(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlanPackDropdown(
+private fun PlanDropdown(
     selectedPlanId: String?,
     onPlanSelected: (String) -> Unit,
 ) {
@@ -1457,10 +1457,10 @@ private fun PlanPackDropdown(
     var expanded by remember { mutableStateOf(false) }
     val selectedPlan = plans.find { it.id == selectedPlanId }
     val displayValue = selectedPlan?.let { "${it.name} (${it.summaryLine()})" }
-        ?: if (plans.isEmpty()) "No packs available" else "Select a pack"
+        ?: if (plans.isEmpty()) "No plans available" else "Select a plan"
 
     Column {
-        GlideFieldLabel("Pack")
+        GlideFieldLabel("Plan")
         Spacer(modifier = Modifier.height(2.dp))
         ExposedDropdownMenuBox(
             expanded = expanded,
@@ -1512,7 +1512,7 @@ private fun PlanPackDropdown(
         if (plans.isEmpty()) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Add multi lesson packs in the Plans panel.",
+                text = "Add multi lesson plans in the Plans panel.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

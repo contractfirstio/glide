@@ -30,7 +30,7 @@ object AttendanceCreditService {
         session: ClassSessionKey,
         absentAttendees: List<ClassAttendee>,
     ): List<AbsentCreditPreview> = absentAttendees.map { attendee ->
-        val enrollment = PackEnrollmentStore.forPeopleGroup(attendee.peopleGroupId)
+        val enrollment = PlanEnrollmentStore.forPeopleGroup(attendee.peopleGroupId)
         val snapshot = enrollment?.planSnapshot
         val amountMinor = snapshot?.perSessionCreditPerPersonMinor() ?: 0L
         val currencyCode = snapshot?.currencyCode ?: DEFAULT_CURRENCY_FALLBACK
@@ -59,7 +59,7 @@ object AttendanceCreditService {
         var currencyCode = DEFAULT_CURRENCY_FALLBACK
 
         absentAttendees.forEach { attendee ->
-            val enrollment = PackEnrollmentStore.forPeopleGroup(attendee.peopleGroupId)
+            val enrollment = PlanEnrollmentStore.forPeopleGroup(attendee.peopleGroupId)
             if (enrollment == null) {
                 creditsSkipped++
                 return@forEach
@@ -114,11 +114,11 @@ object AttendanceCreditService {
             return buildString {
                 append("$className has absent students, but no billing credits can be added.")
                 if (ineligible > 0) {
-                    append(" Those households may not have an active pack enrollment.")
+                    append(" Those households may not have an active plan enrollment.")
                 }
             }
         }
-        val firstEnrollment = PackEnrollmentStore.forPeopleGroup(eligible.first().attendee.peopleGroupId)
+        val firstEnrollment = PlanEnrollmentStore.forPeopleGroup(eligible.first().attendee.peopleGroupId)
         val perPerson = eligible.first().amountMinor
         val currency = eligible.first().currencyCode
         val perSessionLabel = formatMoney(perPerson, currency)
@@ -128,9 +128,9 @@ object AttendanceCreditService {
             if (eligible.size != 1) append("s")
             append(" — credit ")
             append(perSessionLabel)
-            append(" per person toward the household's next pack bill?")
+            append(" per person toward the household's next plan bill?")
             if (lessonCount != null) {
-                append(" (Per-person pack price divided across $lessonCount classes.)")
+                append(" (Per-person plan price divided across $lessonCount classes.)")
             }
             if (ineligible > 0) {
                 append(" ")

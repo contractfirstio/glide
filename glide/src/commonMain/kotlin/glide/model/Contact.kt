@@ -2,7 +2,7 @@ package glide.model
 
 import java.util.UUID
 
-/** Main contact — can be linked to multiple customer people groups, each with its own pack. */
+/** Main contact — can be linked to multiple customer people groups, each with its own plan. */
 data class Contact(
     val id: String = UUID.randomUUID().toString(),
     val name: String,

@@ -4,15 +4,15 @@ import androidx.compose.runtime.mutableStateListOf
 import glide.model.parseIsoLocalDate
 import java.time.LocalDate
 
-data class PackClassSchedule(
+data class PlanClassSchedule(
     val peopleGroupId: String,
     val scheduledClassId: String,
     /** ISO yyyy-MM-dd session dates, in chronological order. */
     val sessionDates: List<String>,
 )
 
-object PackClassScheduleStore {
-    private val _schedules = mutableStateListOf<PackClassSchedule>()
+object PlanClassScheduleStore {
+    private val _schedules = mutableStateListOf<PlanClassSchedule>()
 
     fun sessionDatesFor(peopleGroupId: String, scheduledClassId: String): List<String>? =
         _schedules.find { it.peopleGroupId == peopleGroupId && it.scheduledClassId == scheduledClassId }
@@ -23,7 +23,7 @@ object PackClassScheduleStore {
         val futureDates = filterFutureSessionDates(sessionDates).distinct().sorted()
         if (futureDates.isEmpty()) return
         _schedules.add(
-            PackClassSchedule(
+            PlanClassSchedule(
                 peopleGroupId = peopleGroupId,
                 scheduledClassId = scheduledClassId,
                 sessionDates = futureDates,
@@ -48,7 +48,7 @@ object PackClassScheduleStore {
         scheduledClassId: String,
         sessionDate: LocalDate,
     ): Boolean {
-        if (sessionDate.isBefore(peopleGroupPackPeriodStartDate(peopleGroupId))) return false
+        if (sessionDate.isBefore(peopleGroupPlanPeriodStartDate(peopleGroupId))) return false
         val dates = sessionDatesFor(peopleGroupId, scheduledClassId) ?: return true
         return sessionDate.toString() in dates
     }

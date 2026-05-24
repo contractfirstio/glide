@@ -2,13 +2,13 @@ package glide.billing
 
 import glide.data.BillStore
 import glide.data.LocationStore
-import glide.data.PackClassScheduleStore
-import glide.data.PackEnrollmentStore
+import glide.data.PlanClassScheduleStore
+import glide.data.PlanEnrollmentStore
 import glide.data.PeopleGroupStore
 import glide.data.ScheduledClassStore
 import glide.data.computeAllClassSessionDates
-import glide.data.peopleGroupPackPeriodStartDate
-import glide.data.requiredClassSessionsForPack
+import glide.data.peopleGroupPlanPeriodStartDate
+import glide.data.requiredClassSessionsForPlan
 import glide.data.rosterNameLabels
 import glide.model.Bill
 import glide.model.BillStatus
@@ -31,7 +31,7 @@ data class InvoiceClassSchedule(
 fun Bill.toInvoiceClassSchedule(): InvoiceClassSchedule? {
     val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
     val scheduledClass = ScheduledClassStore.findClassContainingCustomerGroup(peopleGroupId) ?: return null
-    if (PackEnrollmentStore.findById(enrollmentId) == null) return null
+    if (PlanEnrollmentStore.findById(enrollmentId) == null) return null
 
     val location = scheduledClass.locationId?.let { LocationStore.findById(it) }
     val locationName = location?.name?.takeIf { name -> name.isNotBlank() }
@@ -41,8 +41,8 @@ fun Bill.toInvoiceClassSchedule(): InvoiceClassSchedule? {
     }
     val locationAddressLines = location?.formattedAddressLines().orEmpty()
 
-    val periodStart = peopleGroupPackPeriodStartDate(peopleGroupId)
-    val sessionDates = packBillClassSessionDates(peopleGroupId, scheduledClass, periodStart)
+    val periodStart = peopleGroupPlanPeriodStartDate(peopleGroupId)
+    val sessionDates = planBillClassSessionDates(peopleGroupId, scheduledClass, periodStart)
     val scheduledSessionLabels = sessionDates
         .map { formatInvoiceClassSessionLabel(it, scheduledClass) }
         .filter { it.isNotBlank() }
@@ -57,16 +57,16 @@ fun Bill.toInvoiceClassSchedule(): InvoiceClassSchedule? {
     )
 }
 
-private fun Bill.packBillClassSessionDates(
+private fun Bill.planBillClassSessionDates(
     peopleGroupId: String,
     scheduledClass: ScheduledClass,
     periodStart: LocalDate,
 ): List<String> {
-    val enrollment = PackEnrollmentStore.findById(enrollmentId) ?: return emptyList()
-    val sessionCount = requiredClassSessionsForPack(enrollment.planSnapshot)
-    val billIndex = packBillIndex()
+    val enrollment = PlanEnrollmentStore.findById(enrollmentId) ?: return emptyList()
+    val sessionCount = requiredClassSessionsForPlan(enrollment.planSnapshot)
+    val billIndex = planBillIndex()
 
-    val storedDates = PackClassScheduleStore.sessionDatesFor(peopleGroupId, scheduledClass.id)
+    val storedDates = PlanClassScheduleStore.sessionDatesFor(peopleGroupId, scheduledClass.id)
     if (billIndex == 0 && storedDates != null) {
         return storedDates
             .filter { iso -> parseIsoLocalDate(iso)?.let { !it.isBefore(periodStart) } == true }
@@ -79,7 +79,7 @@ private fun Bill.packBillClassSessionDates(
         .take(sessionCount)
 }
 
-private fun Bill.packBillIndex(): Int {
+private fun Bill.planBillIndex(): Int {
     val index = BillStore.forEnrollment(enrollmentId)
         .filter { it.status != BillStatus.VOID }
         .sortedBy { it.createdAtMillis }

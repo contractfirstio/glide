@@ -13,31 +13,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import glide.data.PackEnrollmentStore
+import glide.data.PlanEnrollmentStore
 import glide.data.PeopleGroupStore
 import glide.data.ScheduledClassStore
-import glide.data.UnassignedSoldPack
-import glide.data.findSoldPacksNotAssignedToClass
-import glide.data.openUnassignedSoldPack
-import glide.data.unassignedSoldPacksMessage
+import glide.data.UnassignedSoldPlan
+import glide.data.findSoldPlansNotAssignedToClass
+import glide.data.openUnassignedSoldPlan
+import glide.data.unassignedSoldPlansMessage
 import glide.ui.theme.GlideTextButton
 
 @Composable
-fun rememberUnassignedSoldPacks(): List<UnassignedSoldPack> {
-    PackEnrollmentStore.all
+fun rememberUnassignedSoldPlans(): List<UnassignedSoldPlan> {
+    PlanEnrollmentStore.all
     PeopleGroupStore.all
     ScheduledClassStore.classes
-    return findSoldPacksNotAssignedToClass()
+    return findSoldPlansNotAssignedToClass()
 }
 
 @Composable
-fun UnassignedSoldPackAlertBanner(
-    unassigned: List<UnassignedSoldPack>,
+fun UnassignedSoldPlanAlertBanner(
+    unassigned: List<UnassignedSoldPlan>,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
     if (unassigned.isEmpty()) return
-    val packCount = unassigned.size
+    val planCount = unassigned.size
     val first = unassigned.first()
     Column(
         modifier = modifier
@@ -46,14 +46,14 @@ fun UnassignedSoldPackAlertBanner(
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         Text(
-            text = unassignedSoldPacksMessage(packCount),
+            text = unassignedSoldPlansMessage(planCount),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onTertiaryContainer,
         )
         if (!compact) {
             val preview = unassigned.take(3).joinToString(" · ") { item ->
-                "${item.customerLabel} (${item.packName})"
+                "${item.customerLabel} (${item.planName})"
             }
             val suffix = if (unassigned.size > 3) " · …" else ""
             Text(
@@ -70,7 +70,7 @@ fun UnassignedSoldPackAlertBanner(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            GlideTextButton(onClick = { openUnassignedSoldPack(first) }) {
+            GlideTextButton(onClick = { openUnassignedSoldPlan(first) }) {
                 Text(
                     text = if (compact) "Open" else "Open first sold plan",
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
