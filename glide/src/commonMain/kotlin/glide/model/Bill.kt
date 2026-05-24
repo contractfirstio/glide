@@ -27,6 +27,8 @@ data class Bill(
     val issuedAtMillis: Long? = null,
     val dueAtMillis: Long? = null,
     val paidAtMillis: Long? = null,
+    /** Frozen invoice content captured at issue time; used for identical PDF regeneration. */
+    val issuedInvoiceSnapshot: IssuedInvoiceSnapshot? = null,
 )
 
 fun Bill.isIssuedToCustomer(): Boolean =

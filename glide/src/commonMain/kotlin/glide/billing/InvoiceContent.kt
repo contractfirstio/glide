@@ -8,6 +8,9 @@ import glide.data.grossAmountMinorResolved
 import glide.data.packLineDescription
 import glide.data.resolveMainContact
 import glide.model.Bill
+import glide.model.IssuedInvoiceClassSchedule
+import glide.model.IssuedInvoiceCreditLine
+import glide.model.IssuedInvoiceSnapshot
 import glide.model.displayDateMillis
 import glide.model.formatMoney
 import java.text.SimpleDateFormat
@@ -52,11 +55,17 @@ data class InvoiceContent(
 private val invoiceDateFormat = SimpleDateFormat("d MMM yyyy", Locale.UK)
 
 fun Bill.toInvoiceContent(): InvoiceContent? {
+    issuedInvoiceSnapshot?.let { return it.toInvoiceContent() }
     val bill = BillStore.reconcileBillCredits(id) ?: this
-    val group = PeopleGroupStore.findById(bill.peopleGroupId) ?: return null
+    return bill.toLiveInvoiceContent()
+}
+
+/** Builds invoice content from current stores without reconciling credits or reading a stored snapshot. */
+fun Bill.toLiveInvoiceContent(): InvoiceContent? {
+    val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
     val main = group.resolveMainContact()
-    val gross = bill.grossAmountMinorResolved()
-    val creditLines = BillingCreditStore.appliedToBill(bill.id).map { credit ->
+    val gross = grossAmountMinorResolved()
+    val creditLines = BillingCreditStore.appliedToBill(id).map { credit ->
         InvoiceCreditLine(
             description = credit.description,
             amountMinor = credit.amountMinor,
@@ -67,17 +76,81 @@ fun Bill.toInvoiceContent(): InvoiceContent? {
         fromEmail = AppSettingsStore.companyEmail,
         fromPhone = AppSettingsStore.companyPhone,
         fpsNumber = AppSettingsStore.fpsNumber,
-        invoiceNumber = bill.id.replace("-", "").take(8).uppercase(Locale.UK),
-        issuedAtMillis = bill.displayDateMillis(),
-        dueAtMillis = bill.dueAtMillis,
+        invoiceNumber = id.replace("-", "").take(8).uppercase(Locale.UK),
+        issuedAtMillis = displayDateMillis(),
+        dueAtMillis = dueAtMillis,
         billToName = main.name.ifBlank { "Customer" },
         billToEmail = main.email,
         billToPhone = main.phone,
-        packLineDescription = bill.packLineDescription(),
-        classSchedule = bill.toInvoiceClassSchedule(),
+        packLineDescription = packLineDescription(),
+        classSchedule = toInvoiceClassSchedule(),
         grossAmountMinor = gross,
         creditLines = creditLines,
-        totalAmountMinor = bill.amountMinor,
-        currencyCode = bill.currencyCode,
+        totalAmountMinor = amountMinor,
+        currencyCode = currencyCode,
     )
 }
+
+fun InvoiceContent.toIssuedInvoiceSnapshot(): IssuedInvoiceSnapshot = IssuedInvoiceSnapshot(
+    fromName = fromName,
+    fromEmail = fromEmail,
+    fromPhone = fromPhone,
+    fpsNumber = fpsNumber,
+    invoiceNumber = invoiceNumber,
+    issuedAtMillis = issuedAtMillis,
+    dueAtMillis = dueAtMillis,
+    billToName = billToName,
+    billToEmail = billToEmail,
+    billToPhone = billToPhone,
+    packLineDescription = packLineDescription,
+    classSchedule = classSchedule?.toIssuedInvoiceClassSchedule(),
+    grossAmountMinor = grossAmountMinor,
+    creditLines = creditLines.map { it.toIssuedInvoiceCreditLine() },
+    totalAmountMinor = totalAmountMinor,
+    currencyCode = currencyCode,
+)
+
+fun IssuedInvoiceSnapshot.toInvoiceContent(): InvoiceContent = InvoiceContent(
+    fromName = fromName,
+    fromEmail = fromEmail,
+    fromPhone = fromPhone,
+    fpsNumber = fpsNumber,
+    invoiceNumber = invoiceNumber,
+    issuedAtMillis = issuedAtMillis,
+    dueAtMillis = dueAtMillis,
+    billToName = billToName,
+    billToEmail = billToEmail,
+    billToPhone = billToPhone,
+    packLineDescription = packLineDescription,
+    classSchedule = classSchedule?.toInvoiceClassSchedule(),
+    grossAmountMinor = grossAmountMinor,
+    creditLines = creditLines.map { it.toInvoiceCreditLine() },
+    totalAmountMinor = totalAmountMinor,
+    currencyCode = currencyCode,
+)
+
+private fun InvoiceClassSchedule.toIssuedInvoiceClassSchedule(): IssuedInvoiceClassSchedule =
+    IssuedInvoiceClassSchedule(
+        className = className,
+        classDetails = classDetails,
+        locationAddressLines = locationAddressLines,
+        studentNamesLabel = studentNamesLabel,
+        billingWindowStartLabel = billingWindowStartLabel,
+        scheduledSessionLabels = scheduledSessionLabels,
+    )
+
+private fun IssuedInvoiceClassSchedule.toInvoiceClassSchedule(): InvoiceClassSchedule =
+    InvoiceClassSchedule(
+        className = className,
+        classDetails = classDetails,
+        locationAddressLines = locationAddressLines,
+        studentNamesLabel = studentNamesLabel,
+        billingWindowStartLabel = billingWindowStartLabel,
+        scheduledSessionLabels = scheduledSessionLabels,
+    )
+
+private fun InvoiceCreditLine.toIssuedInvoiceCreditLine(): IssuedInvoiceCreditLine =
+    IssuedInvoiceCreditLine(description = description, amountMinor = amountMinor)
+
+private fun IssuedInvoiceCreditLine.toInvoiceCreditLine(): InvoiceCreditLine =
+    InvoiceCreditLine(description = description, amountMinor = amountMinor)

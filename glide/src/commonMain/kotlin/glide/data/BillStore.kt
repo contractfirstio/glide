@@ -2,6 +2,8 @@ package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
 import glide.billing.InvoiceExporter
+import glide.billing.toIssuedInvoiceSnapshot
+import glide.billing.toLiveInvoiceContent
 import glide.model.Bill
 import glide.model.BillStatus
 import glide.model.PackEnrollment
@@ -88,11 +90,14 @@ object BillStore {
             if (hasOutstandingAttendanceSubmissions()) return false
             if (soldPackBlocksBillIssuance(bill.peopleGroupId)) return false
             if (bill.status != BillStatus.SCHEDULED) return false
-            _bills[index] = bill.copy(
+            val reconciled = reconcileBillCredits(billId) ?: return false
+            val issuedBill = reconciled.copy(
                 status = BillStatus.ISSUED,
                 issuedAtMillis = issuedAtMillis,
-                dueAtMillis = bill.dueAtMillis ?: issuedAtMillis,
+                dueAtMillis = reconciled.dueAtMillis ?: issuedAtMillis,
             )
+            val snapshot = issuedBill.toLiveInvoiceContent()?.toIssuedInvoiceSnapshot()
+            _bills[index] = issuedBill.copy(issuedInvoiceSnapshot = snapshot)
             true
         } else {
             if (bill.status != BillStatus.ISSUED) return false
@@ -100,6 +105,7 @@ object BillStore {
                 status = BillStatus.SCHEDULED,
                 issuedAtMillis = null,
                 dueAtMillis = null,
+                issuedInvoiceSnapshot = null,
             )
             true
         }
@@ -110,8 +116,12 @@ object BillStore {
         val bill = findById(billId) ?: return false
         if (hasOutstandingAttendanceSubmissions()) return false
         if (soldPackBlocksBillIssuance(bill.peopleGroupId)) return false
-        val reconciled = reconcileBillCredits(billId) ?: return false
-        InvoiceExporter.exportInvoice(reconciled)
+        val exportBill = if (bill.issuedInvoiceSnapshot != null) {
+            bill
+        } else {
+            reconcileBillCredits(billId) ?: return false
+        }
+        InvoiceExporter.exportInvoice(exportBill)
         return true
     }
 
