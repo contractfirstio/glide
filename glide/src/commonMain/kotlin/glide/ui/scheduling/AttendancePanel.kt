@@ -43,6 +43,7 @@ import glide.model.ClassSessionKey
 import glide.model.ScheduledClass
 import glide.model.canTakeAttendance
 import glide.model.scheduleLine
+import java.time.LocalDate
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.FormPanelLinkedBox
 import glide.ui.shared.FormPanelSection
@@ -79,6 +80,8 @@ fun AttendancePanel(
         else attendeesForClass(scheduledClass, sessionDate)
     }
     val attendeeKeys = remember(attendees) { attendees.map { it.key } }
+    val today = remember { LocalDate.now() }
+    val isFutureSession = sessionDate != null && sessionDate.isAfter(today)
     val canTakeAttendance = scheduledClass != null && sessionDate != null &&
         scheduledClass.canTakeAttendance(sessionDate)
     ClassAttendanceStore.records
@@ -216,7 +219,12 @@ fun AttendancePanel(
                 role = FormPanelSectionRole.Primary,
             ) {
                 Text(
-                    text = "$present present · $absent absent · $unmarked unmarked",
+                    text = if (canTakeAttendance || isSubmitted) {
+                        "$present present · $absent absent · $unmarked unmarked"
+                    } else {
+                        val enrolledLabel = if (attendees.size == 1) "student" else "students"
+                        "${attendees.size} enrolled $enrolledLabel"
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -224,7 +232,12 @@ fun AttendancePanel(
                 if (!canTakeAttendance) {
                     Spacer(modifier = Modifier.height(spacing.field))
                     Text(
-                        text = "Attendance opens after this class ends (${scheduledClass.endTime}).",
+                        text = if (isFutureSession) {
+                            "Preview only — mark attendance after this class ends on " +
+                                formatIsoDateForDisplay(session.sessionDate) + "."
+                        } else {
+                            "Attendance opens after this class ends (${scheduledClass.endTime})."
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -251,7 +264,10 @@ fun AttendancePanel(
                 }
             }
 
-            FormPanelSectionsDivider(label = "Mark attendance", spacing = spacing)
+            FormPanelSectionsDivider(
+                label = if (canEditAttendance) "Mark attendance" else "Expected attendees",
+                spacing = spacing,
+            )
 
             if (attendees.isEmpty()) {
                 Text(
@@ -267,7 +283,11 @@ fun AttendancePanel(
                 ) {
                     FormPanelSection(
                         title = "Students",
-                        description = "Mark each attendee present or absent, grouped by household.",
+                        description = if (canEditAttendance) {
+                            "Mark each attendee present or absent, grouped by household."
+                        } else {
+                            "Students enrolled for this session, grouped by household."
+                        },
                         spacing = spacing,
                         role = FormPanelSectionRole.Secondary,
                     ) {
@@ -326,6 +346,7 @@ fun AttendancePanel(
                                         attendee = attendee,
                                         status = draftByAttendeeKey[attendee.key],
                                         needsMark = highlightUnmarked && draftByAttendeeKey[attendee.key] == null,
+                                        previewMode = !canEditAttendance,
                                         enabled = canEditAttendance,
                                         onPresent = {
                                             draftByAttendeeKey = draftByAttendeeKey +
@@ -414,6 +435,7 @@ private fun AttendanceRow(
     attendee: ClassAttendee,
     status: AttendanceStatus?,
     needsMark: Boolean,
+    previewMode: Boolean,
     enabled: Boolean,
     onPresent: () -> Unit,
     onAbsent: () -> Unit,
@@ -442,7 +464,11 @@ private fun AttendanceRow(
                 text = when (status) {
                     AttendanceStatus.PRESENT -> "Present"
                     AttendanceStatus.ABSENT -> "Absent"
-                    null -> if (needsMark) "Not marked" else "Unmarked"
+                    null -> when {
+                        needsMark -> "Not marked"
+                        previewMode -> "Expected"
+                        else -> "Unmarked"
+                    }
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = when (status) {

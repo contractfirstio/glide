@@ -55,7 +55,6 @@ import java.time.LocalDate
 import glide.model.AcademicTerm
 import glide.model.ClassSessionKey
 import glide.model.ScheduledClass
-import glide.model.canTakeAttendance
 import glide.model.compareScheduledClasses
 import glide.model.parseIsoLocalDate
 import glide.model.timeRangeLine
@@ -457,7 +456,6 @@ private fun TermCalendarClassBlock(
         .joinToString(", ")
         .takeIf { it.isNotBlank() }
     val blockTextColor = Color(0xFF0A1018)
-    val canTakeAttendance = scheduledClass.canTakeAttendance(sessionDate)
 
     Box(
         modifier = Modifier
@@ -474,10 +472,7 @@ private fun TermCalendarClassBlock(
                     Modifier
                 },
             )
-            .clickable(
-                enabled = canTakeAttendance,
-                onClick = { onOpenAttendance(scheduledClass.id, sessionDate) },
-            )
+            .clickable { onOpenAttendance(scheduledClass.id, sessionDate) }
             .background(scheduledClass.resolvedCalendarColor())
             .padding(horizontal = 2.dp, vertical = 1.dp),
     ) {
