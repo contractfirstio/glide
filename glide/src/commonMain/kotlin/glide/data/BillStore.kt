@@ -57,7 +57,7 @@ object BillStore {
     private fun addPlanBill(enrollment: PlanEnrollment, description: String): Bill {
         val snapshot = enrollment.planSnapshot
         val participantCount =
-            PeopleGroupStore.findById(enrollment.peopleGroupId)?.classAttendeeCount()?.coerceAtLeast(1) ?: 1
+            PeopleGroupStore.findById(enrollment.peopleGroupId)?.classAttendeeCount() ?: 0
         val grossMinor = snapshot.totalAmountMinor(participantCount)
         val bill = Bill(
             enrollmentId = enrollment.id,

@@ -435,7 +435,7 @@ private fun EnrollmentSummary(
 ) {
     val snapshot = enrollment.planSnapshot
     val participantCount =
-        PeopleGroupStore.findById(enrollment.peopleGroupId)?.classAttendeeCount()?.coerceAtLeast(1) ?: 1
+        PeopleGroupStore.findById(enrollment.peopleGroupId)?.classAttendeeCount() ?: 0
     Column(
         modifier = Modifier
             .fillMaxWidth()

@@ -13,7 +13,7 @@ data class PlanSnapshot(
 ) {
     /** Plan price × number of class participants (attending members). */
     fun totalAmountMinor(classParticipantCount: Int): Long =
-        priceAmountMinor * classParticipantCount.coerceAtLeast(1)
+        priceAmountMinor * classParticipantCount.coerceAtLeast(0)
 
     /** Per-person credit for one missed class session (plan price ÷ class count). */
     fun perSessionCreditPerPersonMinor(): Long =
