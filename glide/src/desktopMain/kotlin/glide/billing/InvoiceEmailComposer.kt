@@ -19,114 +19,186 @@ internal object InvoiceEmailComposer {
         }
 
         val subject = invoiceEmailSubject(content)
-        val body = content.formatInvoiceEmailBody()
+        val htmlBody = content.formatInvoiceEmailHtmlBody()
+        val plainBody = content.formatInvoiceEmailPlainTextBody()
 
         return when {
             osName.contains("mac") || osName.contains("darwin") ->
-                composeOnMac(recipient, subject, body, pdf)
+                composeOnMac(recipient, subject, htmlBody, plainBody, pdf)
             osName.contains("win") ->
-                composeOnWindows(recipient, subject, body, pdf)
+                composeOnWindows(recipient, subject, htmlBody, plainBody, pdf)
             else ->
-                composeOnLinux(recipient, subject, body, pdf)
+                composeOnLinux(recipient, subject, htmlBody, plainBody, pdf)
         }
     }
 
     private fun composeOnMac(
         recipient: String,
         subject: String,
-        body: String,
+        htmlBody: String,
+        plainBody: String,
         pdf: File,
     ): InvoiceExportResult {
-        if (runMacMailScript(recipient, subject, body, pdf)) {
+        if (openEmlDraftInMail(recipient, subject, htmlBody, plainBody, pdf)) {
             return InvoiceExportResult.Success
         }
-        return composeWithMailtoFallback(recipient, subject, body, pdf, revealInFinder = true)
+        if (runMacMailScript(recipient, subject, htmlBody, plainBody, pdf)) {
+            return InvoiceExportResult.Success
+        }
+        return composeWithMailtoFallback(recipient, subject, plainBody, pdf, revealInFinder = true)
     }
+
+    private fun openEmlDraftInMail(
+        recipient: String,
+        subject: String,
+        htmlBody: String,
+        plainBody: String,
+        pdf: File,
+    ): Boolean = runCatching {
+        val eml = InvoiceEmlDraft.write(
+            to = recipient,
+            subject = subject,
+            plainBody = plainBody,
+            htmlBody = htmlBody,
+            pdf = pdf,
+        )
+        runProcess(listOf("open", eml.absolutePath))
+    }.getOrDefault(false)
 
     private fun composeOnWindows(
         recipient: String,
         subject: String,
-        body: String,
+        htmlBody: String,
+        plainBody: String,
         pdf: File,
     ): InvoiceExportResult {
-        if (runOutlookComposeScript(recipient, subject, body, pdf)) {
+        if (runOutlookComposeScript(recipient, subject, htmlBody, plainBody, pdf)) {
             return InvoiceExportResult.Success
         }
-        return composeWithMailtoFallback(recipient, subject, body, pdf, revealInFinder = true)
+        return composeWithMailtoFallback(recipient, subject, plainBody, pdf, revealInFinder = true)
     }
 
     private fun composeOnLinux(
         recipient: String,
         subject: String,
-        body: String,
+        htmlBody: String,
+        plainBody: String,
         pdf: File,
     ): InvoiceExportResult {
-        if (runXdgEmail(recipient, subject, body, pdf)) {
+        if (runXdgEmail(recipient, subject, htmlBody, plainBody, pdf)) {
             return InvoiceExportResult.Success
         }
-        return composeWithMailtoFallback(recipient, subject, body, pdf, revealInFinder = false)
+        return composeWithMailtoFallback(recipient, subject, plainBody, pdf, revealInFinder = false)
     }
 
     private fun runMacMailScript(
         recipient: String,
         subject: String,
-        body: String,
+        htmlBody: String,
+        plainBody: String,
         pdf: File,
-    ): Boolean {
+    ): Boolean = withTempEmailFiles(htmlBody, plainBody) { htmlFile, plainFile ->
+        val htmlPath = escapeAppleScript(htmlFile.absolutePath)
+        val plainPath = escapeAppleScript(plainFile.absolutePath)
         val script = """
+            set htmlText to read POSIX file "$htmlPath" as «class utf8»
+            set plainText to read POSIX file "$plainPath" as «class utf8»
             tell application "Mail"
                 activate
-                set newMessage to make new outgoing message with properties {subject:"${escapeAppleScript(subject)}", visible:true, content:"${escapeAppleScript(body)}"}
+                set newMessage to make new outgoing message with properties {subject:"${escapeAppleScript(subject)}", content:plainText, visible:true}
                 tell newMessage
                     make new to recipient at end of to recipients with properties {address:"${escapeAppleScript(recipient)}"}
                     make new attachment with properties {file name:(POSIX file "${escapeAppleScript(pdf.absolutePath)}")}
                 end tell
+                if htmlText is not "" then
+                    delay 0.3
+                    try
+                        tell newMessage to set html content to htmlText
+                    end try
+                end if
             end tell
         """.trimIndent()
-        return runProcess(listOf("osascript", "-e", script))
+        runProcess(listOf("osascript", "-e", script))
     }
 
     private fun runOutlookComposeScript(
         recipient: String,
         subject: String,
-        body: String,
+        htmlBody: String,
+        plainBody: String,
         pdf: File,
-    ): Boolean {
+    ): Boolean = withTempEmailFiles(htmlBody, plainBody) { htmlFile, plainFile ->
+        val htmlPath = htmlFile.absolutePath.replace("'", "''")
+        val plainPath = plainFile.absolutePath.replace("'", "''")
         val path = pdf.absolutePath.replace("'", "''")
         val script = """
+            ${'$'}html = Get-Content -LiteralPath '${htmlPath}' -Raw -Encoding UTF8
+            ${'$'}plain = Get-Content -LiteralPath '${plainPath}' -Raw -Encoding UTF8
             ${'$'}outlook = New-Object -ComObject Outlook.Application
             ${'$'}mail = ${'$'}outlook.CreateItem(0)
             ${'$'}mail.To = '${recipient.replace("'", "''")}'
             ${'$'}mail.Subject = '${subject.replace("'", "''")}'
-            ${'$'}mail.Body = @'
-$body
-'@
+            ${'$'}mail.BodyFormat = 2
+            if (-not [string]::IsNullOrWhiteSpace(${'$'}html)) {
+                ${'$'}mail.HTMLBody = ${'$'}html
+            } else {
+                ${'$'}mail.Body = ${'$'}plain
+            }
             ${'$'}mail.Attachments.Add('${path}')
             ${'$'}mail.Display() | Out-Null
         """.trimIndent()
-        return runProcess(listOf("powershell", "-NoProfile", "-Command", script))
+        runProcess(listOf("powershell", "-NoProfile", "-Command", script))
     }
 
     private fun runXdgEmail(
         recipient: String,
         subject: String,
-        body: String,
+        htmlBody: String,
+        plainBody: String,
         pdf: File,
-    ): Boolean {
-        val xdgEmail = listOf("xdg-email", "--attach", pdf.absolutePath, "--subject", subject, "--body", body, recipient)
-        if (runProcess(xdgEmail)) return true
-        val mailtoUri = buildMailtoUri(recipient, subject, body)
-        return runProcess(listOf("xdg-email", "--attach", pdf.absolutePath, mailtoUri))
+    ): Boolean = withTempEmailFiles(htmlBody, plainBody) { htmlFile, _ ->
+        val htmlAttempt = listOf(
+            "xdg-email",
+            "--attach", pdf.absolutePath,
+            "--subject", subject,
+            "--body", htmlFile.absolutePath,
+            "--content-type", "text/html",
+            recipient,
+        )
+        if (runProcess(htmlAttempt)) return@withTempEmailFiles true
+
+        val plainAttempt = listOf(
+            "xdg-email",
+            "--attach", pdf.absolutePath,
+            "--subject", subject,
+            "--body", plainBody,
+            recipient,
+        )
+        runProcess(plainAttempt)
+    }
+
+    private inline fun <T> withTempEmailFiles(
+        htmlBody: String,
+        plainBody: String,
+        block: (htmlFile: File, plainFile: File) -> T,
+    ): T {
+        val htmlFile = File.createTempFile("glide-invoice-", ".html")
+        val plainFile = File.createTempFile("glide-invoice-", ".txt")
+        htmlFile.writeText(htmlBody, Charsets.UTF_8)
+        plainFile.writeText(plainBody, Charsets.UTF_8)
+        htmlFile.deleteOnExit()
+        plainFile.deleteOnExit()
+        return block(htmlFile, plainFile)
     }
 
     private fun composeWithMailtoFallback(
         recipient: String,
         subject: String,
-        body: String,
+        plainBody: String,
         pdf: File,
         revealInFinder: Boolean,
     ): InvoiceExportResult {
-        val mailtoUri = buildMailtoUri(recipient, subject, body)
+        val mailtoUri = buildMailtoUri(recipient, subject, plainBody)
         val openedMail = runCatching {
             if (Desktop.isDesktopSupported()) {
                 Desktop.getDesktop().mail(URI(mailtoUri))
@@ -137,13 +209,12 @@ $body
         }.getOrDefault(false)
 
         if (!openedMail) {
-            runCatching {
+            val launched = runCatching {
                 val process = ProcessBuilder(openMailtoCommand(mailtoUri)).start()
                 process.waitFor() == 0
-            }.getOrDefault(false).let { launched ->
-                if (!launched) {
-                    return InvoiceExportResult.Failure("Could not open your email client.")
-                }
+            }.getOrDefault(false)
+            if (!launched) {
+                return InvoiceExportResult.Failure("Could not open your email client.")
             }
         }
 
