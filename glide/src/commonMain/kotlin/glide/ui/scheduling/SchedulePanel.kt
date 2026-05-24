@@ -491,7 +491,9 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             FormPanelSectionsDivider(label = "Enrollment", spacing = spacing)
                             ClassCustomerGroupsSection(
                                 classId = selectedId,
-                                termIds = form.draft.termIds.toList(),
+                                scheduledClassForValidation = selectedId?.let { id ->
+                                    form.draft.toScheduledClass(existingId = id)
+                                },
                                 customerGroupIds = form.draft.customerGroupIds.toList(),
                                 locationId = form.draft.locationId,
                                 onCustomerGroupIdsChange = { ids ->
@@ -738,7 +740,7 @@ private fun ClassListItem(
 @Composable
 private fun ClassCustomerGroupsSection(
     classId: String?,
-    termIds: List<String>,
+    scheduledClassForValidation: ScheduledClass?,
     customerGroupIds: List<String>,
     locationId: String?,
     onCustomerGroupIdsChange: (List<String>) -> Unit,
@@ -748,13 +750,12 @@ private fun ClassCustomerGroupsSection(
     var enrollmentMessage by remember { mutableStateOf<String?>(null) }
     var pendingRemoveGroupId by remember { mutableStateOf<String?>(null) }
 
-    val scheduledClass = classId?.let { ScheduledClassStore.findById(it) }
-    val classForValidation = scheduledClass?.copy(termIds = termIds)
+    val classForValidation = scheduledClassForValidation
     val assignedIds = customerGroupIds
     val location = locationId?.let { LocationStore.findById(it) }
     val headcount = headcountForCustomerGroups(customerGroupIds)
 
-    val searchResults = remember(searchQuery, assignedIds, classId, termIds, classForValidation) {
+    val searchResults = remember(searchQuery, assignedIds, classId, classForValidation) {
         PeopleGroupStore.customers
             .filter { it.id !in assignedIds }
             .filter { group -> isCustomerGroupAvailableForClass(group.id, classId) }

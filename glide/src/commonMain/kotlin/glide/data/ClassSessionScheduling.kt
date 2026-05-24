@@ -166,14 +166,19 @@ fun scheduledClassHasRollingCustomerGroup(scheduledClass: ScheduledClass): Boole
 fun ScheduledClass.linkedAcademicTerms(): List<AcademicTerm> =
     termIds.mapNotNull { TermStore.findById(it) }
 
-/** Rolling pack enrollments require at least one linked term and every linked term to accept rolling plans. */
+/** Rolling pack enrollments require a recurring class and every linked term to accept rolling plans. */
 fun ScheduledClass.canAcceptRollingPackEnrollments(): Boolean {
+    if (isWeekly()) return false
     val linked = linkedAcademicTerms()
     return linked.isNotEmpty() && linked.all { it.acceptsRollingPlans }
 }
 
-fun rollingPackNotAllowedOnClassMessage(): String =
-    "Rolling pack enrollments require every linked term to accept rolling plans."
+fun rollingPackNotAllowedOnClassMessage(scheduledClass: ScheduledClass? = null): String =
+    if (scheduledClass?.isWeekly() == true) {
+        "Rolling pack enrollments cannot be assigned to weekly classes."
+    } else {
+        "Rolling pack enrollments require every linked term to accept rolling plans."
+    }
 
 fun peopleGroupHasRollingPack(peopleGroupId: String): Boolean =
     PackEnrollmentStore.forPeopleGroup(peopleGroupId)?.planSnapshot?.rolling == true
@@ -186,7 +191,7 @@ fun validateRollingPackEnrollmentForClass(
     if (scheduledClass.canAcceptRollingPackEnrollments()) return null
     val label = PeopleGroupStore.findById(peopleGroupId)?.resolveMainContact()?.name?.takeIf { it.isNotBlank() }
         ?: "This customer group"
-    return "$label has a rolling pack. ${rollingPackNotAllowedOnClassMessage()}"
+    return "$label has a rolling pack. ${rollingPackNotAllowedOnClassMessage(scheduledClass)}"
 }
 
 fun validateRollingPackEnrollmentsForClass(
