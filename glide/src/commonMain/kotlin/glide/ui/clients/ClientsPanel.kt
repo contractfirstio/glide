@@ -49,6 +49,10 @@ import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.ListFormPanelLayout
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
+import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
@@ -87,12 +91,25 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
     val form = rememberFormDirtyTracker(ClientFormState())
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var listSearchQuery by remember { mutableStateOf("") }
 
     val soldPlanId = BillingPanelState.soldPlanId
     val clientFilterId = ClientsPanelState.selectedClientId
     val planFilterId = PlansPanelState.selectedPlanId
     val studentFilterId = StudentsPanelState.selectedStudentId
     val clients = ClientStore.forClientsPanel(soldPlanId, planFilterId, studentFilterId)
+    val filteredClients = remember(clients, listSearchQuery) {
+        clients.filter { client ->
+            matchesPanelListSearch(
+                listSearchQuery,
+                formatPersonLabel(client.name, client.dateOfBirth),
+                client.email,
+                client.phone,
+                client.notes,
+            )
+        }
+    }
+    val searchActive = listSearchQuery.isNotBlank()
     val soldPlanLabel = soldPlanId?.let { id ->
         findSoldPlanById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
     }
@@ -187,7 +204,13 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${clients.size} client${if (clients.size == 1) "" else "s"}",
+                            text = panelListCountLabel(
+                                singular = "client",
+                                plural = "clients",
+                                filteredCount = filteredClients.size,
+                                totalCount = clients.size,
+                                searchActive = searchActive,
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -213,6 +236,12 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                             }
                         }
                     }
+                    PanelListSearchSpacer()
+                    PanelListSearchField(
+                        query = listSearchQuery,
+                        onQueryChange = { listSearchQuery = it },
+                        placeholder = "Name, email, phone…",
+                    )
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (clients.isEmpty()) {
@@ -247,6 +276,29 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    } else if (filteredClients.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (listSectionHeight != null) {
+                                        Modifier.height(listSectionHeight)
+                                    } else {
+                                        Modifier.weight(1f)
+                                    },
+                                )
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    MaterialTheme.shapes.small,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No clients match your search.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     } else {
                         LazyColumn(
                             modifier = Modifier.then(
@@ -258,7 +310,7 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            items(clients, key = { it.id }) { client ->
+                            items(filteredClients, key = { it.id }) { client ->
                                 ClientListItem(
                                     client = client,
                                     selected = client.id == selectedId,

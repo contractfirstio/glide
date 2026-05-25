@@ -92,6 +92,10 @@ import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.ListFormPanelLayout
 import glide.ui.shared.FormPanelSectionsDivider
 import glide.ui.shared.IsoDateField
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
+import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.theme.GlideTextButton
 import java.text.SimpleDateFormat
@@ -253,6 +257,7 @@ private fun PeopleGroupPanel(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
     var cloneMessage by remember { mutableStateOf<String?>(null) }
+    var listSearchQuery by remember { mutableStateOf("") }
 
     val clientFilterId = if (!ui.isLeadPanel) {
         ClientsPanelState.selectedClientId
@@ -304,7 +309,15 @@ private fun PeopleGroupPanel(
         )
         else -> SoldPlanStore.forSoldPlansPanel(clientFilterId, studentFilterId, planFilterId)
     }
+    val filteredLeads = remember(leads, listSearchQuery) {
+        leads.filter { lead -> leadMatchesPanelSearch(lead, listSearchQuery) }
+    }
+    val filteredSoldPlans = remember(soldPlans, listSearchQuery) {
+        soldPlans.filter { group -> soldPlanMatchesPanelSearch(group, listSearchQuery) }
+    }
+    val searchActive = listSearchQuery.isNotBlank()
     val groupCount = if (ui.isLeadPanel) leads.size else soldPlans.size
+    val filteredGroupCount = if (ui.isLeadPanel) filteredLeads.size else filteredSoldPlans.size
     val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val studentFilterLabel = studentFilterId?.let {
@@ -502,7 +515,17 @@ private fun PeopleGroupPanel(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = ui.listCountLabel(groupCount),
+                            text = if (searchActive) {
+                                panelListCountLabel(
+                                    singular = if (ui.isLeadPanel) "lead" else "sold plan",
+                                    plural = if (ui.isLeadPanel) "leads" else "sold plans",
+                                    filteredCount = filteredGroupCount,
+                                    totalCount = groupCount,
+                                    searchActive = true,
+                                )
+                            } else {
+                                ui.listCountLabel(groupCount)
+                            },
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -548,6 +571,12 @@ private fun PeopleGroupPanel(
                             }
                         }
                     }
+                    PanelListSearchSpacer()
+                    PanelListSearchField(
+                        query = listSearchQuery,
+                        onQueryChange = { listSearchQuery = it },
+                        placeholder = if (ui.isLeadPanel) "Name, email, plan…" else "Client, student, plan…",
+                    )
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (groupCount == 0) {
@@ -587,6 +616,33 @@ private fun PeopleGroupPanel(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    } else if (filteredGroupCount == 0) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (listSectionHeight != null) {
+                                        Modifier.height(listSectionHeight)
+                                    } else {
+                                        Modifier.weight(1f)
+                                    },
+                                )
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    MaterialTheme.shapes.small,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = if (ui.isLeadPanel) {
+                                    "No leads match your search."
+                                } else {
+                                    "No sold plans match your search."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     } else {
                         LazyColumn(
                             modifier = Modifier.then(
@@ -599,7 +655,7 @@ private fun PeopleGroupPanel(
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             if (ui.isLeadPanel) {
-                                items(leads, key = { it.id }) { group ->
+                                items(filteredLeads, key = { it.id }) { group ->
                                     LeadListItem(
                                         group = group,
                                         dateFormat = dateFormat,
@@ -616,7 +672,7 @@ private fun PeopleGroupPanel(
                                     )
                                 }
                             } else {
-                                items(soldPlans, key = { it.id }) { group ->
+                                items(filteredSoldPlans, key = { it.id }) { group ->
                                     SoldPlanListItem(
                                         group = group,
                                         dateFormat = dateFormat,
@@ -1046,6 +1102,36 @@ private fun SoldPlanListItem(
             overflow = TextOverflow.Ellipsis,
         )
     }
+}
+
+private fun leadMatchesPanelSearch(lead: Lead, query: String): Boolean {
+    val main = lead.resolveMainClient()
+    val studentNames = lead.resolveStudents().joinToString(" ") { it.name }
+    val planName = lead.planId?.let { PlanStore.findById(it)?.name }.orEmpty()
+    return matchesPanelListSearch(
+        query,
+        formatPersonLabel(main.name, main.dateOfBirth),
+        main.email,
+        main.phone,
+        lead.notes,
+        studentNames,
+        planName,
+        lead.status.label,
+    )
+}
+
+private fun soldPlanMatchesPanelSearch(group: SoldPlan, query: String): Boolean {
+    val main = group.resolveMainClient()
+    val studentNames = group.resolveStudents().joinToString(" ") { it.name }
+    val planName = group.planId?.let { PlanStore.findById(it)?.name }.orEmpty()
+    return matchesPanelListSearch(
+        query,
+        main?.name.orEmpty(),
+        studentNames,
+        planName,
+        planNameForGroup(group),
+        planStartDateLabelForGroup(group),
+    )
 }
 
 private fun planLabelForLead(group: Lead): String? {

@@ -49,6 +49,10 @@ import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.ListFormPanelLayout
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
+import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
@@ -86,6 +90,7 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
     val form = rememberFormDirtyTracker(StudentFormState())
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var listSearchQuery by remember { mutableStateOf("") }
 
     val soldPlanId = BillingPanelState.soldPlanId
     val clientFilterId = ClientsPanelState.selectedClientId
@@ -97,6 +102,16 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
         planFilterId,
         studentFilterId,
     )
+    val filteredPeople = remember(people, listSearchQuery) {
+        people.filter { person ->
+            matchesPanelListSearch(
+                listSearchQuery,
+                formatPersonLabel(person.name, person.dateOfBirth),
+                person.notes,
+            )
+        }
+    }
+    val searchActive = listSearchQuery.isNotBlank()
     val soldPlanLabel = soldPlanId?.let { id ->
         findSoldPlanById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
     }
@@ -181,7 +196,13 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${people.size} ${if (people.size == 1) "student" else "students"}",
+                            text = panelListCountLabel(
+                                singular = "student",
+                                plural = "students",
+                                filteredCount = filteredPeople.size,
+                                totalCount = people.size,
+                                searchActive = searchActive,
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -207,6 +228,12 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                             }
                         }
                     }
+                    PanelListSearchSpacer()
+                    PanelListSearchField(
+                        query = listSearchQuery,
+                        onQueryChange = { listSearchQuery = it },
+                        placeholder = "Name…",
+                    )
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (people.isEmpty()) {
@@ -243,6 +270,29 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    } else if (filteredPeople.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (listSectionHeight != null) {
+                                        Modifier.height(listSectionHeight)
+                                    } else {
+                                        Modifier.weight(1f)
+                                    },
+                                )
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    MaterialTheme.shapes.small,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No students match your search.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     } else {
                         LazyColumn(
                             modifier = Modifier.then(
@@ -254,7 +304,7 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            items(people, key = { it.id }) { person ->
+                            items(filteredPeople, key = { it.id }) { person ->
                                 StudentListItem(
                                     person = person,
                                     selected = person.id == selectedId,

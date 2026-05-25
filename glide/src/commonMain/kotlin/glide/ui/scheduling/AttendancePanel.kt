@@ -49,6 +49,9 @@ import glide.ui.shared.FormPanelLinkedBox
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideOutlinedButton
@@ -96,6 +99,17 @@ fun AttendancePanel(
     var highlightUnmarked by remember(session) { mutableStateOf(false) }
     var showCreditDialog by remember(session) { mutableStateOf(false) }
     var creditDialogPreviews by remember(session) { mutableStateOf<List<AbsentCreditPreview>>(emptyList()) }
+    var listSearchQuery by remember(session) { mutableStateOf("") }
+
+    val filteredAttendees = remember(attendees, listSearchQuery) {
+        attendees.filter { attendee ->
+            matchesPanelListSearch(
+                listSearchQuery,
+                attendee.displayName,
+                attendee.householdLabel,
+            )
+        }
+    }
 
     LaunchedEffect(session, attendeeKeys) {
         draftByAttendeeKey = AttendanceStore.draftForSession(session, attendeeKeys)
@@ -275,6 +289,19 @@ fun AttendancePanel(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            } else if (filteredAttendees.isEmpty()) {
+                PanelListSearchSpacer()
+                PanelListSearchField(
+                    query = listSearchQuery,
+                    onQueryChange = { listSearchQuery = it },
+                    placeholder = "Student or household…",
+                )
+                Spacer(modifier = Modifier.height(spacing.field))
+                Text(
+                    text = "No students match your search.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             } else {
                 Column(
                     modifier = Modifier
@@ -330,7 +357,15 @@ fun AttendancePanel(
                         }
                         Spacer(modifier = Modifier.height(spacing.section))
 
-                        val grouped = attendees.groupBy { it.soldPlanId }
+                        PanelListSearchSpacer()
+                        PanelListSearchField(
+                            query = listSearchQuery,
+                            onQueryChange = { listSearchQuery = it },
+                            placeholder = "Student or household…",
+                        )
+                        Spacer(modifier = Modifier.height(spacing.field))
+
+                        val grouped = filteredAttendees.groupBy { it.soldPlanId }
                         grouped.forEach { (_, groupAttendees) ->
                             val household = groupAttendees.first().householdLabel
                             FormPanelLinkedBox(role = FormPanelSectionRole.Secondary) {

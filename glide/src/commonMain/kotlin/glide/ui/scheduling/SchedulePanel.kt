@@ -93,6 +93,10 @@ import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.ListFormPanelLayout
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
+import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.peoplegroup.EntitySearchPicker
@@ -211,6 +215,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var listSearchQuery by remember { mutableStateOf("") }
 
     val locations = LocationStore.sortedForPanel()
     val soldPlanFilterId = SchedulePanelState.selectedSoldPlanId
@@ -221,6 +226,10 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
         termId = termFilterId,
         locationId = locationFilterId,
     )
+    val filteredClasses = remember(classes, listSearchQuery) {
+        classes.filter { scheduledClass -> classMatchesPanelSearch(scheduledClass, listSearchQuery) }
+    }
+    val searchActive = listSearchQuery.isNotBlank()
     val soldPlanFilterLabel = soldPlanFilterId?.let { groupId ->
         findSoldPlanById(groupId)?.let { group ->
             group.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
@@ -376,7 +385,13 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${classes.size} class${if (classes.size == 1) "" else "es"}",
+                            text = panelListCountLabel(
+                                singular = "class",
+                                plural = "classes",
+                                filteredCount = filteredClasses.size,
+                                totalCount = classes.size,
+                                searchActive = searchActive,
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -400,6 +415,12 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             }
                         }
                     }
+                    PanelListSearchSpacer()
+                    PanelListSearchField(
+                        query = listSearchQuery,
+                        onQueryChange = { listSearchQuery = it },
+                        placeholder = "Class name, term, location…",
+                    )
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (classes.isEmpty()) {
@@ -433,6 +454,29 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    } else if (filteredClasses.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (listSectionHeight != null) {
+                                        Modifier.height(listSectionHeight)
+                                    } else {
+                                        Modifier.weight(1f)
+                                    },
+                                )
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    MaterialTheme.shapes.small,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No classes match your search.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     } else {
                         LazyColumn(
                             modifier = Modifier.then(
@@ -444,7 +488,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            items(classes, key = { it.id }) { scheduledClass ->
+                            items(filteredClasses, key = { it.id }) { scheduledClass ->
                                 ClassListItem(
                                     scheduledClass = scheduledClass,
                                     selected = scheduledClass.id == selectedId,
@@ -663,6 +707,20 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
             continueEnabled = !hasSoldPlans,
         )
     }
+}
+
+private fun classMatchesPanelSearch(scheduledClass: Class, query: String): Boolean {
+    val termNames = scheduledClass.termIds.mapNotNull { TermStore.findById(it)?.name }.joinToString(" ")
+    val location = scheduledClass.locationId?.let { LocationStore.findById(it) }
+    return matchesPanelListSearch(
+        query,
+        scheduledClass.name,
+        scheduledClass.scheduleLine(),
+        termNames,
+        location?.name.orEmpty(),
+        location?.city.orEmpty(),
+        scheduledClass.notes,
+    )
 }
 
 @Composable

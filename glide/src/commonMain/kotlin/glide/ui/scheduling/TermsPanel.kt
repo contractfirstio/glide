@@ -46,6 +46,10 @@ import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.ListFormPanelLayout
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
+import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.leads.parseIsoDateToMillis
@@ -102,6 +106,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var listSearchQuery by remember { mutableStateOf("") }
 
     val allTerms = TermStore.sortedForPanel()
     val termFilterId = SchedulePanelState.selectedTermFilterId
@@ -115,6 +120,18 @@ fun TermsPanel(modifier: Modifier = Modifier) {
     } else {
         allTerms
     }
+    val filteredTerms = remember(terms, listSearchQuery) {
+        terms.filter { term ->
+            matchesPanelListSearch(
+                listSearchQuery,
+                term.name,
+                term.notes,
+                formatIsoDateForDisplay(term.startDate),
+                formatIsoDateForDisplay(term.endDate),
+            )
+        }
+    }
+    val searchActive = listSearchQuery.isNotBlank()
     val highlightedTermId = termFilterId ?: selectedId
     val locationFilterLabel = locationFilterId?.let {
         LocationStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() }
@@ -225,7 +242,13 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${terms.size} term${if (terms.size == 1) "" else "s"}",
+                            text = panelListCountLabel(
+                                singular = "term",
+                                plural = "terms",
+                                filteredCount = filteredTerms.size,
+                                totalCount = terms.size,
+                                searchActive = searchActive,
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -239,6 +262,12 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             }
                         }
                     }
+                    PanelListSearchSpacer()
+                    PanelListSearchField(
+                        query = listSearchQuery,
+                        onQueryChange = { listSearchQuery = it },
+                        placeholder = "Term name…",
+                    )
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (terms.isEmpty()) {
@@ -267,6 +296,29 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    } else if (filteredTerms.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (listSectionHeight != null) {
+                                        Modifier.height(listSectionHeight)
+                                    } else {
+                                        Modifier.weight(1f)
+                                    },
+                                )
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    MaterialTheme.shapes.small,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No terms match your search.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     } else {
                         LazyColumn(
                             modifier = Modifier.then(
@@ -278,7 +330,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            items(terms, key = { it.id }) { term ->
+                            items(filteredTerms, key = { it.id }) { term ->
                                 TermListItem(
                                     term = term,
                                     selected = term.id == highlightedTermId,

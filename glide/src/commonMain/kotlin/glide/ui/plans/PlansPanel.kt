@@ -63,6 +63,10 @@ import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.ListFormPanelLayout
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
+import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
@@ -129,12 +133,25 @@ fun PlansPanel(modifier: Modifier = Modifier) {
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var listSearchQuery by remember { mutableStateOf("") }
 
     val soldPlanId = BillingPanelState.soldPlanId
     val clientFilterId = ClientsPanelState.selectedClientId
     val studentFilterId = StudentsPanelState.selectedStudentId
     val outboundPlanFilterId = PlansPanelState.selectedPlanId
     val plans = PlanStore.forPlansPanel(soldPlanId, clientFilterId, studentFilterId)
+    val filteredPlans = remember(plans, listSearchQuery) {
+        plans.filter { plan ->
+            matchesPanelListSearch(
+                listSearchQuery,
+                plan.name,
+                plan.kind.label,
+                plan.summaryLine(),
+                plan.notes,
+            )
+        }
+    }
+    val searchActive = listSearchQuery.isNotBlank()
     val outboundPlanFilterLabel = outboundPlanFilterId?.let {
         PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
@@ -247,7 +264,13 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${plans.size} plan${if (plans.size == 1) "" else "s"}",
+                            text = panelListCountLabel(
+                                singular = "plan",
+                                plural = "plans",
+                                filteredCount = filteredPlans.size,
+                                totalCount = plans.size,
+                                searchActive = searchActive,
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -276,6 +299,12 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             }
                         }
                     }
+                    PanelListSearchSpacer()
+                    PanelListSearchField(
+                        query = listSearchQuery,
+                        onQueryChange = { listSearchQuery = it },
+                        placeholder = "Plan name, type…",
+                    )
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (plans.isEmpty()) {
@@ -309,6 +338,29 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    } else if (filteredPlans.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (listSectionHeight != null) {
+                                        Modifier.height(listSectionHeight)
+                                    } else {
+                                        Modifier.weight(1f)
+                                    },
+                                )
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    MaterialTheme.shapes.small,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No plans match your search.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     } else {
                         LazyColumn(
                             modifier = Modifier.then(
@@ -320,7 +372,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            items(plans, key = { it.id }) { plan ->
+                            items(filteredPlans, key = { it.id }) { plan ->
                                 PlanListItem(
                                     plan = plan,
                                     selected = plan.id == selectedId,
