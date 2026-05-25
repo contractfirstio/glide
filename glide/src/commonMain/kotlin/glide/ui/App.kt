@@ -2,6 +2,7 @@ package glide.ui
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,7 +21,7 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.isShiftPressed
 import glide.backup.DataBackupResult
 import glide.backup.DataBackupService
 import glide.data.AppSettingsStore
@@ -39,6 +40,9 @@ import glide.ui.scheduling.rememberPendingAttendanceSessions
 import glide.ui.scheduling.rememberUnassignedSoldPlans
 import glide.ui.theme.GlideCanvasBackground
 import glide.ui.theme.GlideTheme
+import glide.ui.layout.PanelCatalog
+import glide.ui.layout.PanelWorkspace
+import androidx.compose.ui.input.key.type
 
 @Composable
 fun App(
@@ -60,6 +64,7 @@ fun App(
         val overdueBillPayments = rememberOverdueBillPayments()
         val unassignedSoldPlans = rememberUnassignedSoldPlans()
         LaunchedEffect(Unit) {
+            PanelWorkspace.startSession(appSettings.workspaceUi)
             focusRequester.requestFocus()
             RollingPlanBillingService.syncAllActiveRollingPlanBilling()
             if (AppSettingsStore.shouldOfferBackupPrompt()) {
@@ -76,7 +81,9 @@ fun App(
             )
         }
 
-        Box(
+        var windowWidthPx by remember { mutableStateOf(0) }
+
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .focusRequester(focusRequester)
@@ -94,13 +101,42 @@ fun App(
                             AppViewState.switchTo(AppViewMode.SCHEDULING)
                             true
                         }
+                        Key.Zero -> {
+                            if (event.isShiftPressed) {
+                                PanelWorkspace.restoreDefaultLayout(viewMode)
+                                AppSettingsStore.saveWorkspaceUi(PanelWorkspace.toSettings())
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven -> {
+                            val index = when (event.key) {
+                                Key.Three -> 0
+                                Key.Four -> 1
+                                Key.Five -> 2
+                                Key.Six -> 3
+                                Key.Seven -> 4
+                                else -> return@onPreviewKeyEvent false
+                            }
+                            val slot = PanelCatalog.slotAtShortcutIndex(index, viewMode) ?: return@onPreviewKeyEvent false
+                            PanelWorkspace.focusPanel(
+                                slot = slot,
+                                windowWidthPx = windowWidthPx,
+                                fill = event.isShiftPressed,
+                                mode = viewMode,
+                            )
+                            true
+                        }
                         else -> false
                     }
                 },
         ) {
+            windowWidthPx = constraints.maxWidth
             GlideCanvasBackground()
             Column(modifier = Modifier.fillMaxSize()) {
                 AppChrome(
+                    windowWidthPx = windowWidthPx,
                     modifier = Modifier.fillMaxWidth(),
                     companySettingsNeedSetup = !appSettings.isConfigured,
                     companySettingsConfigured = appSettings.isConfigured,

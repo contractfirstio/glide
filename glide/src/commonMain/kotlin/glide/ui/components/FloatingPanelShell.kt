@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import glide.data.AppViewState
 import glide.ui.layout.GlideLayout
+import glide.ui.layout.LayoutTier
+import glide.ui.layout.PanelWorkspace
 import glide.ui.theme.GlideAccents
 import glide.ui.theme.GlideTextButton
 import kotlin.math.roundToInt
@@ -71,8 +73,11 @@ fun FloatingPanelShell(
     if (windowWidthPx <= 0 || windowHeightPx <= 0) return
 
     val density = LocalDensity.current
-    val marginPx = with(density) { GlideLayout.PanelMargin.toPx() }
-    val gapPx = with(density) { GlideLayout.PanelGap.toPx() }
+    val windowWidthDp = with(density) { windowWidthPx.toDp() }
+    val layoutTier = GlideLayout.layoutTier(windowWidthDp)
+    val gridTier = LayoutTier.Wide
+    val marginPx = with(density) { GlideLayout.panelMargin(gridTier).toPx() }
+    val gapPx = with(density) { GlideLayout.panelGap(gridTier).toPx() }
     val titleBarHeightPx = with(density) { GlideLayout.PanelTitleBarHeight.toPx() }
     val minWidthPx = with(density) { GlideLayout.PanelMinWidth.toPx() }
     val minHeightPx = with(density) { GlideLayout.PanelMinHeight.toPx() }
@@ -80,13 +85,14 @@ fun FloatingPanelShell(
     val maxPanelHeightPx = windowHeightPx - marginPx * 2
 
     val viewMode = AppViewState.mode
-    val defaultLayout = remember(windowWidthPx, windowHeightPx, slot, marginPx, gapPx, viewMode) {
+    val defaultLayout = remember(windowWidthPx, windowHeightPx, slot, marginPx, gapPx, viewMode, gridTier) {
         val (gridWidthPx, gridHeightPx) = GlideLayout.computeGridPanelSizePx(
             windowWidthPx = windowWidthPx.toFloat(),
             windowHeightPx = windowHeightPx.toFloat(),
             marginPx = marginPx,
             gapPx = gapPx,
             mode = viewMode,
+            tier = gridTier,
         )
         val widthPx = gridWidthPx.coerceIn(minWidthPx, maxPanelWidthPx)
         val heightPx = gridHeightPx.coerceIn(minHeightPx, maxPanelHeightPx)
@@ -99,21 +105,23 @@ fun FloatingPanelShell(
             marginPx = marginPx,
             gapPx = gapPx,
             mode = viewMode,
+            tier = gridTier,
         )
         GridPanelLayout(widthPx, heightPx, xPx, yPx)
     }
 
-    var offsetX by remember(slot) { mutableFloatStateOf(defaultLayout.xPx) }
-    var offsetY by remember(slot) { mutableFloatStateOf(defaultLayout.yPx) }
-    var panelWidthPx by remember(slot) { mutableFloatStateOf(defaultLayout.widthPx) }
-    var panelHeightPx by remember(slot) { mutableFloatStateOf(defaultLayout.heightPx) }
-    var expandedHeightPx by remember(slot) { mutableFloatStateOf(defaultLayout.heightPx) }
-    var isCollapsed by remember(slot) { mutableStateOf(initiallyCollapsed) }
-    var userAdjustedLayout by remember(slot) { mutableStateOf(false) }
-    var isMaximized by remember(slot) { mutableStateOf(false) }
-    var savedLayout by remember(slot) { mutableStateOf<SavedPanelLayout?>(null) }
+    var offsetX by remember(viewMode, slot) { mutableFloatStateOf(defaultLayout.xPx) }
+    var offsetY by remember(viewMode, slot) { mutableFloatStateOf(defaultLayout.yPx) }
+    var panelWidthPx by remember(viewMode, slot) { mutableFloatStateOf(defaultLayout.widthPx) }
+    var panelHeightPx by remember(viewMode, slot) { mutableFloatStateOf(defaultLayout.heightPx) }
+    var expandedHeightPx by remember(viewMode, slot) { mutableFloatStateOf(defaultLayout.heightPx) }
+    var isCollapsed by remember(viewMode, slot) { mutableStateOf(initiallyCollapsed) }
+    var userAdjustedLayout by remember(viewMode, slot) { mutableStateOf(false) }
+    var savedLayout by remember(viewMode, slot) { mutableStateOf<SavedPanelLayout?>(null) }
 
-    val showFillHint = with(density) { windowWidthPx.toDp() } < 1200.dp || isMaximized
+    val isMaximized = PanelWorkspace.isMaximized(slot, viewMode)
+    val showSurface = PanelWorkspace.shouldShowFloatingSurface(slot, windowWidthPx, viewMode)
+    val showFillHint = windowWidthDp < 1200.dp || isMaximized
 
     fun bringToFront() = PanelZOrder.bringToFront(slot)
 
@@ -124,6 +132,7 @@ fun FloatingPanelShell(
         panelHeightPx = maxPanelHeightPx
         expandedHeightPx = maxPanelHeightPx
         isCollapsed = false
+        PanelWorkspace.undock(slot, viewMode)
     }
 
     fun toggleMaximized() {
@@ -137,7 +146,7 @@ fun FloatingPanelShell(
                 expandedHeightPx = saved.expandedHeightPx
                 isCollapsed = saved.wasCollapsed
             }
-            isMaximized = false
+            PanelWorkspace.clearMaximized(viewMode)
             savedLayout = null
         } else {
             savedLayout = SavedPanelLayout(
@@ -148,9 +157,56 @@ fun FloatingPanelShell(
                 expandedHeightPx = expandedHeightPx,
                 wasCollapsed = isCollapsed,
             )
-            isMaximized = true
             userAdjustedLayout = true
+            PanelWorkspace.setMaximized(slot, viewMode)
             applyMaximizedLayout()
+        }
+    }
+
+    fun persistLayoutSnapshot() {
+        PanelWorkspace.updateLayoutSnapshot(
+            slot,
+            glide.data.PanelLayoutSnapshot(
+                offsetX = offsetX,
+                offsetY = offsetY,
+                widthPx = panelWidthPx,
+                heightPx = panelHeightPx,
+                expandedHeightPx = expandedHeightPx,
+                isCollapsed = isCollapsed,
+            ),
+            mode = viewMode,
+        )
+    }
+
+    LaunchedEffect(
+        offsetX,
+        offsetY,
+        panelWidthPx,
+        panelHeightPx,
+        expandedHeightPx,
+        isCollapsed,
+    ) {
+        persistLayoutSnapshot()
+    }
+
+    LaunchedEffect(PanelWorkspace.expandFromDockRequest, viewMode, slot) {
+        val request = PanelWorkspace.expandFromDockRequest
+        if (request?.first == viewMode && request.second == slot) {
+            isCollapsed = false
+            panelHeightPx = expandedHeightPx.coerceIn(minHeightPx, maxPanelHeightPx)
+            PanelWorkspace.clearExpandFromDockRequest()
+        }
+    }
+
+    LaunchedEffect(PanelWorkspace.layoutApplyRevision, viewMode, slot) {
+        PanelWorkspace.layoutSnapshot(slot, viewMode)?.let { snapshot ->
+            offsetX = snapshot.offsetX
+            offsetY = snapshot.offsetY
+            panelWidthPx = snapshot.widthPx
+            panelHeightPx = snapshot.heightPx
+            expandedHeightPx = snapshot.expandedHeightPx
+            isCollapsed = snapshot.isCollapsed
+            userAdjustedLayout = true
         }
     }
 
@@ -169,6 +225,8 @@ fun FloatingPanelShell(
             applyMaximizedLayout()
         }
     }
+
+    if (!PanelWorkspace.shouldCompose(slot, viewMode)) return
 
     val effectiveHeightPx = if (isCollapsed) titleBarHeightPx else panelHeightPx
     val maxOffsetX = (windowWidthPx - panelWidthPx).coerceAtLeast(0f)
@@ -193,6 +251,8 @@ fun FloatingPanelShell(
         accent = accent,
         outline = MaterialTheme.colorScheme.outline,
     )
+
+    if (!showSurface) return
 
     Surface(
         modifier = modifier
@@ -332,9 +392,11 @@ fun FloatingPanelShell(
                                 }
                                 panelHeightPx = expandedHeightPx.coerceIn(minHeightPx, maxPanelHeightPx)
                                 isCollapsed = false
+                                PanelWorkspace.undock(slot, viewMode)
                             } else {
                                 expandedHeightPx = panelHeightPx
                                 isCollapsed = true
+                                PanelWorkspace.dock(slot, viewMode)
                             }
                         },
                     ) {

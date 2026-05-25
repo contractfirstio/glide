@@ -7,6 +7,8 @@ data class AppSettings(
     val companyPhone: String = "",
     /** After the first app session, open/close backup prompts are offered. */
     val hasCompletedFirstSession: Boolean = false,
+    val windowBounds: WindowBounds = WindowBounds(),
+    val workspaceUi: WorkspaceUiSettings = WorkspaceUiSettings(),
 ) {
     val isConfigured: Boolean
         get() = legalCompanyName.isNotBlank() &&

@@ -19,6 +19,8 @@ object AppSettingsStore {
 
     val hasCompletedFirstSession: Boolean get() = settings.hasCompletedFirstSession
 
+    val windowBounds: WindowBounds get() = settings.windowBounds
+
     fun shouldOfferBackupPrompt(): Boolean =
         isConfigured && hasCompletedFirstSession
 
@@ -33,10 +35,24 @@ object AppSettingsStore {
             companyEmail = settings.companyEmail.trim(),
             companyPhone = settings.companyPhone.trim(),
             hasCompletedFirstSession = _settings.value.hasCompletedFirstSession,
+            windowBounds = _settings.value.windowBounds,
+            workspaceUi = _settings.value.workspaceUi,
         )
         if (!trimmed.isConfigured) return
         _settings.value = trimmed
         persistAppSettings(trimmed)
+    }
+
+    fun saveWindowBounds(bounds: WindowBounds) {
+        val updated = _settings.value.copy(windowBounds = bounds)
+        _settings.value = updated
+        persistAppSettings(updated)
+    }
+
+    fun saveWorkspaceUi(workspaceUi: WorkspaceUiSettings) {
+        val updated = _settings.value.copy(workspaceUi = workspaceUi)
+        _settings.value = updated
+        persistAppSettings(updated)
     }
 
     fun markFirstSessionCompleted() {

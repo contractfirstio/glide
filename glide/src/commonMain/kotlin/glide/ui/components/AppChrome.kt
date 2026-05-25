@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -23,16 +25,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import glide.data.AppSettingsStore
 import glide.data.AppViewMode
 import glide.data.AppViewState
 import glide.generated.resources.Res
 import glide.generated.resources.glide_logo
 import glide.ui.layout.GlideLayout
+import glide.ui.layout.PanelCatalog
+import glide.ui.layout.PanelWorkspace
 import glide.ui.theme.GlideOutlinedButton
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun AppChrome(
+    windowWidthPx: Int,
     modifier: Modifier = Modifier,
     companySettingsNeedSetup: Boolean = false,
     companySettingsConfigured: Boolean = true,
@@ -40,6 +46,9 @@ fun AppChrome(
     onEmailDataBackup: () -> Unit = {},
 ) {
     val mode = AppViewState.mode
+    val compactChrome = with(androidx.compose.ui.platform.LocalDensity.current) {
+        windowWidthPx.toDp() < GlideLayout.CompactChromeWidthBreakpoint
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -66,16 +75,17 @@ fun AppChrome(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ViewModeButton(
-                label = "Customer Management",
+                label = if (compactChrome) "Customers" else "Customer Management",
                 selected = mode == AppViewMode.CUSTOMER_MANAGEMENT,
                 onClick = { AppViewState.switchTo(AppViewMode.CUSTOMER_MANAGEMENT) },
             )
             ViewModeButton(
-                label = "Scheduling",
+                label = if (compactChrome) "Schedule" else "Scheduling",
                 selected = mode == AppViewMode.SCHEDULING,
                 onClick = { AppViewState.switchTo(AppViewMode.SCHEDULING) },
             )
             AppMenu(
+                windowWidthPx = windowWidthPx,
                 companySettingsNeedSetup = companySettingsNeedSetup,
                 companySettingsConfigured = companySettingsConfigured,
                 onOpenCompanySettings = onOpenCompanySettings,
@@ -87,12 +97,17 @@ fun AppChrome(
 
 @Composable
 private fun AppMenu(
+    windowWidthPx: Int,
     companySettingsNeedSetup: Boolean,
     companySettingsConfigured: Boolean,
     onOpenCompanySettings: () -> Unit,
     onEmailDataBackup: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    var panelsExpanded by remember { mutableStateOf(false) }
+    var presetsExpanded by remember { mutableStateOf(false) }
+    val viewMode = AppViewState.mode
+    val presets = PanelWorkspace.workspacePresets.filter { it.mode == viewMode.name }
 
     Box {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -114,8 +129,73 @@ private fun AppMenu(
         }
         DropdownMenu(
             expanded = menuExpanded,
-            onDismissRequest = { menuExpanded = false },
+            onDismissRequest = {
+                menuExpanded = false
+                panelsExpanded = false
+                presetsExpanded = false
+            },
         ) {
+            DropdownMenuItem(
+                text = { Text("Panels ▸") },
+                onClick = { panelsExpanded = !panelsExpanded },
+            )
+            if (panelsExpanded) {
+                PanelCatalog.primarySlots(viewMode).forEach { slot ->
+                    val visible = PanelWorkspace.isVisible(slot, viewMode)
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = visible, onCheckedChange = null)
+                                Text(PanelCatalog.label(slot, viewMode))
+                            }
+                        },
+                        onClick = {
+                            PanelWorkspace.setVisible(slot, !visible, viewMode)
+                            AppSettingsStore.saveWorkspaceUi(PanelWorkspace.toSettings())
+                        },
+                    )
+                }
+            }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("Save workspace layout…") },
+                onClick = {
+                    val count = presets.size + 1
+                    PanelWorkspace.savePreset("Layout $count", viewMode)
+                    AppSettingsStore.saveWorkspaceUi(PanelWorkspace.toSettings())
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Saved layouts ▸") },
+                onClick = { presetsExpanded = !presetsExpanded },
+            )
+            if (presetsExpanded) {
+                if (presets.isEmpty()) {
+                    DropdownMenuItem(
+                        text = { Text("No saved layouts") },
+                        onClick = {},
+                        enabled = false,
+                    )
+                } else {
+                    presets.forEach { preset ->
+                        DropdownMenuItem(
+                            text = { Text(preset.name) },
+                            onClick = {
+                                PanelWorkspace.applyPreset(preset)
+                                AppSettingsStore.saveWorkspaceUi(PanelWorkspace.toSettings())
+                            },
+                        )
+                    }
+                }
+            }
+            DropdownMenuItem(
+                text = { Text("Restore default layout") },
+                onClick = {
+                    PanelWorkspace.restoreDefaultLayout(viewMode)
+                    AppSettingsStore.saveWorkspaceUi(PanelWorkspace.toSettings())
+                },
+            )
+            HorizontalDivider()
             DropdownMenuItem(
                 text = { Text("Company settings…") },
                 onClick = {
@@ -146,7 +226,7 @@ private fun ViewModeButton(
             Text(label)
         }
     } else {
-        androidx.compose.material3.TextButton(onClick = onClick) {
+        TextButton(onClick = onClick) {
             Text(
                 text = label,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

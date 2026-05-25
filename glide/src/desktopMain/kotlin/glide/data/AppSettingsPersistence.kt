@@ -1,6 +1,9 @@
 package glide.data
 
 import glide.data.persistence.glideApplicationSupportDir
+import glide.data.persistence.glideJson
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import glide.data.persistence.legacyDocumentsGlideDir
 import java.io.File
 import java.util.Properties
@@ -34,6 +37,8 @@ internal actual fun persistAppSettings(settings: AppSettings) {
         PROPERTY_HAS_COMPLETED_FIRST_SESSION,
         settings.hasCompletedFirstSession.toString(),
     )
+    properties.setProperty(PROPERTY_WINDOW_BOUNDS, glideJson.encodeToString(settings.windowBounds))
+    properties.setProperty(PROPERTY_WORKSPACE_UI, glideJson.encodeToString(settings.workspaceUi))
     file.outputStream().use { properties.store(it, "Glide app settings") }
 }
 
@@ -52,12 +57,20 @@ private fun readProperties(file: File): AppSettings = runCatching {
             companyPhone.isNotBlank()
         else -> false
     }
+    val windowBounds = properties.getProperty(PROPERTY_WINDOW_BOUNDS)?.let { json ->
+        runCatching { glideJson.decodeFromString<WindowBounds>(json) }.getOrDefault(WindowBounds())
+    } ?: WindowBounds()
+    val workspaceUi = properties.getProperty(PROPERTY_WORKSPACE_UI)?.let { json ->
+        runCatching { glideJson.decodeFromString<WorkspaceUiSettings>(json) }.getOrDefault(WorkspaceUiSettings())
+    } ?: WorkspaceUiSettings()
     AppSettings(
         legalCompanyName = legalCompanyName,
         fpsNumber = fpsNumber,
         companyEmail = companyEmail,
         companyPhone = companyPhone,
         hasCompletedFirstSession = hasCompletedFirstSession,
+        windowBounds = windowBounds,
+        workspaceUi = workspaceUi,
     )
 }.getOrDefault(AppSettings())
 
@@ -66,6 +79,8 @@ private const val PROPERTY_FPS_NUMBER = "fpsNumber"
 private const val PROPERTY_COMPANY_EMAIL = "companyEmail"
 private const val PROPERTY_COMPANY_PHONE = "companyPhone"
 private const val PROPERTY_HAS_COMPLETED_FIRST_SESSION = "hasCompletedFirstSession"
+private const val PROPERTY_WINDOW_BOUNDS = "windowBounds"
+private const val PROPERTY_WORKSPACE_UI = "workspaceUi"
 
 private fun settingsFile(): File = File(glideApplicationSupportDir(), "settings.properties")
 
