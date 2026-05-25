@@ -133,7 +133,7 @@ fun App(
                 },
         ) {
             windowWidthPx = constraints.maxWidth
-            GlideCanvasBackground()
+            GlideCanvasBackground(mode = viewMode)
             Column(modifier = Modifier.fillMaxSize()) {
                 AppChrome(
                     windowWidthPx = windowWidthPx,

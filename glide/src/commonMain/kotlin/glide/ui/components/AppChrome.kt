@@ -2,12 +2,16 @@ package glide.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -22,8 +26,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import glide.data.AppSettingsStore
 import glide.data.AppViewMode
@@ -35,7 +41,7 @@ import glide.ui.SavedLayoutsDialog
 import glide.ui.layout.GlideLayout
 import glide.ui.layout.PanelCatalog
 import glide.ui.layout.PanelWorkspace
-import glide.ui.theme.GlideOutlinedButton
+import glide.ui.theme.GlideAccents
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
@@ -48,52 +54,139 @@ fun AppChrome(
     onEmailDataBackup: () -> Unit = {},
 ) {
     val mode = AppViewState.mode
+    val accent = GlideAccents.forViewMode(mode)
     val compactChrome = with(androidx.compose.ui.platform.LocalDensity.current) {
         windowWidthPx.toDp() < GlideLayout.CompactChromeWidthBreakpoint
     }
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(GlideLayout.AppChromeHeight)
-            .background(
-                Brush.horizontalGradient(
-                    colors = listOf(
-                        Color(0xFF1A222C),
-                        Color(0xFF151A22),
+    val modeLabel = GlideAccents.viewModeLabel(mode, compact = compactChrome)
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(GlideLayout.ViewModeAccentStripHeight)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            accent.copy(alpha = 0.95f),
+                            accent.copy(alpha = 0.55f),
+                            accent.copy(alpha = 0.85f),
+                        ),
                     ),
                 ),
-            )
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Image(
-            painter = painterResource(Res.drawable.glide_logo),
-            contentDescription = "Glide",
-            modifier = Modifier.height(28.dp),
         )
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(GlideLayout.AppChromeHeight)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            accent.copy(alpha = 0.18f),
+                            Color(0xFF1A222C),
+                            Color(0xFF151A22),
+                        ),
+                    ),
+                )
+                .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            ViewModeButton(
-                label = if (compactChrome) "Customers" else "Customer Management",
-                selected = mode == AppViewMode.CUSTOMER_MANAGEMENT,
-                onClick = { AppViewState.switchTo(AppViewMode.CUSTOMER_MANAGEMENT) },
-            )
-            ViewModeButton(
-                label = if (compactChrome) "Schedule" else "Scheduling",
-                selected = mode == AppViewMode.SCHEDULING,
-                onClick = { AppViewState.switchTo(AppViewMode.SCHEDULING) },
-            )
-            AppMenu(
-                windowWidthPx = windowWidthPx,
-                companySettingsNeedSetup = companySettingsNeedSetup,
-                companySettingsConfigured = companySettingsConfigured,
-                onOpenCompanySettings = onOpenCompanySettings,
-                onEmailDataBackup = onEmailDataBackup,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Image(
+                    painter = painterResource(Res.drawable.glide_logo),
+                    contentDescription = "Glide",
+                    modifier = Modifier.height(28.dp),
+                )
+                Text(
+                    text = modeLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accent,
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ViewModeSegmentedControl(
+                    compact = compactChrome,
+                    selectedMode = mode,
+                )
+                AppMenu(
+                    windowWidthPx = windowWidthPx,
+                    companySettingsNeedSetup = companySettingsNeedSetup,
+                    companySettingsConfigured = companySettingsConfigured,
+                    onOpenCompanySettings = onOpenCompanySettings,
+                    onEmailDataBackup = onEmailDataBackup,
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun ViewModeSegmentedControl(
+    compact: Boolean,
+    selectedMode: AppViewMode,
+) {
+    val segmentShape = RoundedCornerShape(6.dp)
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+    Row(
+        modifier = Modifier
+            .clip(segmentShape)
+            .background(trackColor)
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                shape = segmentShape,
+            )
+            .padding(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        ViewModeSegment(
+            label = "Customers",
+            selected = selectedMode == AppViewMode.CUSTOMER_MANAGEMENT,
+            accent = GlideAccents.forViewMode(AppViewMode.CUSTOMER_MANAGEMENT),
+            onClick = { AppViewState.switchTo(AppViewMode.CUSTOMER_MANAGEMENT) },
+            modifier = Modifier.clip(RoundedCornerShape(4.dp)),
+        )
+        ViewModeSegment(
+            label = if (compact) "Schedule" else "Scheduling",
+            selected = selectedMode == AppViewMode.SCHEDULING,
+            accent = GlideAccents.forViewMode(AppViewMode.SCHEDULING),
+            onClick = { AppViewState.switchTo(AppViewMode.SCHEDULING) },
+            modifier = Modifier.clip(RoundedCornerShape(4.dp)),
+        )
+    }
+}
+
+@Composable
+private fun ViewModeSegment(
+    label: String,
+    selected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val background = if (selected) accent.copy(alpha = 0.92f) else Color.Transparent
+    val textColor = if (selected) Color(0xFF0A141C) else MaterialTheme.colorScheme.onSurfaceVariant
+    Box(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .background(background)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = textColor,
+        )
     }
 }
 
@@ -217,26 +310,6 @@ private fun AppMenu(
                     menuExpanded = false
                     onEmailDataBackup()
                 },
-            )
-        }
-    }
-}
-
-@Composable
-private fun ViewModeButton(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    if (selected) {
-        GlideOutlinedButton(onClick = onClick) {
-            Text(label)
-        }
-    } else {
-        TextButton(onClick = onClick) {
-            Text(
-                text = label,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

@@ -27,6 +27,20 @@ object GlideAccents {
     val TermCalendar = Color(0xFFD4A8B8)
     val Attendance = Color(0xFFB8D4C8)
 
+    /** Distinct accent for the active workspace view (chrome strip, label, canvas tint). */
+    val CustomerManagementView = Color(0xFF8CB4DC)
+    val SchedulingView = Color(0xFF9BC4B8)
+
+    fun forViewMode(mode: AppViewMode): Color = when (mode) {
+        AppViewMode.CUSTOMER_MANAGEMENT -> CustomerManagementView
+        AppViewMode.SCHEDULING -> SchedulingView
+    }
+
+    fun viewModeLabel(mode: AppViewMode, compact: Boolean = false): String = when (mode) {
+        AppViewMode.CUSTOMER_MANAGEMENT -> if (compact) "Customers" else "Customer Management"
+        AppViewMode.SCHEDULING -> if (compact) "Scheduling" else "Scheduling"
+    }
+
     fun forPanel(slot: Int): Color = when (AppViewState.mode) {
         AppViewMode.CUSTOMER_MANAGEMENT -> when (slot) {
             PanelSlots.LEADS -> Leads
@@ -50,7 +64,11 @@ object GlideAccents {
 }
 
 @Composable
-fun GlideCanvasBackground(modifier: Modifier = Modifier) {
+fun GlideCanvasBackground(
+    mode: AppViewMode = AppViewState.mode,
+    modifier: Modifier = Modifier,
+) {
+    val accent = GlideAccents.forViewMode(mode)
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -70,7 +88,7 @@ fun GlideCanvasBackground(modifier: Modifier = Modifier) {
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFF243448).copy(alpha = 0.4f),
+                            accent.copy(alpha = 0.32f),
                             Color.Transparent,
                         ),
                         center = Offset(0.12f, 0.1f),
@@ -84,10 +102,10 @@ fun GlideCanvasBackground(modifier: Modifier = Modifier) {
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFF1E2A38).copy(alpha = 0.35f),
+                            accent.copy(alpha = if (mode == AppViewMode.SCHEDULING) 0.22f else 0.12f),
                             Color.Transparent,
                         ),
-                        center = Offset(0.88f, 0.8f),
+                        center = Offset(if (mode == AppViewMode.SCHEDULING) 0.15f else 0.88f, 0.75f),
                         radius = 700f,
                     ),
                 ),
@@ -98,7 +116,7 @@ fun GlideCanvasBackground(modifier: Modifier = Modifier) {
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFF2A3440).copy(alpha = 0.25f),
+                            accent.copy(alpha = 0.14f),
                             Color.Transparent,
                         ),
                         center = Offset(0.5f, 0.4f),

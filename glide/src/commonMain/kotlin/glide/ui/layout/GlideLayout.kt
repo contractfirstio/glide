@@ -15,6 +15,7 @@ enum class LayoutTier {
 
 object GlideLayout {
     val AppChromeHeight = 44.dp
+    val ViewModeAccentStripHeight = 4.dp
     val CompactChromeWidthBreakpoint = 1100.dp
     /** Side-by-side list + form below this width stacks vertically. */
     val CompactWidthBreakpoint = 680.dp
