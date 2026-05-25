@@ -244,6 +244,16 @@ object PanelWorkspace {
         return preset
     }
 
+    private fun syncDockedFromSnapshots(mode: AppViewMode) {
+        val state = modeState(mode)
+        state.dockedSlots.clear()
+        state.layoutSnapshots.forEach { (slot, snapshot) ->
+            if (snapshot.isCollapsed && isVisible(slot, mode)) {
+                state.dockedSlots.add(slot)
+            }
+        }
+    }
+
     fun applyPreset(preset: WorkspacePreset) {
         val mode = runCatching { AppViewMode.valueOf(preset.mode) }.getOrNull() ?: return
         if (AppViewState.mode != mode) {
@@ -257,7 +267,7 @@ object PanelWorkspace {
         state.layoutSnapshots.clear()
         state.layoutSnapshots.putAll(preset.layouts)
         state.maximizedSlot = null
-        state.dockedSlots.clear()
+        syncDockedFromSnapshots(mode)
         state.tabActiveSlot = firstVisibleSlot(mode)
         layoutApplyRevision++
         preset.layouts.keys.forEach { PanelZOrder.bringToFront(it) }

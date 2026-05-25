@@ -145,6 +145,11 @@ fun FloatingPanelShell(
                 panelHeightPx = saved.heightPx
                 expandedHeightPx = saved.expandedHeightPx
                 isCollapsed = saved.wasCollapsed
+                if (saved.wasCollapsed) {
+                    PanelWorkspace.dock(slot, viewMode)
+                } else {
+                    PanelWorkspace.undock(slot, viewMode)
+                }
             }
             PanelWorkspace.clearMaximized(viewMode)
             savedLayout = null
@@ -207,6 +212,11 @@ fun FloatingPanelShell(
             expandedHeightPx = snapshot.expandedHeightPx
             isCollapsed = snapshot.isCollapsed
             userAdjustedLayout = true
+            if (snapshot.isCollapsed) {
+                PanelWorkspace.dock(slot, viewMode)
+            } else {
+                PanelWorkspace.undock(slot, viewMode)
+            }
         }
     }
 

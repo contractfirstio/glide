@@ -30,6 +30,8 @@ import glide.data.AppViewMode
 import glide.data.AppViewState
 import glide.generated.resources.Res
 import glide.generated.resources.glide_logo
+import glide.ui.SaveWorkspaceLayoutDialog
+import glide.ui.SavedLayoutsDialog
 import glide.ui.layout.GlideLayout
 import glide.ui.layout.PanelCatalog
 import glide.ui.layout.PanelWorkspace
@@ -105,9 +107,30 @@ private fun AppMenu(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     var panelsExpanded by remember { mutableStateOf(false) }
-    var presetsExpanded by remember { mutableStateOf(false) }
+    var showSaveLayoutDialog by remember { mutableStateOf(false) }
+    var showSavedLayoutsDialog by remember { mutableStateOf(false) }
     val viewMode = AppViewState.mode
     val presets = PanelWorkspace.workspacePresets.filter { it.mode == viewMode.name }
+
+    if (showSaveLayoutDialog) {
+        SaveWorkspaceLayoutDialog(
+            viewMode = viewMode,
+            suggestedName = "Layout ${presets.size + 1}",
+            onSave = { name ->
+                PanelWorkspace.savePreset(name, viewMode)
+                AppSettingsStore.saveWorkspaceUi(PanelWorkspace.toSettings())
+                showSaveLayoutDialog = false
+            },
+            onDismiss = { showSaveLayoutDialog = false },
+        )
+    }
+
+    if (showSavedLayoutsDialog) {
+        SavedLayoutsDialog(
+            viewMode = viewMode,
+            onDismiss = { showSavedLayoutsDialog = false },
+        )
+    }
 
     Box {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -132,7 +155,6 @@ private fun AppMenu(
             onDismissRequest = {
                 menuExpanded = false
                 panelsExpanded = false
-                presetsExpanded = false
             },
         ) {
             DropdownMenuItem(
@@ -160,34 +182,19 @@ private fun AppMenu(
             DropdownMenuItem(
                 text = { Text("Save workspace layout…") },
                 onClick = {
-                    val count = presets.size + 1
-                    PanelWorkspace.savePreset("Layout $count", viewMode)
-                    AppSettingsStore.saveWorkspaceUi(PanelWorkspace.toSettings())
+                    menuExpanded = false
+                    panelsExpanded = false
+                    showSaveLayoutDialog = true
                 },
             )
             DropdownMenuItem(
-                text = { Text("Saved layouts ▸") },
-                onClick = { presetsExpanded = !presetsExpanded },
+                text = { Text("Saved layouts…") },
+                onClick = {
+                    menuExpanded = false
+                    panelsExpanded = false
+                    showSavedLayoutsDialog = true
+                },
             )
-            if (presetsExpanded) {
-                if (presets.isEmpty()) {
-                    DropdownMenuItem(
-                        text = { Text("No saved layouts") },
-                        onClick = {},
-                        enabled = false,
-                    )
-                } else {
-                    presets.forEach { preset ->
-                        DropdownMenuItem(
-                            text = { Text(preset.name) },
-                            onClick = {
-                                PanelWorkspace.applyPreset(preset)
-                                AppSettingsStore.saveWorkspaceUi(PanelWorkspace.toSettings())
-                            },
-                        )
-                    }
-                }
-            }
             DropdownMenuItem(
                 text = { Text("Restore default layout") },
                 onClick = {
