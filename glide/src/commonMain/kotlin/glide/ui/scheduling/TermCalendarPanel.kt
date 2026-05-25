@@ -46,16 +46,16 @@ import glide.data.AppViewState
 import glide.data.AttendancePanelState
 import glide.data.LocationStore
 import glide.data.SchedulePanelState
-import glide.data.ScheduledClassStore
+import glide.data.ClassStore
 import glide.data.TermStore
 import glide.data.millisUntilNextAttendanceReminderCheck
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
-import glide.model.AcademicTerm
-import glide.model.ClassSessionKey
-import glide.model.ScheduledClass
-import glide.model.compareScheduledClasses
+import glide.model.Term
+import glide.model.AttendanceSessionKey
+import glide.model.Class
+import glide.model.compareClasses
 import glide.model.parseIsoLocalDate
 import glide.model.timeRangeLine
 import glide.ui.layout.GlideLayout
@@ -99,7 +99,7 @@ private suspend fun LazyListState.scrollToShowDate(months: List<YearMonth>, date
 @Composable
 fun TermCalendarPanel(modifier: Modifier = Modifier) {
     val termsChronological = TermStore.sortedChronologically()
-    val allClasses = ScheduledClassStore.classes
+    val allClasses = ClassStore.classes
     val today = remember { LocalDate.now() }
     val viewMode = AppViewState.mode
     val attendanceVisible = AttendancePanelState.visible
@@ -160,7 +160,7 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
         val termIndex = termsChronological.indexOfFirst { it.id == selectedTerm.id }
         val termClasses = remember(selectedTerm.id, allClasses) {
             allClasses.filter { selectedTerm.id in it.termIds }
-                .sortedWith(compareScheduledClasses())
+                .sortedWith(compareClasses())
         }
         val months = remember(selectedTerm) { monthsInTerm(selectedTerm) }
 
@@ -220,7 +220,7 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
 
 @Composable
 private fun TermCalendarHeader(
-    term: AcademicTerm,
+    term: Term,
     canGoPrevious: Boolean,
     canGoNext: Boolean,
     onPrevious: () -> Unit,
@@ -268,7 +268,7 @@ private fun TermCalendarHeader(
 }
 
 @Composable
-private fun TermCalendarLegend(classes: List<ScheduledClass>) {
+private fun TermCalendarLegend(classes: List<Class>) {
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -302,10 +302,10 @@ private fun TermCalendarLegend(classes: List<ScheduledClass>) {
 @Composable
 private fun TermCalendarMonthSection(
     yearMonth: YearMonth,
-    term: AcademicTerm,
-    classes: List<ScheduledClass>,
+    term: Term,
+    classes: List<Class>,
     today: LocalDate,
-    activeAttendanceSession: ClassSessionKey?,
+    activeAttendanceSession: AttendanceSessionKey?,
 ) {
     val cells = remember(yearMonth, term.id, classes) {
         buildMonthGrid(yearMonth, term, classes)
@@ -364,7 +364,7 @@ private fun TermCalendarMonthSection(
 private fun TermCalendarDayCellView(
     cell: TermCalendarDayCell,
     today: LocalDate,
-    activeAttendanceSession: ClassSessionKey?,
+    activeAttendanceSession: AttendanceSessionKey?,
     modifier: Modifier = Modifier,
 ) {
     val date = cell.date
@@ -430,7 +430,7 @@ private fun TermCalendarDayCellView(
                             scheduledClass = scheduledClass,
                             sessionDate = date,
                             isActiveAttendance = activeAttendanceSession?.let { session ->
-                                session.scheduledClassId == scheduledClass.id &&
+                                session.classId == scheduledClass.id &&
                                     session.sessionDate == date.toString()
                             } == true,
                             onOpenAttendance = { classId, sessionDate ->
@@ -446,10 +446,10 @@ private fun TermCalendarDayCellView(
 
 @Composable
 private fun TermCalendarClassBlock(
-    scheduledClass: ScheduledClass,
+    scheduledClass: Class,
     sessionDate: LocalDate,
     isActiveAttendance: Boolean,
-    onOpenAttendance: (scheduledClassId: String, sessionDate: LocalDate) -> Unit,
+    onOpenAttendance: (classId: String, sessionDate: LocalDate) -> Unit,
 ) {
     val locationName = scheduledClass.locationId?.let { LocationStore.findById(it)?.name }
     val rosterSummary = rosterLinesForClass(scheduledClass, sessionDate)

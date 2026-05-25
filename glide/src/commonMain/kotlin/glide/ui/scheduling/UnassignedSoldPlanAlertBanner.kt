@@ -13,9 +13,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import glide.data.PlanEnrollmentStore
-import glide.data.PeopleGroupStore
-import glide.data.ScheduledClassStore
+import glide.data.SoldPlanEnrollmentStore
+import glide.data.SoldPlanStore
+import glide.data.ClassStore
 import glide.data.UnassignedSoldPlan
 import glide.data.findSoldPlansNotAssignedToClass
 import glide.data.openUnassignedSoldPlan
@@ -24,9 +24,9 @@ import glide.ui.theme.GlideTextButton
 
 @Composable
 fun rememberUnassignedSoldPlans(): List<UnassignedSoldPlan> {
-    PlanEnrollmentStore.all
-    PeopleGroupStore.all
-    ScheduledClassStore.classes
+    SoldPlanEnrollmentStore.all
+    SoldPlanStore.all
+    ClassStore.classes
     return findSoldPlansNotAssignedToClass()
 }
 

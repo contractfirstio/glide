@@ -5,7 +5,9 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.util.UUID
 
-data class AcademicTerm(
+import kotlinx.serialization.Serializable
+@Serializable
+data class Term(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     /** ISO local date (yyyy-MM-dd). */
@@ -28,14 +30,14 @@ fun parseIsoLocalDate(isoDate: String): LocalDate? {
     }
 }
 
-fun AcademicTerm.dateRange(): ClosedRange<LocalDate>? {
+fun Term.dateRange(): ClosedRange<LocalDate>? {
     val start = parseIsoLocalDate(startDate) ?: return null
     val end = parseIsoLocalDate(endDate) ?: return null
     if (end.isBefore(start)) return null
     return start..end
 }
 
-fun AcademicTerm.containsDate(date: LocalDate): Boolean {
+fun Term.containsDate(date: LocalDate): Boolean {
     val range = dateRange() ?: return false
     return date in range
 }
@@ -43,7 +45,7 @@ fun AcademicTerm.containsDate(date: LocalDate): Boolean {
 fun dateRangesOverlap(a: ClosedRange<LocalDate>, b: ClosedRange<LocalDate>): Boolean =
     !a.endInclusive.isBefore(b.start) && !b.endInclusive.isBefore(a.start)
 
-fun AcademicTerm.overlapsTerm(other: AcademicTerm): Boolean {
+fun Term.overlapsTerm(other: Term): Boolean {
     if (id == other.id) return false
     val thisRange = dateRange() ?: return false
     val otherRange = other.dateRange() ?: return false
@@ -52,33 +54,33 @@ fun AcademicTerm.overlapsTerm(other: AcademicTerm): Boolean {
 
 /** First term in [terms] whose dates overlap [candidate], excluding [excludeTermId]. */
 fun findOverlappingTerm(
-    terms: List<AcademicTerm>,
-    candidate: AcademicTerm,
+    terms: List<Term>,
+    candidate: Term,
     excludeTermId: String? = null,
-): AcademicTerm? =
+): Term? =
     terms.firstOrNull { term ->
         term.id != excludeTermId && term.overlapsTerm(candidate)
     }
 
-fun AcademicTerm.summaryLine(): String {
+fun Term.summaryLine(): String {
     if (startDate.isBlank() && endDate.isBlank()) return ""
     if (startDate.isBlank()) return endDate
     if (endDate.isBlank()) return startDate
     return "$startDate – $endDate"
 }
 
-private fun AcademicTerm.sortableStartDate(): LocalDate? = parseIsoLocalDate(startDate)
+private fun Term.sortableStartDate(): LocalDate? = parseIsoLocalDate(startDate)
 
-private fun AcademicTerm.sortableEndDate(): LocalDate? = parseIsoLocalDate(endDate)
+private fun Term.sortableEndDate(): LocalDate? = parseIsoLocalDate(endDate)
 
-/** Latest academic terms first (reverse chronological by start date). */
-fun compareAcademicTermsReverseChronological(): Comparator<AcademicTerm> =
-    compareByDescending<AcademicTerm> { it.sortableStartDate() ?: LocalDate.MIN }
+/** Latest terms first (reverse chronological by start date). */
+fun compareTermsReverseChronological(): Comparator<Term> =
+    compareByDescending<Term> { it.sortableStartDate() ?: LocalDate.MIN }
         .thenByDescending { it.sortableEndDate() ?: LocalDate.MIN }
         .thenBy { it.name.lowercase() }
 
-/** Earliest academic terms first (for term calendar navigation). */
-fun compareAcademicTermsChronological(): Comparator<AcademicTerm> =
-    compareBy<AcademicTerm> { it.sortableStartDate() ?: LocalDate.MAX }
+/** Earliest terms first (for term calendar navigation). */
+fun compareTermsChronological(): Comparator<Term> =
+    compareBy<Term> { it.sortableStartDate() ?: LocalDate.MAX }
         .thenBy { it.sortableEndDate() ?: LocalDate.MAX }
         .thenBy { it.name.lowercase() }

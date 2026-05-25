@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import glide.data.AppViewState
 import glide.ui.layout.GlideLayout
+import glide.ui.layout.LayoutTier
+import glide.ui.layout.PanelWorkspace
 import glide.ui.theme.GlideAccents
 import glide.ui.theme.GlideTextButton
 import kotlin.math.roundToInt
@@ -46,6 +48,15 @@ private data class GridPanelLayout(
     val heightPx: Float,
     val xPx: Float,
     val yPx: Float,
+)
+
+private data class SavedPanelLayout(
+    val offsetX: Float,
+    val offsetY: Float,
+    val widthPx: Float,
+    val heightPx: Float,
+    val expandedHeightPx: Float,
+    val wasCollapsed: Boolean,
 )
 
 @Composable
@@ -62,23 +73,26 @@ fun FloatingPanelShell(
     if (windowWidthPx <= 0 || windowHeightPx <= 0) return
 
     val density = LocalDensity.current
-    val marginPx = with(density) { GlideLayout.PanelMargin.toPx() }
-    val gapPx = with(density) { GlideLayout.PanelGap.toPx() }
+    val windowWidthDp = with(density) { windowWidthPx.toDp() }
+    val layoutTier = GlideLayout.layoutTier(windowWidthDp)
+    val gridTier = LayoutTier.Wide
+    val marginPx = with(density) { GlideLayout.panelMargin(gridTier).toPx() }
+    val gapPx = with(density) { GlideLayout.panelGap(gridTier).toPx() }
     val titleBarHeightPx = with(density) { GlideLayout.PanelTitleBarHeight.toPx() }
     val minWidthPx = with(density) { GlideLayout.PanelMinWidth.toPx() }
     val minHeightPx = with(density) { GlideLayout.PanelMinHeight.toPx() }
     val maxPanelWidthPx = windowWidthPx - marginPx * 2
     val maxPanelHeightPx = windowHeightPx - marginPx * 2
-    val showDragHint = with(density) { windowWidthPx.toDp() } >= 900.dp
 
     val viewMode = AppViewState.mode
-    val defaultLayout = remember(windowWidthPx, windowHeightPx, slot, marginPx, gapPx, viewMode) {
+    val defaultLayout = remember(windowWidthPx, windowHeightPx, slot, marginPx, gapPx, viewMode, gridTier) {
         val (gridWidthPx, gridHeightPx) = GlideLayout.computeGridPanelSizePx(
             windowWidthPx = windowWidthPx.toFloat(),
             windowHeightPx = windowHeightPx.toFloat(),
             marginPx = marginPx,
             gapPx = gapPx,
             mode = viewMode,
+            tier = gridTier,
         )
         val widthPx = gridWidthPx.coerceIn(minWidthPx, maxPanelWidthPx)
         val heightPx = gridHeightPx.coerceIn(minHeightPx, maxPanelHeightPx)
@@ -91,20 +105,123 @@ fun FloatingPanelShell(
             marginPx = marginPx,
             gapPx = gapPx,
             mode = viewMode,
+            tier = gridTier,
         )
         GridPanelLayout(widthPx, heightPx, xPx, yPx)
     }
 
-    var offsetX by remember(slot) { mutableFloatStateOf(defaultLayout.xPx) }
-    var offsetY by remember(slot) { mutableFloatStateOf(defaultLayout.yPx) }
-    var panelWidthPx by remember(slot) { mutableFloatStateOf(defaultLayout.widthPx) }
-    var panelHeightPx by remember(slot) { mutableFloatStateOf(defaultLayout.heightPx) }
-    var expandedHeightPx by remember(slot) { mutableFloatStateOf(defaultLayout.heightPx) }
-    var isCollapsed by remember(slot) { mutableStateOf(initiallyCollapsed) }
-    var userAdjustedLayout by remember(slot) { mutableStateOf(false) }
+    var offsetX by remember(viewMode, slot) { mutableFloatStateOf(defaultLayout.xPx) }
+    var offsetY by remember(viewMode, slot) { mutableFloatStateOf(defaultLayout.yPx) }
+    var panelWidthPx by remember(viewMode, slot) { mutableFloatStateOf(defaultLayout.widthPx) }
+    var panelHeightPx by remember(viewMode, slot) { mutableFloatStateOf(defaultLayout.heightPx) }
+    var expandedHeightPx by remember(viewMode, slot) { mutableFloatStateOf(defaultLayout.heightPx) }
+    var isCollapsed by remember(viewMode, slot) { mutableStateOf(initiallyCollapsed) }
+    var userAdjustedLayout by remember(viewMode, slot) { mutableStateOf(false) }
+    var savedLayout by remember(viewMode, slot) { mutableStateOf<SavedPanelLayout?>(null) }
 
-    LaunchedEffect(defaultLayout, userAdjustedLayout) {
-        if (!userAdjustedLayout) {
+    val isMaximized = PanelWorkspace.isMaximized(slot, viewMode)
+    val showSurface = PanelWorkspace.shouldShowFloatingSurface(slot, windowWidthPx, viewMode)
+    val showFillHint = windowWidthDp < 1200.dp || isMaximized
+
+    fun bringToFront() = PanelZOrder.bringToFront(slot)
+
+    fun applyMaximizedLayout() {
+        offsetX = marginPx
+        offsetY = marginPx
+        panelWidthPx = maxPanelWidthPx
+        panelHeightPx = maxPanelHeightPx
+        expandedHeightPx = maxPanelHeightPx
+        isCollapsed = false
+        PanelWorkspace.undock(slot, viewMode)
+    }
+
+    fun toggleMaximized() {
+        bringToFront()
+        if (isMaximized) {
+            savedLayout?.let { saved ->
+                offsetX = saved.offsetX
+                offsetY = saved.offsetY
+                panelWidthPx = saved.widthPx
+                panelHeightPx = saved.heightPx
+                expandedHeightPx = saved.expandedHeightPx
+                isCollapsed = saved.wasCollapsed
+                if (saved.wasCollapsed) {
+                    PanelWorkspace.dock(slot, viewMode)
+                } else {
+                    PanelWorkspace.undock(slot, viewMode)
+                }
+            }
+            PanelWorkspace.clearMaximized(viewMode)
+            savedLayout = null
+        } else {
+            savedLayout = SavedPanelLayout(
+                offsetX = offsetX,
+                offsetY = offsetY,
+                widthPx = panelWidthPx,
+                heightPx = panelHeightPx,
+                expandedHeightPx = expandedHeightPx,
+                wasCollapsed = isCollapsed,
+            )
+            userAdjustedLayout = true
+            PanelWorkspace.setMaximized(slot, viewMode)
+            applyMaximizedLayout()
+        }
+    }
+
+    fun persistLayoutSnapshot() {
+        PanelWorkspace.updateLayoutSnapshot(
+            slot,
+            glide.data.PanelLayoutSnapshot(
+                offsetX = offsetX,
+                offsetY = offsetY,
+                widthPx = panelWidthPx,
+                heightPx = panelHeightPx,
+                expandedHeightPx = expandedHeightPx,
+                isCollapsed = isCollapsed,
+            ),
+            mode = viewMode,
+        )
+    }
+
+    LaunchedEffect(
+        offsetX,
+        offsetY,
+        panelWidthPx,
+        panelHeightPx,
+        expandedHeightPx,
+        isCollapsed,
+    ) {
+        persistLayoutSnapshot()
+    }
+
+    LaunchedEffect(PanelWorkspace.expandFromDockRequest, viewMode, slot) {
+        val request = PanelWorkspace.expandFromDockRequest
+        if (request?.first == viewMode && request.second == slot) {
+            isCollapsed = false
+            panelHeightPx = expandedHeightPx.coerceIn(minHeightPx, maxPanelHeightPx)
+            PanelWorkspace.clearExpandFromDockRequest()
+        }
+    }
+
+    LaunchedEffect(PanelWorkspace.layoutApplyRevision, viewMode, slot) {
+        PanelWorkspace.layoutSnapshot(slot, viewMode)?.let { snapshot ->
+            offsetX = snapshot.offsetX
+            offsetY = snapshot.offsetY
+            panelWidthPx = snapshot.widthPx
+            panelHeightPx = snapshot.heightPx
+            expandedHeightPx = snapshot.expandedHeightPx
+            isCollapsed = snapshot.isCollapsed
+            userAdjustedLayout = true
+            if (snapshot.isCollapsed) {
+                PanelWorkspace.dock(slot, viewMode)
+            } else {
+                PanelWorkspace.undock(slot, viewMode)
+            }
+        }
+    }
+
+    LaunchedEffect(defaultLayout, userAdjustedLayout, isMaximized) {
+        if (!userAdjustedLayout && !isMaximized) {
             offsetX = defaultLayout.xPx
             offsetY = defaultLayout.yPx
             panelWidthPx = defaultLayout.widthPx
@@ -112,6 +229,14 @@ fun FloatingPanelShell(
             expandedHeightPx = defaultLayout.heightPx
         }
     }
+
+    LaunchedEffect(windowWidthPx, windowHeightPx, isMaximized, marginPx, maxPanelWidthPx, maxPanelHeightPx) {
+        if (isMaximized) {
+            applyMaximizedLayout()
+        }
+    }
+
+    if (!PanelWorkspace.shouldCompose(slot, viewMode)) return
 
     val effectiveHeightPx = if (isCollapsed) titleBarHeightPx else panelHeightPx
     val maxOffsetX = (windowWidthPx - panelWidthPx).coerceAtLeast(0f)
@@ -131,13 +256,13 @@ fun FloatingPanelShell(
     val isSelected = PanelZOrder.isFocused(slot)
     val panelShape = MaterialTheme.shapes.medium
 
-    fun bringToFront() = PanelZOrder.bringToFront(slot)
-
     val panelBorder = panelBorderStroke(
         selected = isSelected,
         accent = accent,
         outline = MaterialTheme.colorScheme.outline,
     )
+
+    if (!showSurface) return
 
     Surface(
         modifier = modifier
@@ -195,16 +320,25 @@ fun FloatingPanelShell(
                                 },
                             ),
                         )
-                        .pointerInput(slot, maxOffsetX, maxOffsetY, isCollapsed) {
-                            detectDragGestures(
-                                onDragStart = { bringToFront() },
-                            ) { change, dragAmount ->
-                                change.consume()
-                                userAdjustedLayout = true
-                                bringToFront()
-                                offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxOffsetX)
-                                offsetY = (offsetY + dragAmount.y).coerceIn(0f, maxOffsetY)
-                            }
+                        .then(
+                            if (!isMaximized) {
+                                Modifier.pointerInput(slot, maxOffsetX, maxOffsetY, isCollapsed) {
+                                    detectDragGestures(
+                                        onDragStart = { bringToFront() },
+                                    ) { change, dragAmount ->
+                                        change.consume()
+                                        userAdjustedLayout = true
+                                        bringToFront()
+                                        offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxOffsetX)
+                                        offsetY = (offsetY + dragAmount.y).coerceIn(0f, maxOffsetY)
+                                    }
+                                }
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .pointerInput(slot, isMaximized) {
+                            detectTapGestures(onDoubleTap = { toggleMaximized() })
                         },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -237,9 +371,9 @@ fun FloatingPanelShell(
                             .weight(1f)
                             .padding(start = 10.dp),
                     )
-                    if (showDragHint && !isCollapsed) {
+                    if (showFillHint && !isCollapsed) {
                         Text(
-                            text = "Drag to move",
+                            text = if (isMaximized) "Double-click to restore" else "Double-click to fill",
                             style = MaterialTheme.typography.labelSmall,
                             color = accent.copy(alpha = 0.75f),
                             modifier = Modifier.padding(end = 4.dp),
@@ -258,19 +392,31 @@ fun FloatingPanelShell(
                     GlideTextButton(
                         onClick = {
                             bringToFront()
+                            if (isMaximized) {
+                                toggleMaximized()
+                                return@GlideTextButton
+                            }
                             if (isCollapsed) {
                                 if (expandedHeightPx.isNaN()) {
                                     expandedHeightPx = minHeightPx
                                 }
                                 panelHeightPx = expandedHeightPx.coerceIn(minHeightPx, maxPanelHeightPx)
                                 isCollapsed = false
+                                PanelWorkspace.undock(slot, viewMode)
                             } else {
                                 expandedHeightPx = panelHeightPx
                                 isCollapsed = true
+                                PanelWorkspace.dock(slot, viewMode)
                             }
                         },
                     ) {
-                        Text(if (isCollapsed) "Expand" else "Collapse")
+                        Text(
+                            when {
+                                isMaximized -> "Restore"
+                                isCollapsed -> "Expand"
+                                else -> "Collapse"
+                            },
+                        )
                     }
                 }
 
@@ -288,7 +434,7 @@ fun FloatingPanelShell(
                 }
             }
 
-            if (!isCollapsed) {
+            if (!isCollapsed && !isMaximized) {
                 PanelResizeHandle(
                     modifier = Modifier.align(Alignment.BottomEnd),
                     onResizeStart = { bringToFront() },

@@ -3,7 +3,6 @@ package glide.data
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import glide.model.PeopleGroupType
 
 /**
  * Cross-panel scheduling filters — selections in classes, sold plans, terms, and locations
@@ -21,7 +20,7 @@ object SchedulePanelState {
 
     /** Class selected in the Classes panel — filters sold plans and syncs term, calendar, and location. */
     fun onClassSelected(classId: String) {
-        if (ScheduledClassStore.findById(classId) == null) return
+        if (ClassStore.findById(classId) == null) return
         selectedSoldPlanId = null
         selectedTermFilterId = null
         selectedLocationFilterId = null
@@ -30,12 +29,11 @@ object SchedulePanelState {
 
     /** Sold plan selected in the Sold Plans panel — filters classes and syncs term, calendar, and location. */
     fun onSoldPlanSelected(groupId: String) {
-        val group = PeopleGroupStore.findById(groupId) ?: return
-        if (group.type != PeopleGroupType.CUSTOMER) return
+        val group = findSoldPlanById(groupId) ?: return
         selectedSoldPlanId = groupId
         selectedTermFilterId = null
         selectedLocationFilterId = null
-        selectedClassId = ScheduledClassStore.findClassContainingCustomerGroup(groupId)?.id
+        selectedClassId = ClassStore.findClassContainingSoldPlan(groupId)?.id
     }
 
     /** Term selected in the Terms panel — filters classes, sold plans, and locations. */
@@ -58,7 +56,7 @@ object SchedulePanelState {
 
     /** Updates class context without clearing the sold-plan filter. */
     fun syncClassContext(classId: String) {
-        if (ScheduledClassStore.findById(classId) != null) {
+        if (ClassStore.findById(classId) != null) {
             selectedClassId = classId
         }
     }
@@ -112,7 +110,7 @@ object SchedulePanelState {
 
     private fun restoreClassContextFromSoldPlan() {
         selectedSoldPlanId?.let { soldPlanId ->
-            selectedClassId = ScheduledClassStore.findClassContainingCustomerGroup(soldPlanId)?.id
+            selectedClassId = ClassStore.findClassContainingSoldPlan(soldPlanId)?.id
         }
     }
 }

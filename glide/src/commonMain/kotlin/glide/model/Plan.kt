@@ -2,12 +2,15 @@ package glide.model
 
 import java.util.UUID
 
+import kotlinx.serialization.Serializable
+@Serializable
 enum class PlanKind(val label: String) {
     MULTI_LESSON_PLAN("Multi Lesson Plan"),
     SINGLE_LESSON_PLAN("Single Lesson Plan"),
     CAMP("Camp"),
 }
 
+@Serializable
 data class Plan(
     val id: String = UUID.randomUUID().toString(),
     val kind: PlanKind,

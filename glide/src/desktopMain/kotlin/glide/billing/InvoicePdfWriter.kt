@@ -204,7 +204,7 @@ object InvoicePdfWriter {
     }
 
     private fun invoiceDirectory(): File {
-        val documents = File(System.getProperty("user.home"), "Documents")
-        return File(documents, "Glide/invoices")
+        val dir = java.io.File(glide.data.persistence.glideDocumentsExportDir())
+        return java.io.File(dir, "invoices")
     }
 }

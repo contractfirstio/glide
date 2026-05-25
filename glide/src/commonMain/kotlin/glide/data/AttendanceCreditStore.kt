@@ -1,42 +1,48 @@
 package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
-import glide.model.BillingCredit
+import glide.model.AttendanceCredit
 
-object BillingCreditStore {
-    private val _credits = mutableStateListOf<BillingCredit>()
+object AttendanceCreditStore {
+    private val _credits = mutableStateListOf<AttendanceCredit>()
 
-    val all: List<BillingCredit> get() = _credits
+    val all: List<AttendanceCredit> get() = _credits
 
-    fun unappliedForEnrollment(enrollmentId: String): List<BillingCredit> =
+    fun unappliedForEnrollment(enrollmentId: String): List<AttendanceCredit> =
         _credits.filter { it.enrollmentId == enrollmentId && it.appliedToBillId == null }
             .sortedBy { it.createdAtMillis }
 
     fun unappliedTotalMinor(enrollmentId: String): Long =
         unappliedForEnrollment(enrollmentId).sumOf { it.amountMinor }
 
-    fun appliedToBill(billId: String): List<BillingCredit> =
+    fun appliedToBill(billId: String): List<AttendanceCredit> =
         _credits.filter { it.appliedToBillId == billId }.sortedBy { it.createdAtMillis }
 
     fun appliedTotalMinorForBill(billId: String): Long =
         appliedToBill(billId).sumOf { it.amountMinor }
 
     fun hasCreditForAbsentSession(
-        scheduledClassId: String,
+        classId: String,
         sessionDate: String,
         attendeeKey: String,
     ): Boolean = _credits.any {
-        it.scheduledClassId == scheduledClassId &&
+        it.classId == classId &&
             it.sessionDate == sessionDate &&
             it.attendeeKey == attendeeKey
     }
 
-    fun add(credit: BillingCredit) {
-        if (hasCreditForAbsentSession(credit.scheduledClassId, credit.sessionDate, credit.attendeeKey)) {
+    fun add(credit: AttendanceCredit) {
+        if (hasCreditForAbsentSession(credit.classId, credit.sessionDate, credit.attendeeKey)) {
             return
         }
         _credits.add(credit)
         BillStore.applyPendingCreditsToOpenBills(credit.enrollmentId)
+        persistAppData()
+    }
+
+    internal fun replaceAll(credits: List<AttendanceCredit>) {
+        _credits.clear()
+        _credits.addAll(credits)
     }
 
     /**
@@ -47,7 +53,7 @@ object BillingCreditStore {
         if (maxToApplyMinor <= 0) return 0L
         var applied = 0L
         val pending = unappliedForEnrollment(enrollmentId).toMutableList()
-        val indicesToUpdate = mutableListOf<Pair<Int, BillingCredit>>()
+        val indicesToUpdate = mutableListOf<Pair<Int, AttendanceCredit>>()
         for (credit in pending) {
             if (applied >= maxToApplyMinor) break
             if (applied + credit.amountMinor > maxToApplyMinor) break
@@ -60,10 +66,12 @@ object BillingCreditStore {
         indicesToUpdate.forEach { (index, updated) ->
             _credits[index] = updated
         }
+        if (indicesToUpdate.isNotEmpty()) persistAppData()
         return applied
     }
 
     fun removeAllForEnrollment(enrollmentId: String) {
-        _credits.removeAll { it.enrollmentId == enrollmentId }
+        val removed = _credits.removeAll { it.enrollmentId == enrollmentId }
+        if (removed) persistAppData()
     }
 }

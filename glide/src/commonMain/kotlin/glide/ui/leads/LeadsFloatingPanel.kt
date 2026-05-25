@@ -5,7 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import glide.ui.components.FloatingPanelShell
 import glide.ui.layout.PanelSlots
-import glide.ui.peoplegroup.LeadsPeopleGroupPanel
+import glide.ui.peoplegroup.LeadsPanel
 
 @Composable
 fun LeadsFloatingPanel(
@@ -18,6 +18,6 @@ fun LeadsFloatingPanel(
         windowWidthPx = windowWidthPx,
         windowHeightPx = windowHeightPx,
     ) {
-        LeadsPeopleGroupPanel(modifier = Modifier.fillMaxSize())
+        LeadsPanel(modifier = Modifier.fillMaxSize())
     }
 }

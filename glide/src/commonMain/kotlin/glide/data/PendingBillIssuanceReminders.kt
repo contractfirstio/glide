@@ -2,12 +2,11 @@ package glide.data
 
 import glide.model.Bill
 import glide.model.BillStatus
-import glide.model.PeopleGroupType
 import glide.model.formatMoney
 
 data class PendingBillIssuance(
     val billId: String,
-    val peopleGroupId: String,
+    val soldPlanId: String,
     val customerLabel: String,
     val billDescription: String,
     val formattedAmount: String,
@@ -32,18 +31,17 @@ fun billsNeedingIssuanceMessage(count: Int? = null): String {
 
 fun openPendingBillIssuance(pending: PendingBillIssuance) {
     AppViewState.switchTo(AppViewMode.CUSTOMER_MANAGEMENT)
-    PeopleGroupNavigation.openCustomer(pending.peopleGroupId)
+    LeadNavigation.openSoldPlan(pending.soldPlanId)
 }
 
 private fun Bill.toPendingBillIssuanceOrNull(): PendingBillIssuance? {
-    val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
-    if (group.type != PeopleGroupType.CUSTOMER) return null
-    if (soldPlanBlocksBillIssuance(peopleGroupId)) return null
+    val group = findSoldPlanById(soldPlanId) ?: return null
+    if (soldPlanBlocksBillIssuance(soldPlanId)) return null
     val main = group.resolveMainClient()
-    val customerLabel = main.name.ifBlank { "Customer" }
+    val customerLabel = main?.name?.ifBlank { "Customer" } ?: "Customer"
     return PendingBillIssuance(
         billId = id,
-        peopleGroupId = peopleGroupId,
+        soldPlanId = soldPlanId,
         customerLabel = customerLabel,
         billDescription = planLineDescription(),
         formattedAmount = formatMoney(amountMinor, currencyCode),

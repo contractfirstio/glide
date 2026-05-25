@@ -42,37 +42,38 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.LocationStore
 import glide.data.enrolledHeadcount
-import glide.data.headcountForCustomerGroups
-import glide.data.AddCustomerGroupResult
-import glide.data.PlanClassScheduleStore
+import glide.data.headcountForSoldPlans
+import glide.data.AddSoldPlanResult
+import glide.data.SoldPlanClassScheduleStore
 import glide.data.RollingPlanBillingService
-import glide.data.assignPlanClassSchedule
-import glide.data.isCustomerGroupAvailableForClass
-import glide.data.tryAddCustomerGroup
-import glide.data.validateCustomerGroupsForClass
+import glide.data.assignSoldPlanClassSchedule
+import glide.data.isSoldPlanAvailableForClass
+import glide.data.tryAddSoldPlan
+import glide.data.validateSoldPlansForClass
 import glide.data.validatePlanSchedulesForClass
-import glide.data.validateRollingPlanEnrollmentsForClass
+import glide.data.validateRollingSoldPlanEnrollmentsForClass
 import glide.data.peopleGroupHasRollingPlan
-import glide.data.canAcceptRollingPlanEnrollments
+import glide.data.canAcceptRollingSoldPlanEnrollments
 import glide.data.PlanScheduleAssignment
-import glide.data.assignWeeklyPlanClassSchedule
+import glide.data.assignWeeklySoldPlanClassSchedule
 import glide.data.requiredClassSessionsForPlan
 import glide.data.validateWeeklyPlanFitsClass
 import glide.model.isWeekly
-import glide.data.PlanEnrollmentStore
-import glide.data.PeopleGroupStore
+import glide.data.SoldPlanEnrollmentStore
+import glide.data.SoldPlanStore
 import glide.data.PlanStore
-import glide.data.ScheduledClassStore
+import glide.data.ClassStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
 import glide.data.resolveMainClient
 import glide.data.toScheduleMessage
 import glide.data.toUserMessage
-import glide.model.ClassLocation
-import glide.model.PeopleGroup
+import glide.data.findSoldPlanById
+import glide.model.Location
+import glide.model.SoldPlan
 import glide.model.ClassScheduleKind
 import glide.model.DayOfWeek
-import glide.model.ScheduledClass
+import glide.model.Class
 import glide.model.compareTime24h
 import glide.model.isValidTime24h
 import glide.model.parseScheduleIsoDate
@@ -90,7 +91,12 @@ import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelLinkedBox
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.ListFormPanelLayout
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
+import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.peoplegroup.EntitySearchPicker
@@ -109,7 +115,7 @@ import java.util.UUID
 private data class ClassFormState(
     val name: String = "",
     val termIds: Set<String> = emptySet(),
-    val customerGroupIds: Set<String> = emptySet(),
+    val soldPlanIds: Set<String> = emptySet(),
     val locationId: String? = null,
     val scheduleKind: ClassScheduleKind = ClassScheduleKind.RECURRING,
     val dayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
@@ -134,10 +140,10 @@ private data class ClassFormState(
         }
     }
 
-    fun toScheduledClass(
+    fun toClass(
         existingId: String? = null,
         createdAtMillis: Long = System.currentTimeMillis(),
-    ): ScheduledClass {
+    ): Class {
         val resolvedSingleDate = when (scheduleKind) {
             ClassScheduleKind.RECURRING, ClassScheduleKind.WEEKLY -> null
             ClassScheduleKind.SINGLE_DAY -> singleDate.trim().takeIf { it.isNotBlank() }
@@ -157,11 +163,11 @@ private data class ClassFormState(
             ClassScheduleKind.WEEKLY -> resolvedWeeklyDays.firstOrNull() ?: dayOfWeek
             ClassScheduleKind.RECURRING -> dayOfWeek
         }
-        return ScheduledClass(
+        return Class(
             id = existingId ?: UUID.randomUUID().toString(),
             name = name.trim(),
             termIds = termIds.toList(),
-            customerGroupIds = customerGroupIds.toList(),
+            soldPlanIds = soldPlanIds.toList(),
             locationId = locationId,
             dayOfWeek = resolvedDayOfWeek,
             singleDate = resolvedSingleDate,
@@ -175,28 +181,28 @@ private data class ClassFormState(
         )
     }
 
-    fun withAutoTermForSingleDay(terms: List<glide.model.AcademicTerm>): ClassFormState {
+    fun withAutoTermForSingleDay(terms: List<glide.model.Term>): ClassFormState {
         if (scheduleKind != ClassScheduleKind.SINGLE_DAY) return this
         if (singleDate.isBlank()) return copy(termIds = emptySet())
         val term = findTermContainingIsoDate(terms, singleDate)
         return copy(termIds = term?.let { setOf(it.id) } ?: emptySet())
     }
 
-    fun withAutoTermForWeekly(terms: List<glide.model.AcademicTerm>): ClassFormState {
+    fun withAutoTermForWeekly(terms: List<glide.model.Term>): ClassFormState {
         if (scheduleKind != ClassScheduleKind.WEEKLY) return this
         if (weekOfDate.isBlank()) return copy(termIds = emptySet())
         val term = findTermContainingIsoDate(terms, weekOfDate)
         return copy(termIds = term?.let { setOf(it.id) } ?: emptySet())
     }
 
-    fun withAutoTerms(terms: List<glide.model.AcademicTerm>): ClassFormState = when (scheduleKind) {
+    fun withAutoTerms(terms: List<glide.model.Term>): ClassFormState = when (scheduleKind) {
         ClassScheduleKind.SINGLE_DAY -> withAutoTermForSingleDay(terms)
         ClassScheduleKind.WEEKLY -> withAutoTermForWeekly(terms)
         ClassScheduleKind.RECURRING -> this
     }
 
     companion object {
-        fun defaultForCreate(terms: List<glide.model.AcademicTerm>): ClassFormState =
+        fun defaultForCreate(terms: List<glide.model.Term>): ClassFormState =
             ClassFormState(termIds = defaultRecurringClassTermIds(terms))
     }
 }
@@ -209,19 +215,24 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var listSearchQuery by remember { mutableStateOf("") }
 
     val locations = LocationStore.sortedForPanel()
     val soldPlanFilterId = SchedulePanelState.selectedSoldPlanId
     val termFilterId = SchedulePanelState.selectedTermFilterId
     val locationFilterId = SchedulePanelState.selectedLocationFilterId
-    val classes = ScheduledClassStore.forSchedulingPanel(
+    val classes = ClassStore.forSchedulingPanel(
         soldPlanId = soldPlanFilterId,
         termId = termFilterId,
         locationId = locationFilterId,
     )
+    val filteredClasses = remember(classes, listSearchQuery) {
+        classes.filter { scheduledClass -> classMatchesPanelSearch(scheduledClass, listSearchQuery) }
+    }
+    val searchActive = listSearchQuery.isNotBlank()
     val soldPlanFilterLabel = soldPlanFilterId?.let { groupId ->
-        PeopleGroupStore.findById(groupId)?.let { group ->
-            group.resolveMainClient().name.takeIf { it.isNotBlank() }
+        findSoldPlanById(groupId)?.let { group ->
+            group.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
                 ?: group.planId?.let { PlanStore.findById(it)?.name }?.takeIf { it.isNotBlank() }
         }
     }
@@ -245,7 +256,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
         SchedulePanelState.onClassCleared()
     }
 
-    fun syncClassIntoForm(scheduledClass: ScheduledClass) {
+    fun syncClassIntoForm(scheduledClass: Class) {
         selectedId = scheduledClass.id
         isCreating = false
         SchedulePanelState.syncClassContext(scheduledClass.id)
@@ -253,7 +264,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
             ClassFormState(
                 name = scheduledClass.name,
                 termIds = scheduledClass.termIds.toSet(),
-                customerGroupIds = scheduledClass.customerGroupIds.toSet(),
+                soldPlanIds = scheduledClass.soldPlanIds.toSet(),
                 locationId = scheduledClass.locationId,
                 scheduleKind = scheduledClass.scheduleKind(),
                 dayOfWeek = scheduledClass.dayOfWeek,
@@ -270,7 +281,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
         formError = null
     }
 
-    fun loadIntoForm(scheduledClass: ScheduledClass) {
+    fun loadIntoForm(scheduledClass: Class) {
         selectedId = scheduledClass.id
         isCreating = false
         SchedulePanelState.onClassSelected(scheduledClass.id)
@@ -278,7 +289,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
             ClassFormState(
                 name = scheduledClass.name,
                 termIds = scheduledClass.termIds.toSet(),
-                customerGroupIds = scheduledClass.customerGroupIds.toSet(),
+                soldPlanIds = scheduledClass.soldPlanIds.toSet(),
                 locationId = scheduledClass.locationId,
                 scheduleKind = scheduledClass.scheduleKind(),
                 dayOfWeek = scheduledClass.dayOfWeek,
@@ -297,7 +308,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
 
     LaunchedEffect(soldPlanFilterId, classes) {
         val soldPlanId = soldPlanFilterId ?: return@LaunchedEffect
-        val scheduledClass = ScheduledClassStore.findClassContainingCustomerGroup(soldPlanId)
+        val scheduledClass = ClassStore.findClassContainingSoldPlan(soldPlanId)
         if (scheduledClass == null) {
             if (selectedId != null) clearLocalSelection()
             return@LaunchedEffect
@@ -374,7 +385,13 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${classes.size} class${if (classes.size == 1) "" else "es"}",
+                            text = panelListCountLabel(
+                                singular = "class",
+                                plural = "classes",
+                                filteredCount = filteredClasses.size,
+                                totalCount = classes.size,
+                                searchActive = searchActive,
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -398,6 +415,12 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             }
                         }
                     }
+                    PanelListSearchSpacer()
+                    PanelListSearchField(
+                        query = listSearchQuery,
+                        onQueryChange = { listSearchQuery = it },
+                        placeholder = "Class name, term, location…",
+                    )
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (classes.isEmpty()) {
@@ -431,6 +454,29 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    } else if (filteredClasses.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (listSectionHeight != null) {
+                                        Modifier.height(listSectionHeight)
+                                    } else {
+                                        Modifier.weight(1f)
+                                    },
+                                )
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    MaterialTheme.shapes.small,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No classes match your search.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     } else {
                         LazyColumn(
                             modifier = Modifier.then(
@@ -442,7 +488,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            items(classes, key = { it.id }) { scheduledClass ->
+                            items(filteredClasses, key = { it.id }) { scheduledClass ->
                                 ClassListItem(
                                     scheduledClass = scheduledClass,
                                     selected = scheduledClass.id == selectedId,
@@ -466,7 +512,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
 
                     val termsReadOnly = !isCreating &&
                         selectedId != null &&
-                        !ScheduledClassStore.canEditTerms(selectedId!!)
+                        !ClassStore.canEditTerms(selectedId!!)
 
                     Column(
                         modifier = Modifier
@@ -486,7 +532,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                         if (termsReadOnly) {
                             Spacer(modifier = Modifier.height(spacing.field))
                             Text(
-                                text = ScheduledClassStore.classTermsEditBlockReason(selectedId!!)
+                                text = ClassStore.classTermsEditBlockReason(selectedId!!)
                                     ?: "This class has sold plans and its terms cannot be changed.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -498,19 +544,19 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                             ClassCustomerGroupsSection(
                                 classId = selectedId,
                                 scheduledClassForValidation = selectedId?.let { id ->
-                                    form.draft.toScheduledClass(existingId = id)
+                                    form.draft.toClass(existingId = id)
                                 },
-                                customerGroupIds = form.draft.customerGroupIds.toList(),
+                                soldPlanIds = form.draft.soldPlanIds.toList(),
                                 locationId = form.draft.locationId,
                                 onCustomerGroupIdsChange = { ids ->
-                                    form.draft = form.draft.copy(customerGroupIds = ids.toSet())
+                                    form.draft = form.draft.copy(soldPlanIds = ids.toSet())
                                 },
                                 spacing = spacing,
                             )
                         }
 
                         if (!isCreating && selectedId != null) {
-                            val soldPlanCount = ScheduledClassStore.soldPlanCount(selectedId!!)
+                            val soldPlanCount = ClassStore.soldPlanCount(selectedId!!)
                             if (soldPlanCount > 0) {
                                 Spacer(modifier = Modifier.height(spacing.field))
                                 Text(
@@ -557,50 +603,50 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                     form.draft = stateToSave
                                 }
                                 if (isCreating) {
-                                    val scheduledClass = stateToSave.toScheduledClass()
-                                    ScheduledClassStore.create(scheduledClass)
+                                    val scheduledClass = stateToSave.toClass()
+                                    ClassStore.create(scheduledClass)
                                     loadIntoForm(scheduledClass)
                                 } else {
-                                    val existing = selectedId?.let { ScheduledClassStore.findById(it) }
+                                    val existing = selectedId?.let { ClassStore.findById(it) }
                                     if (existing != null) {
-                                        validateCustomerGroupsForClass(
-                                            stateToSave.customerGroupIds.toList(),
+                                        validateSoldPlansForClass(
+                                            stateToSave.soldPlanIds.toList(),
                                             classId = existing.id,
                                         )?.let { message ->
                                             formError = message
                                             return@GlideButton
                                         }
-                                        val updated = stateToSave.toScheduledClass(
+                                        val updated = stateToSave.toClass(
                                             existingId = existing.id,
                                             createdAtMillis = existing.createdAtMillis,
                                         )
-                                        if (ScheduledClassStore.soldPlanCount(existing.id) > 0 &&
+                                        if (ClassStore.soldPlanCount(existing.id) > 0 &&
                                             updated.termIds.toSet() != existing.termIds.toSet()
                                         ) {
-                                            formError = ScheduledClassStore.classTermsEditBlockReason(existing.id)
+                                            formError = ClassStore.classTermsEditBlockReason(existing.id)
                                                 ?: "This class has sold plans and its terms cannot be changed."
                                             return@GlideButton
                                         }
                                         validatePlanSchedulesForClass(
-                                            updated.customerGroupIds,
+                                            updated.soldPlanIds,
                                             updated,
                                         )?.let { message ->
                                             formError = message
                                             return@GlideButton
                                         }
-                                        validateRollingPlanEnrollmentsForClass(
-                                            updated.customerGroupIds,
+                                        validateRollingSoldPlanEnrollmentsForClass(
+                                            updated.soldPlanIds,
                                             updated,
                                         )?.let { message ->
                                             formError = message
                                             return@GlideButton
                                         }
-                                        ScheduledClassStore.update(updated)
-                                        updated.customerGroupIds.forEach { groupId ->
+                                        ClassStore.update(updated)
+                                        updated.soldPlanIds.forEach { groupId ->
                                             if (!updated.isWeekly() ||
-                                                PlanClassScheduleStore.sessionDatesFor(groupId, updated.id) == null
+                                                SoldPlanClassScheduleStore.sessionDatesFor(groupId, updated.id) == null
                                             ) {
-                                                assignPlanClassSchedule(groupId, updated)
+                                                assignSoldPlanClassSchedule(groupId, updated)
                                             }
                                             RollingPlanBillingService.syncRollingPlanBilling(groupId)
                                         }
@@ -617,7 +663,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                         if (!isCreating) {
                             GlideOutlinedButton(
                                 onClick = { showDeleteConfirm = true },
-                                enabled = selectedId?.let { ScheduledClassStore.canDelete(it) } == true,
+                                enabled = selectedId?.let { ClassStore.canDelete(it) } == true,
                             ) {
                                 Text("Delete", color = MaterialTheme.colorScheme.error)
                             }
@@ -626,25 +672,19 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                 }
             }
 
-            if (compact) {
-                listSection(Modifier.fillMaxWidth())
-                HorizontalDivider(modifier = Modifier.padding(vertical = spacing.section))
-                formSection(Modifier.fillMaxWidth().weight(1f))
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(spacing.section),
-                ) {
-                    listSection(Modifier.weight(0.42f).fillMaxHeight())
-                    VerticalDivider(modifier = Modifier.fillMaxHeight())
-                    formSection(Modifier.weight(0.58f).fillMaxHeight())
-                }
-            }
+            ListFormPanelLayout(
+                hasSelection = selectedId != null || isCreating,
+                spacing = spacing,
+                onCloseForm = { clearSelection() },
+                modifier = Modifier.fillMaxSize(),
+                listSection = listSection,
+                formSection = formSection,
+            )
         }
     }
 
     if (showDeleteConfirm && selectedId != null) {
-        val soldPlanCount = ScheduledClassStore.soldPlanCount(selectedId!!)
+        val soldPlanCount = ClassStore.soldPlanCount(selectedId!!)
         val hasSoldPlans = soldPlanCount > 0
         DeleteConfirmDialog(
             title = "Delete class?",
@@ -656,7 +696,7 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
             },
             onDismiss = { showDeleteConfirm = false },
             onContinue = {
-                if (ScheduledClassStore.delete(selectedId!!)) {
+                if (ClassStore.delete(selectedId!!)) {
                     showDeleteConfirm = false
                     clearSelection()
                 } else {
@@ -669,9 +709,23 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
     }
 }
 
+private fun classMatchesPanelSearch(scheduledClass: Class, query: String): Boolean {
+    val termNames = scheduledClass.termIds.mapNotNull { TermStore.findById(it)?.name }.joinToString(" ")
+    val location = scheduledClass.locationId?.let { LocationStore.findById(it) }
+    return matchesPanelListSearch(
+        query,
+        scheduledClass.name,
+        scheduledClass.scheduleLine(),
+        termNames,
+        location?.name.orEmpty(),
+        location?.city.orEmpty(),
+        scheduledClass.notes,
+    )
+}
+
 @Composable
 private fun ClassListItem(
-    scheduledClass: ScheduledClass,
+    scheduledClass: Class,
     selected: Boolean,
     compact: Boolean,
     onClick: () -> Unit,
@@ -687,7 +741,7 @@ private fun ClassListItem(
     val locationLine = location?.let { loc ->
         listOfNotNull(loc.name, loc.maxCapacity?.let { "Max $it" }).joinToString(" · ")
     }
-    val groupCount = scheduledClass.customerGroupIds.size
+    val groupCount = scheduledClass.soldPlanIds.size
     val enrolledCount = scheduledClass.enrolledHeadcount()
     Column(
         modifier = Modifier
@@ -757,8 +811,8 @@ private data class PendingWeeklyPlanLink(
 @Composable
 private fun ClassCustomerGroupsSection(
     classId: String?,
-    scheduledClassForValidation: ScheduledClass?,
-    customerGroupIds: List<String>,
+    scheduledClassForValidation: Class?,
+    soldPlanIds: List<String>,
     locationId: String?,
     onCustomerGroupIdsChange: (List<String>) -> Unit,
     spacing: GlideLayout.Spacing,
@@ -770,36 +824,36 @@ private fun ClassCustomerGroupsSection(
     var weeklyLinkBlockedMessage by remember { mutableStateOf<String?>(null) }
 
     val classForValidation = scheduledClassForValidation
-    val assignedIds = customerGroupIds
+    val assignedIds = soldPlanIds
     val location = locationId?.let { LocationStore.findById(it) }
-    val headcount = headcountForCustomerGroups(customerGroupIds)
+    val headcount = headcountForSoldPlans(soldPlanIds)
 
     val searchResults = remember(searchQuery, assignedIds, classId, classForValidation) {
-        PeopleGroupStore.customers
+        SoldPlanStore.all
             .filter { it.id !in assignedIds }
-            .filter { group -> isCustomerGroupAvailableForClass(group.id, classId) }
+            .filter { group -> isSoldPlanAvailableForClass(group.id, classId) }
             .filter { group ->
                 if (!peopleGroupHasRollingPlan(group.id)) return@filter true
-                classForValidation?.canAcceptRollingPlanEnrollments() == true
+                classForValidation?.canAcceptRollingSoldPlanEnrollments() == true
             }
             .filter { group ->
                 val main = group.resolveMainClient()
                 searchQuery.isBlank() ||
-                    main.name.matchesEntitySearch(searchQuery) ||
-                    main.email.matchesEntitySearch(searchQuery)
+                    main?.name.orEmpty().matchesEntitySearch(searchQuery) ||
+                    main?.email.orEmpty().matchesEntitySearch(searchQuery)
             }
             .map { group ->
                 val main = group.resolveMainClient()
                 SearchResultItem(
                     id = group.id,
-                    primaryLabel = formatPersonLabel(main.name, main.dateOfBirth),
+                    primaryLabel = formatPersonLabel((main?.name).orEmpty(), (main?.dateOfBirth).orEmpty()),
                     secondaryLabel = soldPlanSearchSecondaryLabel(group),
                 )
             }
     }
 
     FormPanelSection(
-        title = "Customer groups",
+        title = "Sold plans",
         description = "Customer plans enrolled on this class. Each group can only be on one class.",
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
@@ -822,20 +876,20 @@ private fun ClassCustomerGroupsSection(
                         weeklyLinkBlockedMessage = message
                         return@EntitySearchPicker
                     }
-                    val enrollment = PlanEnrollmentStore.forPeopleGroup(groupId)
+                    val enrollment = SoldPlanEnrollmentStore.forSoldPlan(groupId)
                     val requiredDays = enrollment?.let { requiredClassSessionsForPlan(it.planSnapshot) }
                     if (requiredDays == null) {
-                        enrollmentMessage = "Sold plan not found for this customer group."
+                        enrollmentMessage = "Sold plan not found for this sold plan."
                         return@EntitySearchPicker
                     }
-                    val preCheck = tryAddCustomerGroup(
-                        currentGroupIds = customerGroupIds,
+                    val preCheck = tryAddSoldPlan(
+                        currentGroupIds = soldPlanIds,
                         groupId = groupId,
                         locationId = locationId,
                         classId = classId,
                         scheduledClass = cls,
                     )
-                    if (preCheck != AddCustomerGroupResult.Success) {
+                    if (preCheck != AddSoldPlanResult.Success) {
                         enrollmentMessage = preCheck.toUserMessage()
                         return@EntitySearchPicker
                     }
@@ -847,16 +901,16 @@ private fun ClassCustomerGroupsSection(
                     )
                     return@EntitySearchPicker
                 }
-                val result = tryAddCustomerGroup(
-                    currentGroupIds = customerGroupIds,
+                val result = tryAddSoldPlan(
+                    currentGroupIds = soldPlanIds,
                     groupId = groupId,
                     locationId = locationId,
                     classId = classId,
                     scheduledClass = classForValidation,
                 )
-                if (result == AddCustomerGroupResult.Success) {
-                    onCustomerGroupIdsChange(customerGroupIds + groupId)
-                    classForValidation?.let { cls -> assignPlanClassSchedule(groupId, cls) }
+                if (result == AddSoldPlanResult.Success) {
+                    onCustomerGroupIdsChange(soldPlanIds + groupId)
+                    classForValidation?.let { cls -> assignSoldPlanClassSchedule(groupId, cls) }
                     RollingPlanBillingService.syncRollingPlanBilling(groupId)
                     enrollmentMessage = result.toUserMessage()
                 } else {
@@ -889,7 +943,7 @@ private fun ClassCustomerGroupsSection(
                 GlideFieldLabel("In this class (${assignedIds.size})")
                 Spacer(modifier = Modifier.height(spacing.field))
                 assignedIds.forEachIndexed { index, groupId ->
-                    val group = PeopleGroupStore.findById(groupId) ?: return@forEachIndexed
+                    val group = findSoldPlanById(groupId) ?: return@forEachIndexed
                     val main = group.resolveMainClient()
                     Row(
                         modifier = Modifier
@@ -904,7 +958,7 @@ private fun ClassCustomerGroupsSection(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = formatPersonLabel(main.name, main.dateOfBirth),
+                                text = formatPersonLabel((main?.name).orEmpty(), (main?.dateOfBirth).orEmpty()),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
@@ -918,7 +972,7 @@ private fun ClassCustomerGroupsSection(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             classId?.let { cid ->
-                                PlanClassScheduleStore.formatSessionDatesLabel(groupId, cid)?.let { scheduleLabel ->
+                                SoldPlanClassScheduleStore.formatSessionDatesLabel(groupId, cid)?.let { scheduleLabel ->
                                     Text(
                                         text = scheduleLabel,
                                         style = MaterialTheme.typography.labelSmall,
@@ -944,18 +998,18 @@ private fun ClassCustomerGroupsSection(
     }
 
     pendingRemoveGroupId?.let { groupId ->
-        val group = PeopleGroupStore.findById(groupId)
-        val label = group?.resolveMainClient()?.name?.takeIf { it.isNotBlank() } ?: "This customer group"
+        val group = findSoldPlanById(groupId)
+        val label = group?.resolveMainClient()?.name?.takeIf { it.isNotBlank() } ?: "This sold plan"
         DeleteConfirmDialog(
             title = "Remove from class?",
             message = "$label will be removed from this class.",
             onDismiss = { pendingRemoveGroupId = null },
             onContinue = {
                 if (classId != null) {
-                    PlanClassScheduleStore.remove(groupId, classId)
+                    SoldPlanClassScheduleStore.remove(groupId, classId)
                 }
-                onCustomerGroupIdsChange(customerGroupIds.filter { it != groupId })
-                enrollmentMessage = "Customer group removed from class."
+                onCustomerGroupIdsChange(soldPlanIds.filter { it != groupId })
+                enrollmentMessage = "Sold plan removed from class."
                 pendingRemoveGroupId = null
             },
         )
@@ -976,19 +1030,19 @@ private fun ClassCustomerGroupsSection(
             onDismiss = { pendingWeeklyLink = null },
             onConfirm = { selectedDays ->
                 val cls = classForValidation ?: return@WeeklyPlanScheduleDialog
-                val result = tryAddCustomerGroup(
-                    currentGroupIds = customerGroupIds,
+                val result = tryAddSoldPlan(
+                    currentGroupIds = soldPlanIds,
                     groupId = pending.groupId,
                     locationId = locationId,
                     classId = classId,
                     scheduledClass = cls,
                 )
-                if (result != AddCustomerGroupResult.Success) {
+                if (result != AddSoldPlanResult.Success) {
                     enrollmentMessage = result.toUserMessage()
                     pendingWeeklyLink = null
                     return@WeeklyPlanScheduleDialog
                 }
-                val assignment = assignWeeklyPlanClassSchedule(pending.groupId, cls, selectedDays)
+                val assignment = assignWeeklySoldPlanClassSchedule(pending.groupId, cls, selectedDays)
                 if (assignment is PlanScheduleAssignment.Partial ||
                     assignment is PlanScheduleAssignment.NoSessionsAvailable
                 ) {
@@ -997,23 +1051,23 @@ private fun ClassCustomerGroupsSection(
                     pendingWeeklyLink = null
                     return@WeeklyPlanScheduleDialog
                 }
-                onCustomerGroupIdsChange(customerGroupIds + pending.groupId)
+                onCustomerGroupIdsChange(soldPlanIds + pending.groupId)
                 RollingPlanBillingService.syncRollingPlanBilling(pending.groupId)
-                enrollmentMessage = AddCustomerGroupResult.Success.toUserMessage()
+                enrollmentMessage = AddSoldPlanResult.Success.toUserMessage()
                 pendingWeeklyLink = null
             },
         )
     }
 }
 
-private fun soldPlanSearchSecondaryLabel(group: PeopleGroup): String {
-    val planName = PlanEnrollmentStore.forPeopleGroup(group.id)?.planSnapshot?.planName
+private fun soldPlanSearchSecondaryLabel(group: SoldPlan): String {
+    val planName = SoldPlanEnrollmentStore.forSoldPlan(group.id)?.planSnapshot?.planName
         ?: group.planId?.let { PlanStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() } }
         ?: "No plan"
     val startDate = group.planStartDate.takeIf { it.isNotBlank() }
         ?.let { formatIsoDateForDisplay(it) }
         ?.takeIf { it.isNotBlank() }
-        ?: PlanEnrollmentStore.forPeopleGroup(group.id)?.planPeriodStartedAtMillis
+        ?: SoldPlanEnrollmentStore.forSoldPlan(group.id)?.planPeriodStartedAtMillis
             ?.let { formatIsoDateForDisplay(millisToIsoDate(it)) }
             ?.takeIf { it.isNotBlank() }
     return if (startDate != null) {
@@ -1028,8 +1082,8 @@ private fun soldPlanSearchSecondaryLabel(group: PeopleGroup): String {
 private fun ClassForm(
     state: ClassFormState,
     onStateChange: (ClassFormState) -> Unit,
-    terms: List<glide.model.AcademicTerm>,
-    locations: List<ClassLocation>,
+    terms: List<glide.model.Term>,
+    locations: List<Location>,
     spacing: GlideLayout.Spacing,
     isCreating: Boolean,
     termsReadOnly: Boolean = false,

@@ -8,12 +8,15 @@ import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import java.util.UUID
 
+import kotlinx.serialization.Serializable
+@Serializable
 enum class ClassScheduleKind(val label: String) {
     RECURRING("Recurring weekly"),
     WEEKLY("Weekly"),
     SINGLE_DAY("Single day"),
 }
 
+@Serializable
 enum class DayOfWeek(val label: String, val shortLabel: String, val sortOrder: Int) {
     MONDAY("Monday", "Mon", 1),
     TUESDAY("Tuesday", "Tue", 2),
@@ -24,11 +27,12 @@ enum class DayOfWeek(val label: String, val shortLabel: String, val sortOrder: I
     SUNDAY("Sunday", "Sun", 7),
 }
 
-data class ScheduledClass(
+@Serializable
+data class Class(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val termIds: List<String> = emptyList(),
-    val customerGroupIds: List<String> = emptyList(),
+    val soldPlanIds: List<String> = emptyList(),
     val locationId: String? = null,
     val dayOfWeek: DayOfWeek,
     /** ISO yyyy-MM-dd when this class runs once; null for recurring or weekly classes. */
@@ -46,13 +50,13 @@ data class ScheduledClass(
     val createdAtMillis: Long = System.currentTimeMillis(),
 )
 
-fun ScheduledClass.usesLocation(locationId: String): Boolean = this.locationId == locationId
+fun Class.usesLocation(locationId: String): Boolean = this.locationId == locationId
 
-fun ScheduledClass.isSingleDay(): Boolean = scheduleKind() == ClassScheduleKind.SINGLE_DAY
+fun Class.isSingleDay(): Boolean = scheduleKind() == ClassScheduleKind.SINGLE_DAY
 
-fun ScheduledClass.isWeekly(): Boolean = scheduleKind() == ClassScheduleKind.WEEKLY
+fun Class.isWeekly(): Boolean = scheduleKind() == ClassScheduleKind.WEEKLY
 
-fun ScheduledClass.scheduleKind(): ClassScheduleKind = when {
+fun Class.scheduleKind(): ClassScheduleKind = when {
     !singleDate.isNullOrBlank() -> ClassScheduleKind.SINGLE_DAY
     !weekOfDate.isNullOrBlank() && weeklyDays.isNotEmpty() -> ClassScheduleKind.WEEKLY
     else -> ClassScheduleKind.RECURRING
@@ -67,7 +71,7 @@ fun weekDateRangeFromIsoDate(isoDate: String): ClosedRange<LocalDate>? {
 fun formatWeeklyDaysLabel(days: List<DayOfWeek>): String =
     days.sortedBy { it.sortOrder }.joinToString(", ") { it.shortLabel }
 
-fun ScheduledClass.scheduleLine(): String {
+fun Class.scheduleLine(): String {
     val time = "$startTime–$endTime"
     return when (scheduleKind()) {
         ClassScheduleKind.SINGLE_DAY -> "${formatScheduleIsoDate(singleDate!!)} · $time"
@@ -105,12 +109,12 @@ fun formatInvoiceClassSessionDate(isoDate: String): String {
     }
 }
 
-fun ScheduledClass.timeRangeLabel(): String = "$startTime–$endTime"
+fun Class.timeRangeLabel(): String = "$startTime–$endTime"
 
-fun formatInvoiceClassSessionLabel(isoDate: String, scheduledClass: ScheduledClass): String {
+fun formatInvoiceClassSessionLabel(isoDate: String, cls: Class): String {
     val dateLabel = formatInvoiceClassSessionDate(isoDate)
     if (dateLabel.isBlank()) return ""
-    return "${dateLabel} · ${scheduledClass.timeRangeLabel()}"
+    return "${dateLabel} · ${cls.timeRangeLabel()}"
 }
 
 fun parseScheduleIsoDate(isoDate: String): LocalDate? {
@@ -142,7 +146,7 @@ fun java.time.DayOfWeek.toModelDayOfWeek(): DayOfWeek = when (this) {
     java.time.DayOfWeek.SUNDAY -> DayOfWeek.SUNDAY
 }
 
-fun ScheduledClass.occursOn(date: LocalDate): Boolean = when (scheduleKind()) {
+fun Class.occursOn(date: LocalDate): Boolean = when (scheduleKind()) {
     ClassScheduleKind.SINGLE_DAY -> parseScheduleIsoDate(singleDate!!) == date
     ClassScheduleKind.WEEKLY -> {
         val range = weekDateRangeFromIsoDate(weekOfDate!!)
@@ -152,7 +156,7 @@ fun ScheduledClass.occursOn(date: LocalDate): Boolean = when (scheduleKind()) {
 }
 
 /** True when [sessionDate] is in the past, or it is today and [endTime] has been reached. */
-fun ScheduledClass.sessionHasEndedForAttendance(
+fun Class.sessionHasEndedForAttendance(
     sessionDate: LocalDate,
     today: LocalDate = LocalDate.now(),
     now: LocalTime = LocalTime.now(),
@@ -164,7 +168,7 @@ fun ScheduledClass.sessionHasEndedForAttendance(
 }
 
 /** Attendance can only be recorded after the class has finished. */
-fun ScheduledClass.canTakeAttendance(
+fun Class.canTakeAttendance(
     sessionDate: LocalDate,
     today: LocalDate = LocalDate.now(),
     now: LocalTime = LocalTime.now(),
@@ -173,7 +177,7 @@ fun ScheduledClass.canTakeAttendance(
 private fun formatTime24h(time: LocalTime): String =
     "${time.hour.toString().padStart(2, '0')}:${time.minute.toString().padStart(2, '0')}"
 
-fun compareScheduledClasses(): Comparator<ScheduledClass> = compareBy(
+fun compareClasses(): Comparator<Class> = compareBy(
     { when (it.scheduleKind()) {
         ClassScheduleKind.RECURRING -> 0
         ClassScheduleKind.WEEKLY -> 1
@@ -185,11 +189,11 @@ fun compareScheduledClasses(): Comparator<ScheduledClass> = compareBy(
     { it.name.lowercase(Locale.UK) },
 )
 
-fun ScheduledClass.timeRangeLine(): String = "$startTime–$endTime"
+fun Class.timeRangeLine(): String = "$startTime–$endTime"
 
-fun ScheduledClass.spansTerm(termId: String): Boolean = termId in termIds
+fun Class.spansTerm(termId: String): Boolean = termId in termIds
 
-fun ScheduledClass.hasCustomerGroup(groupId: String): Boolean = groupId in customerGroupIds
+fun Class.hasSoldPlan(soldPlanId: String): Boolean = soldPlanId in soldPlanIds
 
 fun isValidTime24h(value: String): Boolean {
     val parts = value.split(":")

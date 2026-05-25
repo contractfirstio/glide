@@ -1,8 +1,8 @@
 package glide.model
 
-const val DEFAULT_CURRENCY_CODE = "GBP"
+const val DEFAULT_CURRENCY_CODE = "HKD"
 
-/** Whole currency units (e.g. pounds) to minor units (pence). */
+/** Whole currency units (e.g. dollars) to minor units (e.g. cents). */
 fun majorToMinor(major: Double): Long = (major * 100.0).toLong()
 
 fun parseMajorAmount(input: String): Double? {
@@ -22,6 +22,7 @@ fun formatMoney(amountMinor: Long, currencyCode: String = DEFAULT_CURRENCY_CODE)
     val minor = kotlin.math.abs(amountMinor % 100)
     val amount = "$major.${minor.toString().padStart(2, '0')}"
     return when (currencyCode) {
+        "HKD" -> "HK$$amount"
         "GBP" -> "£$amount"
         "USD" -> "$$amount"
         "EUR" -> "€$amount"

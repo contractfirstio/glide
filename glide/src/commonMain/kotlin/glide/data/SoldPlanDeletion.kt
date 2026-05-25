@@ -1,20 +1,18 @@
 package glide.data
 
 import glide.model.BillStatus
-import glide.model.PeopleGroupType
 
-fun canDeleteSoldPlan(peopleGroupId: String): Boolean =
-    soldPlanDeletionBlockReason(peopleGroupId) == null
+fun canDeleteSoldPlan(soldPlanId: String): Boolean =
+    soldPlanDeletionBlockReason(soldPlanId) == null
 
-fun soldPlanDeletionBlockReason(peopleGroupId: String): String? {
-    val group = PeopleGroupStore.findById(peopleGroupId) ?: return "Sold plan not found."
-    if (group.type != PeopleGroupType.CUSTOMER) return null
+fun soldPlanDeletionBlockReason(soldPlanId: String): String? {
+    val group = findSoldPlanById(soldPlanId) ?: return "Sold plan not found."
 
     val blockers = buildList {
-        if (isSoldPlanAssignedToClass(peopleGroupId)) {
+        if (isSoldPlanAssignedToClass(soldPlanId)) {
             add("assigned to a class")
         }
-        if (hasIssuedOrPaidBill(peopleGroupId)) {
+        if (hasIssuedOrPaidBill(soldPlanId)) {
             add("has an issued or paid bill")
         }
     }
@@ -25,29 +23,29 @@ fun soldPlanDeletionBlockReason(peopleGroupId: String): String? {
     }
 }
 
-fun hasIssuedOrPaidBill(peopleGroupId: String): Boolean =
-    BillStore.forPeopleGroup(peopleGroupId).any {
+fun hasIssuedOrPaidBill(soldPlanId: String): Boolean =
+    BillStore.forSoldPlan(soldPlanId).any {
         it.status == BillStatus.ISSUED || it.status == BillStatus.PAID
     }
 
-internal fun purgeSoldPlanData(peopleGroupId: String) {
-    ScheduledClassStore.clearCustomerGroupReference(peopleGroupId)
-    PlanClassScheduleStore.clearForGroup(peopleGroupId)
+internal fun purgeSoldPlanData(soldPlanId: String) {
+    ClassStore.clearSoldPlanReference(soldPlanId)
+    SoldPlanClassScheduleStore.clearForSoldPlan(soldPlanId)
 
-    val enrollmentIds = PlanEnrollmentStore.all
-        .filter { it.peopleGroupId == peopleGroupId }
+    val enrollmentIds = SoldPlanEnrollmentStore.all
+        .filter { it.soldPlanId == soldPlanId }
         .map { it.id }
     enrollmentIds.forEach { enrollmentId ->
-        BillingCreditStore.removeAllForEnrollment(enrollmentId)
+        AttendanceCreditStore.removeAllForEnrollment(enrollmentId)
     }
-    PlanEnrollmentStore.removeAllForPeopleGroup(peopleGroupId)
-    BillStore.removeAllForPeopleGroup(peopleGroupId)
-    PaymentStore.removeAllForPeopleGroup(peopleGroupId)
+    SoldPlanEnrollmentStore.removeAllForSoldPlan(soldPlanId)
+    BillStore.removeAllForSoldPlan(soldPlanId)
+    PaymentStore.removeAllForSoldPlan(soldPlanId)
 
-    if (BillingPanelState.peopleGroupId == peopleGroupId) {
-        BillingPanelState.onCustomerGroupCleared()
+    if (BillingPanelState.soldPlanId == soldPlanId) {
+        BillingPanelState.onSoldPlanCleared()
     }
-    if (SchedulePanelState.selectedSoldPlanId == peopleGroupId) {
+    if (SchedulePanelState.selectedSoldPlanId == soldPlanId) {
         SchedulePanelState.onSoldPlanCleared()
     }
 }

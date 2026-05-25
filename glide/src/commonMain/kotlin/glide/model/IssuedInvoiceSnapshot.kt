@@ -1,16 +1,20 @@
 package glide.model
 
+import kotlinx.serialization.Serializable
 /** Frozen invoice fields captured when a bill is issued — survives later edits to clients, classes, and settings. */
+@Serializable
 data class IssuedInvoiceDebitLine(
     val description: String,
     val amountMinor: Long,
 )
 
+@Serializable
 data class IssuedInvoiceCreditLine(
     val description: String,
     val amountMinor: Long,
 )
 
+@Serializable
 data class IssuedInvoiceClassSchedule(
     val className: String,
     val classDetails: String,
@@ -20,6 +24,7 @@ data class IssuedInvoiceClassSchedule(
     val scheduledSessionLabels: List<String>,
 )
 
+@Serializable
 data class IssuedInvoiceSnapshot(
     val fromName: String,
     val fromEmail: String,

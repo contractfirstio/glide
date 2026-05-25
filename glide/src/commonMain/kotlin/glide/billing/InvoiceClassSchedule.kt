@@ -2,17 +2,18 @@ package glide.billing
 
 import glide.data.BillStore
 import glide.data.LocationStore
-import glide.data.PlanClassScheduleStore
-import glide.data.PlanEnrollmentStore
-import glide.data.PeopleGroupStore
-import glide.data.ScheduledClassStore
+import glide.data.SoldPlanClassScheduleStore
+import glide.data.SoldPlanEnrollmentStore
+import glide.data.SoldPlanStore
+import glide.data.ClassStore
 import glide.data.computeAllClassSessionDates
-import glide.data.peopleGroupPlanPeriodStartDate
+import glide.data.soldPlanPlanPeriodStartDate
 import glide.data.requiredClassSessionsForPlan
 import glide.data.rosterNameLabels
+import glide.data.findSoldPlanById
 import glide.model.Bill
 import glide.model.BillStatus
-import glide.model.ScheduledClass
+import glide.model.Class
 import glide.model.formatInvoiceClassSessionLabel
 import glide.model.formatScheduleIsoDate
 import glide.model.parseIsoLocalDate
@@ -29,9 +30,9 @@ data class InvoiceClassSchedule(
 )
 
 fun Bill.toInvoiceClassSchedule(): InvoiceClassSchedule? {
-    val group = PeopleGroupStore.findById(peopleGroupId) ?: return null
-    val scheduledClass = ScheduledClassStore.findClassContainingCustomerGroup(peopleGroupId) ?: return null
-    if (PlanEnrollmentStore.findById(enrollmentId) == null) return null
+    val group = findSoldPlanById(soldPlanId) ?: return null
+    val scheduledClass = ClassStore.findClassContainingSoldPlan(soldPlanId) ?: return null
+    if (SoldPlanEnrollmentStore.findById(enrollmentId) == null) return null
 
     val location = scheduledClass.locationId?.let { LocationStore.findById(it) }
     val locationName = location?.name?.takeIf { name -> name.isNotBlank() }
@@ -41,8 +42,8 @@ fun Bill.toInvoiceClassSchedule(): InvoiceClassSchedule? {
     }
     val locationAddressLines = location?.formattedAddressLines().orEmpty()
 
-    val periodStart = peopleGroupPlanPeriodStartDate(peopleGroupId)
-    val sessionDates = planBillClassSessionDates(peopleGroupId, scheduledClass, periodStart)
+    val periodStart = soldPlanPlanPeriodStartDate(soldPlanId)
+    val sessionDates = planBillClassSessionDates(soldPlanId, scheduledClass, periodStart)
     val scheduledSessionLabels = sessionDates
         .map { formatInvoiceClassSessionLabel(it, scheduledClass) }
         .filter { it.isNotBlank() }
@@ -58,15 +59,15 @@ fun Bill.toInvoiceClassSchedule(): InvoiceClassSchedule? {
 }
 
 private fun Bill.planBillClassSessionDates(
-    peopleGroupId: String,
-    scheduledClass: ScheduledClass,
+    soldPlanId: String,
+    scheduledClass: Class,
     periodStart: LocalDate,
 ): List<String> {
-    val enrollment = PlanEnrollmentStore.findById(enrollmentId) ?: return emptyList()
+    val enrollment = SoldPlanEnrollmentStore.findById(enrollmentId) ?: return emptyList()
     val sessionCount = requiredClassSessionsForPlan(enrollment.planSnapshot)
     val billIndex = planBillIndex()
 
-    val storedDates = PlanClassScheduleStore.sessionDatesFor(peopleGroupId, scheduledClass.id)
+    val storedDates = SoldPlanClassScheduleStore.sessionDatesFor(soldPlanId, scheduledClass.id)
     if (billIndex == 0 && storedDates != null) {
         return storedDates
             .filter { iso -> parseIsoLocalDate(iso)?.let { !it.isBefore(periodStart) } == true }

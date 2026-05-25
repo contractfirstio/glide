@@ -2,11 +2,14 @@
 kotlin = "2.0.21"
 compose = "1.8.1"
 pdfbox = "3.0.3"
+serialization = "1.7.3"
 
 [libraries]
 pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 
 [plugins]
 jetbrainsCompose = { id = "org.jetbrains.compose", version.ref = "compose" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

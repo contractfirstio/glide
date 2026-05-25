@@ -34,17 +34,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.LocationStore
-import glide.data.ScheduledClassStore
+import glide.data.ClassStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
 import glide.data.validateTermDisablingRollingPlans
-import glide.model.AcademicTerm
+import glide.model.Term
 import glide.model.findOverlappingTerm
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.ListFormPanelLayout
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
+import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.leads.parseIsoDateToMillis
@@ -74,7 +79,7 @@ private data class TermFormState(
     fun toTerm(
         existingId: String? = null,
         createdAtMillis: Long = System.currentTimeMillis(),
-    ): AcademicTerm = AcademicTerm(
+    ): Term = Term(
         id = existingId ?: UUID.randomUUID().toString(),
         name = name.trim(),
         startDate = startDate,
@@ -85,7 +90,7 @@ private data class TermFormState(
     )
 }
 
-private fun overlapErrorMessage(overlapping: AcademicTerm): String {
+private fun overlapErrorMessage(overlapping: Term): String {
     val range = buildString {
         if (overlapping.startDate.isNotBlank()) append(formatIsoDateForDisplay(overlapping.startDate))
         if (overlapping.startDate.isNotBlank() && overlapping.endDate.isNotBlank()) append(" – ")
@@ -101,6 +106,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var listSearchQuery by remember { mutableStateOf("") }
 
     val allTerms = TermStore.sortedForPanel()
     val termFilterId = SchedulePanelState.selectedTermFilterId
@@ -109,11 +115,23 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         termFilterId == null && locationFilterId == null
     }
     val terms = if (locationFilterId != null) {
-        val termIds = ScheduledClassStore.termIdsForLocation(locationFilterId)
+        val termIds = ClassStore.termIdsForLocation(locationFilterId)
         allTerms.filter { it.id in termIds }
     } else {
         allTerms
     }
+    val filteredTerms = remember(terms, listSearchQuery) {
+        terms.filter { term ->
+            matchesPanelListSearch(
+                listSearchQuery,
+                term.name,
+                term.notes,
+                formatIsoDateForDisplay(term.startDate),
+                formatIsoDateForDisplay(term.endDate),
+            )
+        }
+    }
+    val searchActive = listSearchQuery.isNotBlank()
     val highlightedTermId = termFilterId ?: selectedId
     val locationFilterLabel = locationFilterId?.let {
         LocationStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() }
@@ -136,7 +154,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         SchedulePanelState.onTermCleared()
     }
 
-    fun syncTermIntoForm(term: AcademicTerm) {
+    fun syncTermIntoForm(term: Term) {
         selectedId = term.id
         isCreating = false
         form.load(
@@ -151,7 +169,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         formError = null
     }
 
-    fun loadIntoForm(term: AcademicTerm) {
+    fun loadIntoForm(term: Term) {
         selectedId = term.id
         isCreating = false
         SchedulePanelState.onTermSelected(term.id)
@@ -175,7 +193,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
 
     LaunchedEffect(classSyncId, allTerms) {
         val classId = classSyncId ?: return@LaunchedEffect
-        val scheduledClass = ScheduledClassStore.findById(classId) ?: return@LaunchedEffect
+        val scheduledClass = ClassStore.findById(classId) ?: return@LaunchedEffect
         val resolvedTermId = termIdForClassSelection(scheduledClass, allTerms) ?: return@LaunchedEffect
         allTerms.find { it.id == resolvedTermId }?.let { syncTermIntoForm(it) }
     }
@@ -224,7 +242,13 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${terms.size} term${if (terms.size == 1) "" else "s"}",
+                            text = panelListCountLabel(
+                                singular = "term",
+                                plural = "terms",
+                                filteredCount = filteredTerms.size,
+                                totalCount = terms.size,
+                                searchActive = searchActive,
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -238,6 +262,12 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             }
                         }
                     }
+                    PanelListSearchSpacer()
+                    PanelListSearchField(
+                        query = listSearchQuery,
+                        onQueryChange = { listSearchQuery = it },
+                        placeholder = "Term name…",
+                    )
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (terms.isEmpty()) {
@@ -266,6 +296,29 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    } else if (filteredTerms.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (listSectionHeight != null) {
+                                        Modifier.height(listSectionHeight)
+                                    } else {
+                                        Modifier.weight(1f)
+                                    },
+                                )
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    MaterialTheme.shapes.small,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No terms match your search.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     } else {
                         LazyColumn(
                             modifier = Modifier.then(
@@ -277,7 +330,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            items(terms, key = { it.id }) { term ->
+                            items(filteredTerms, key = { it.id }) { term ->
                                 TermListItem(
                                     term = term,
                                     selected = term.id == highlightedTermId,
@@ -403,20 +456,14 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                 }
             }
 
-            if (compact) {
-                listSection(Modifier.fillMaxWidth())
-                HorizontalDivider(modifier = Modifier.padding(vertical = spacing.section))
-                formSection(Modifier.fillMaxWidth().weight(1f))
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(spacing.section),
-                ) {
-                    listSection(Modifier.weight(0.42f).fillMaxHeight())
-                    VerticalDivider(modifier = Modifier.fillMaxHeight())
-                    formSection(Modifier.weight(0.58f).fillMaxHeight())
-                }
-            }
+            ListFormPanelLayout(
+                hasSelection = selectedId != null || isCreating,
+                spacing = spacing,
+                onCloseForm = { clearSelection() },
+                modifier = Modifier.fillMaxSize(),
+                listSection = listSection,
+                formSection = formSection,
+            )
         }
     }
 
@@ -448,7 +495,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
 
 @Composable
 private fun TermListItem(
-    term: AcademicTerm,
+    term: Term,
     selected: Boolean,
     compact: Boolean,
     onClick: () -> Unit,

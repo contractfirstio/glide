@@ -2,7 +2,6 @@ package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
 import glide.model.Client
-import glide.model.PeopleGroupType
 
 object ClientStore {
     private val _clients = mutableStateListOf<Client>()
@@ -10,30 +9,30 @@ object ClientStore {
     val all: List<Client> get() = _clients
 
     /**
-     * Clients for the Clients panel — all clients, the main client for [customerGroupId],
+     * Clients for the Clients panel — all clients, the main client for [soldPlanId],
      * main clients on groups with [planId], or on groups that include [studentId].
      */
     fun forClientsPanel(
-        customerGroupId: String? = null,
+        soldPlanId: String? = null,
         planId: String? = null,
         studentId: String? = null,
     ): List<Client> =
         when {
-            customerGroupId != null ->
-                PeopleGroupStore.findById(customerGroupId)
-                    ?.takeIf { it.type == PeopleGroupType.CUSTOMER }
+            soldPlanId != null ->
+                findSoldPlanById(soldPlanId)
+                    
                     ?.mainClientId
                     ?.let { findById(it) }
                     ?.let { listOf(it) }
                     ?: emptyList()
             planId != null ->
-                PeopleGroupStore.all
+                SoldPlanStore.all
                     .filter { it.planId == planId }
                     .mapNotNull { it.mainClientId }
                     .distinct()
                     .mapNotNull { findById(it) }
             studentId != null ->
-                PeopleGroupStore.all
+                SoldPlanStore.all
                     .filter { studentId in it.studentIds }
                     .mapNotNull { it.mainClientId }
                     .distinct()
@@ -41,35 +40,42 @@ object ClientStore {
             else -> all
         }
 
-    /** Only call from lead conversion — clients are not created elsewhere. */
+    /** Only call from lead conversion; callers persist after the full conversion completes. */
     fun createFromLeadConversion(client: Client) {
         _clients.add(client)
+    }
+
+    internal fun replaceAll(clients: List<Client>) {
+        _clients.clear()
+        _clients.addAll(clients)
     }
 
     fun update(client: Client) {
         val index = _clients.indexOfFirst { it.id == client.id }
         if (index >= 0) {
             _clients[index] = client
+            persistAppData()
         }
     }
 
     fun isOnSoldPlan(clientId: String): Boolean =
-        PeopleGroupStore.customers.any { it.mainClientId == clientId }
+        SoldPlanStore.all.any { it.mainClientId == clientId }
 
     fun canDelete(clientId: String): Boolean = !isOnSoldPlan(clientId)
 
     fun soldPlanCount(clientId: String): Int =
-        PeopleGroupStore.customers.count { it.mainClientId == clientId }
+        SoldPlanStore.all.count { it.mainClientId == clientId }
 
     fun delete(id: String) {
         if (isOnSoldPlan(id)) return
-        _clients.removeAll { it.id == id }
+        val removed = _clients.removeAll { it.id == id }
+        if (removed) persistAppData()
     }
 
     fun findById(id: String): Client? = _clients.find { it.id == id }
 
-    fun peopleGroupsFor(clientId: String): List<String> =
-        PeopleGroupStore.all
+    fun soldPlansFor(clientId: String): List<String> =
+        SoldPlanStore.all
             .filter { it.mainClientId == clientId }
             .map { it.id }
 }

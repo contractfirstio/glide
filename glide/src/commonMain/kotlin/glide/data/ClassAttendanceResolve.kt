@@ -1,28 +1,27 @@
 package glide.data
 
-import glide.model.ClassAttendee
-import glide.model.PeopleGroup
-import glide.model.ScheduledClass
+import glide.model.AttendanceAttendee
+import glide.model.SoldPlan
+import glide.model.Class
 import java.time.LocalDate
 
-fun attendeesForClass(scheduledClass: ScheduledClass, sessionDate: LocalDate): List<ClassAttendee> =
-    scheduledClass.customerGroupIds
-        .filter { groupId -> isPeopleGroupOnClassSession(groupId, scheduledClass, sessionDate) }
-        .mapNotNull { groupId -> PeopleGroupStore.findById(groupId) }
-        .flatMap { group -> group.attendeesForClassRoster() }
+fun attendeesForClass(cls: Class, sessionDate: LocalDate): List<AttendanceAttendee> =
+    cls.soldPlanIds
+        .filter { soldPlanId -> isSoldPlanOnClassSession(soldPlanId, cls, sessionDate) }
+        .mapNotNull { soldPlanId -> findSoldPlanById(soldPlanId) }
+        .flatMap { soldPlan -> soldPlan.attendeesForClassRoster() }
 
-private fun PeopleGroup.attendeesForClassRoster(): List<ClassAttendee> {
-    val household = clientName.ifBlank { "Household" }
-    val attendees = mutableListOf<ClassAttendee>()
-    if (mainClientAttendsClass && hasResolvableMainClient()) {
+private fun SoldPlan.attendeesForClassRoster(): List<AttendanceAttendee> {
+    val household = resolveMainClient()?.name?.takeIf { it.isNotBlank() } ?: "Household"
+    val attendees = mutableListOf<AttendanceAttendee>()
+    if (mainClientAttendsClass) {
         val main = resolveMainClient()
-        val name = main.name.trim().ifBlank { "Main client" }
-        val key = mainClientId?.let { "client:$it" } ?: "legacy-main:$id"
+        val name = main?.name?.trim()?.ifBlank { "Main client" } ?: "Main client"
         attendees.add(
-            ClassAttendee(
-                key = key,
+            AttendanceAttendee(
+                key = "client:$mainClientId",
                 displayName = name,
-                peopleGroupId = id,
+                soldPlanId = id,
                 householdLabel = household,
             ),
         )
@@ -30,10 +29,10 @@ private fun PeopleGroup.attendeesForClassRoster(): List<ClassAttendee> {
     resolveStudents().forEach { person ->
         val name = person.name.trim().ifBlank { "Student" }
         attendees.add(
-            ClassAttendee(
+            AttendanceAttendee(
                 key = "student:${person.id}",
                 displayName = name,
-                peopleGroupId = id,
+                soldPlanId = id,
                 householdLabel = household,
             ),
         )

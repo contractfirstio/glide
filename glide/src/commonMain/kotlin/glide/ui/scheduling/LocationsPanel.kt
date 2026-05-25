@@ -33,15 +33,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import glide.data.LocationStore
-import glide.data.ScheduledClassStore
+import glide.data.ClassStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
-import glide.model.ClassLocation
+import glide.model.Location
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.ListFormPanelLayout
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
+import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
@@ -75,7 +80,7 @@ private data class LocationFormState(
     fun toLocation(
         existingId: String? = null,
         createdAtMillis: Long = System.currentTimeMillis(),
-    ): ClassLocation = ClassLocation(
+    ): Location = Location(
         id = existingId ?: UUID.randomUUID().toString(),
         name = name.trim(),
         maxCapacity = parsedMaxCapacity(),
@@ -94,6 +99,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var listSearchQuery by remember { mutableStateOf("") }
 
     val allLocations = LocationStore.sortedForPanel()
     val termFilterId = SchedulePanelState.selectedTermFilterId
@@ -102,11 +108,24 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         termFilterId == null && locationFilterId == null
     }
     val locations = if (termFilterId != null) {
-        val locationIds = ScheduledClassStore.locationIdsForTerm(termFilterId)
+        val locationIds = ClassStore.locationIdsForTerm(termFilterId)
         allLocations.filter { it.id in locationIds }
     } else {
         allLocations
     }
+    val filteredLocations = remember(locations, listSearchQuery) {
+        locations.filter { location ->
+            matchesPanelListSearch(
+                listSearchQuery,
+                location.name,
+                location.addressLine1,
+                location.addressLine2,
+                location.city,
+                location.notes,
+            )
+        }
+    }
+    val searchActive = listSearchQuery.isNotBlank()
     val termFilterLabel = termFilterId?.let {
         TermStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() }
     }
@@ -128,7 +147,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         SchedulePanelState.onLocationCleared()
     }
 
-    fun syncLocationIntoForm(location: ClassLocation) {
+    fun syncLocationIntoForm(location: Location) {
         selectedId = location.id
         isCreating = false
         form.load(
@@ -137,7 +156,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         formError = null
     }
 
-    fun loadIntoForm(location: ClassLocation) {
+    fun loadIntoForm(location: Location) {
         selectedId = location.id
         isCreating = false
         SchedulePanelState.onLocationSelected(location.id)
@@ -155,7 +174,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
 
     LaunchedEffect(classSyncId, allLocations) {
         val classId = classSyncId ?: return@LaunchedEffect
-        val locationId = ScheduledClassStore.findById(classId)?.locationId ?: return@LaunchedEffect
+        val locationId = ClassStore.findById(classId)?.locationId ?: return@LaunchedEffect
         allLocations.find { it.id == locationId }?.let { syncLocationIntoForm(it) }
     }
 
@@ -198,7 +217,13 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${locations.size} location${if (locations.size == 1) "" else "s"}",
+                            text = panelListCountLabel(
+                                singular = "location",
+                                plural = "locations",
+                                filteredCount = filteredLocations.size,
+                                totalCount = locations.size,
+                                searchActive = searchActive,
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -212,6 +237,12 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                             }
                         }
                     }
+                    PanelListSearchSpacer()
+                    PanelListSearchField(
+                        query = listSearchQuery,
+                        onQueryChange = { listSearchQuery = it },
+                        placeholder = "Name, address, city…",
+                    )
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (locations.isEmpty()) {
@@ -240,6 +271,29 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    } else if (filteredLocations.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (listSectionHeight != null) {
+                                        Modifier.height(listSectionHeight)
+                                    } else {
+                                        Modifier.weight(1f)
+                                    },
+                                )
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    MaterialTheme.shapes.small,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No locations match your search.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     } else {
                         LazyColumn(
                             modifier = Modifier.then(
@@ -251,7 +305,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            items(locations, key = { it.id }) { location ->
+                            items(filteredLocations, key = { it.id }) { location ->
                                 LocationListItem(
                                     location = location,
                                     selected = location.id == selectedId,
@@ -354,20 +408,14 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                 }
             }
 
-            if (compact) {
-                listSection(Modifier.fillMaxWidth())
-                HorizontalDivider(modifier = Modifier.padding(vertical = spacing.section))
-                formSection(Modifier.fillMaxWidth().weight(1f))
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(spacing.section),
-                ) {
-                    listSection(Modifier.weight(0.42f).fillMaxHeight())
-                    VerticalDivider(modifier = Modifier.fillMaxHeight())
-                    formSection(Modifier.weight(0.58f).fillMaxHeight())
-                }
-            }
+            ListFormPanelLayout(
+                hasSelection = selectedId != null || isCreating,
+                spacing = spacing,
+                onCloseForm = { clearSelection() },
+                modifier = Modifier.fillMaxSize(),
+                listSection = listSection,
+                formSection = formSection,
+            )
         }
     }
 
@@ -399,7 +447,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
 
 @Composable
 private fun LocationListItem(
-    location: ClassLocation,
+    location: Location,
     selected: Boolean,
     compact: Boolean,
     onClick: () -> Unit,
@@ -456,7 +504,7 @@ private fun LocationListItem(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        val classCount = ScheduledClassStore.countForLocation(location.id)
+        val classCount = ClassStore.countForLocation(location.id)
         if (classCount > 0) {
             Text(
                 text = "$classCount class${if (classCount == 1) "" else "es"}",
@@ -553,7 +601,7 @@ private fun LocationForm(
     }
 }
 
-private fun ClassLocation.toFormState(): LocationFormState = LocationFormState(
+private fun Location.toFormState(): LocationFormState = LocationFormState(
     name = name,
     maxCapacityText = maxCapacity?.toString() ?: "",
     addressLine1 = addressLine1,

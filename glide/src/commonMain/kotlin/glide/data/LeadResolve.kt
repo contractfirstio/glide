@@ -1,7 +1,7 @@
 package glide.data
 
 import glide.model.Client
-import glide.model.PeopleGroup
+import glide.model.Lead
 import glide.model.Student
 
 data class ResolvedMainClient(
@@ -11,7 +11,7 @@ data class ResolvedMainClient(
     val phone: String,
 )
 
-fun PeopleGroup.resolveMainClient(): ResolvedMainClient {
+fun Lead.resolveMainClient(): ResolvedMainClient {
     mainClientId?.let { id ->
         ClientStore.findById(id)?.let { client ->
             return client.toResolved()
@@ -25,42 +25,25 @@ fun PeopleGroup.resolveMainClient(): ResolvedMainClient {
     )
 }
 
-fun PeopleGroup.resolveStudents(): List<Student> =
-    studentIds.mapNotNull { StudentStore.findById(it) }
-
-fun PeopleGroup.hasResolvableMainClient(): Boolean =
+fun Lead.hasResolvableMainClient(): Boolean =
     mainClientId != null || clientName.isNotBlank()
 
 /** Household size (main client plus students). */
-fun PeopleGroup.memberCount(): Int {
+fun Lead.memberCount(): Int {
     val main = if (hasResolvableMainClient()) 1 else 0
     return main + studentIds.size
 }
 
 /** People who take the class: students always; main client only when [mainClientAttendsClass]. */
-fun PeopleGroup.classAttendeeCount(): Int {
+fun Lead.classAttendeeCount(): Int {
     val main = if (mainClientAttendsClass && hasResolvableMainClient()) 1 else 0
     return main + studentIds.size
 }
 
-fun PeopleGroup.hasClassParticipant(): Boolean = classAttendeeCount() > 0
+fun Lead.hasClassParticipant(): Boolean = classAttendeeCount() > 0
 
-/** Names shown on the class calendar (attending members only). */
-fun PeopleGroup.rosterNameLabels(): List<String> {
-    val names = mutableListOf<String>()
-    if (mainClientAttendsClass && hasResolvableMainClient()) {
-        val main = resolveMainClient()
-        if (main.name.isNotBlank()) {
-            names.add(main.name.trim())
-        }
-    }
-    resolveStudents().forEach { person ->
-        if (person.name.isNotBlank()) {
-            names.add(person.name.trim())
-        }
-    }
-    return names
-}
+fun Lead.resolveStudents(): List<Student> =
+    studentIds.mapNotNull { StudentStore.findById(it) }
 
 private fun Client.toResolved() = ResolvedMainClient(
     name = name,

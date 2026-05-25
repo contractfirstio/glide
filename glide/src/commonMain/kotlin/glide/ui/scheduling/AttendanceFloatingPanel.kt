@@ -4,14 +4,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import glide.data.AttendancePanelState
-import glide.data.ScheduledClassStore
-import glide.model.ClassSessionKey
+import glide.data.ClassStore
+import glide.model.AttendanceSessionKey
 import glide.ui.components.FloatingPanelShell
 import glide.ui.layout.SchedulingPanelSlots
 
 @Composable
 fun AttendanceFloatingPanel(
-    session: ClassSessionKey,
+    session: AttendanceSessionKey,
     windowWidthPx: Int,
     windowHeightPx: Int,
 ) {
@@ -19,7 +19,7 @@ fun AttendanceFloatingPanel(
     val stateSession = AttendancePanelState.sessionKey ?: return
     if (stateSession != session) return
 
-    val scheduledClass = ScheduledClassStore.findById(session.scheduledClassId)
+    val scheduledClass = ClassStore.findById(session.classId)
     val title = attendancePanelTitle(scheduledClass, session.sessionDate)
 
     FloatingPanelShell(

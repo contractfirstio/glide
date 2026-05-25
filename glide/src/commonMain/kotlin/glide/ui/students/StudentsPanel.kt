@@ -35,18 +35,24 @@ import androidx.compose.ui.unit.dp
 import glide.data.BillingPanelState
 import glide.data.ClientStore
 import glide.data.ClientsPanelState
-import glide.data.PeopleGroupStore
+import glide.data.SoldPlanStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
 import glide.data.StudentsPanelState
 import glide.data.StudentStore
 import glide.data.resolveMainClient
+import glide.data.findSoldPlanById
 import glide.model.Student
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.ListFormPanelLayout
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
+import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
@@ -84,19 +90,30 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
     val form = rememberFormDirtyTracker(StudentFormState())
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var listSearchQuery by remember { mutableStateOf("") }
 
-    val customerGroupId = BillingPanelState.peopleGroupId
+    val soldPlanId = BillingPanelState.soldPlanId
     val clientFilterId = ClientsPanelState.selectedClientId
     val planFilterId = PlansPanelState.selectedPlanId
     val studentFilterId = StudentsPanelState.selectedStudentId
     val people = StudentStore.forStudentsPanel(
-        customerGroupId,
+        soldPlanId,
         clientFilterId,
         planFilterId,
         studentFilterId,
     )
-    val customerGroupLabel = customerGroupId?.let { id ->
-        PeopleGroupStore.findById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
+    val filteredPeople = remember(people, listSearchQuery) {
+        people.filter { person ->
+            matchesPanelListSearch(
+                listSearchQuery,
+                formatPersonLabel(person.name, person.dateOfBirth),
+                person.notes,
+            )
+        }
+    }
+    val searchActive = listSearchQuery.isNotBlank()
+    val soldPlanLabel = soldPlanId?.let { id ->
+        findSoldPlanById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
     }
     val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
@@ -145,8 +162,8 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
             if (!compact) {
                 Text(
                     text = when {
-                        customerGroupId != null -> {
-                            val label = customerGroupLabel ?: "this customer group"
+                        soldPlanId != null -> {
+                            val label = soldPlanLabel ?: "this sold plan"
                             "Showing students for $label. Use Show all to reset."
                         }
                         clientFilterId != null -> {
@@ -160,7 +177,7 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                         studentFilterId != null -> {
                             val label = StudentStore.findById(studentFilterId)?.name?.takeIf { it.isNotBlank() }
                                 ?: "this student"
-                            "Filtering clients and customer groups for $label. Use Clear filter to reset."
+                            "Filtering clients and sold plans for $label. Use Clear filter to reset."
                         }
                         else ->
                             "Edit students on customer plans. They appear here after a lead becomes a customer."
@@ -179,7 +196,13 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${people.size} ${if (people.size == 1) "student" else "students"}",
+                            text = panelListCountLabel(
+                                singular = "student",
+                                plural = "students",
+                                filteredCount = filteredPeople.size,
+                                totalCount = people.size,
+                                searchActive = searchActive,
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -198,13 +221,19 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (customerGroupId != null) {
-                                GlideTextButton(onClick = { BillingPanelState.onCustomerGroupCleared() }) {
+                            if (soldPlanId != null) {
+                                GlideTextButton(onClick = { BillingPanelState.onSoldPlanCleared() }) {
                                     Text("Show all")
                                 }
                             }
                         }
                     }
+                    PanelListSearchSpacer()
+                    PanelListSearchField(
+                        query = listSearchQuery,
+                        onQueryChange = { listSearchQuery = it },
+                        placeholder = "Name…",
+                    )
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (people.isEmpty()) {
@@ -226,8 +255,8 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                         ) {
                             Text(
                                 text = when {
-                                    customerGroupId != null ->
-                                        "No students in this customer group."
+                                    soldPlanId != null ->
+                                        "No students in this sold plan."
                                     clientFilterId != null ->
                                         "No students linked to this client."
                                     planFilterId != null ->
@@ -237,6 +266,29 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                                     else ->
                                         "No one on a customer plan yet. Add students on a lead, then make the lead a customer."
                                 },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else if (filteredPeople.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (listSectionHeight != null) {
+                                        Modifier.height(listSectionHeight)
+                                    } else {
+                                        Modifier.weight(1f)
+                                    },
+                                )
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    MaterialTheme.shapes.small,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No students match your search.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -252,7 +304,7 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            items(people, key = { it.id }) { person ->
+                            items(filteredPeople, key = { it.id }) { person ->
                                 StudentListItem(
                                     person = person,
                                     selected = person.id == selectedId,
@@ -364,20 +416,14 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                 }
             }
 
-            if (compact) {
-                listSection(Modifier.fillMaxWidth())
-                HorizontalDivider(modifier = Modifier.padding(vertical = spacing.section))
-                formSection(Modifier.fillMaxWidth().weight(1f))
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(spacing.section),
-                ) {
-                    listSection(Modifier.weight(0.42f).fillMaxHeight())
-                    VerticalDivider(modifier = Modifier.fillMaxHeight())
-                    formSection(Modifier.weight(0.58f).fillMaxHeight())
-                }
-            }
+            ListFormPanelLayout(
+                hasSelection = selectedId != null,
+                spacing = spacing,
+                onCloseForm = { clearSelection() },
+                modifier = Modifier.fillMaxSize(),
+                listSection = listSection,
+                formSection = formSection,
+            )
         }
     }
 

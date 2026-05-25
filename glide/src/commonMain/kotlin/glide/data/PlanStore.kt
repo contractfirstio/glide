@@ -9,6 +9,12 @@ object PlanStore {
 
     fun create(plan: Plan) {
         _plans.add(plan)
+        persistAppData()
+    }
+
+    internal fun replaceAll(plans: List<Plan>) {
+        _plans.clear()
+        _plans.addAll(plans)
     }
 
     fun update(plan: Plan): Boolean {
@@ -16,11 +22,12 @@ object PlanStore {
         val index = _plans.indexOfFirst { it.id == plan.id }
         if (index < 0) return false
         _plans[index] = plan
+        persistAppData()
         return true
     }
 
     fun soldPlanCount(planId: String): Int =
-        PeopleGroupStore.customers.count { it.planId == planId }
+        SoldPlanStore.all.count { it.planId == planId }
 
     fun canEdit(planId: String): Boolean = soldPlanCount(planId) == 0
 
@@ -43,33 +50,34 @@ object PlanStore {
     fun delete(id: String): Boolean {
         if (!canDelete(id)) return false
         _plans.removeAll { it.id == id }
+        persistAppData()
         return true
     }
 
     fun findById(id: String): Plan? = _plans.find { it.id == id }
 
     /**
-     * Plans for the Plans panel — all plans, the plan on [customerGroupId], or plans used on
+     * Plans for the Plans panel — all plans, the plan on [soldPlanId], or plans used on
      * groups linked to [clientId] or [studentId].
      */
     fun forPlansPanel(
-        customerGroupId: String? = null,
+        soldPlanId: String? = null,
         clientId: String? = null,
         studentId: String? = null,
     ): List<Plan> {
         val planIds = when {
-            customerGroupId != null ->
-                PeopleGroupStore.findById(customerGroupId)
+            soldPlanId != null ->
+                findSoldPlanById(soldPlanId)
                     ?.planId
                     ?.let { listOf(it) }
                     ?: emptyList()
             clientId != null ->
-                PeopleGroupStore.all
+                SoldPlanStore.all
                     .filter { it.mainClientId == clientId }
                     .mapNotNull { it.planId }
                     .distinct()
             studentId != null ->
-                PeopleGroupStore.all
+                SoldPlanStore.all
                     .filter { studentId in it.studentIds }
                     .mapNotNull { it.planId }
                     .distinct()

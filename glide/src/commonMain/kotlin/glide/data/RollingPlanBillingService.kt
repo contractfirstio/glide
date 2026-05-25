@@ -2,26 +2,26 @@ package glide.data
 
 import glide.model.Bill
 import glide.model.BillStatus
-import glide.model.PlanEnrollment
-import glide.model.PlanEnrollmentStatus
+import glide.model.SoldPlanEnrollment
+import glide.model.SoldPlanEnrollmentStatus
 
 object RollingPlanBillingService {
     /**
      * Schedules a renewal bill after attendance for the final class in the current plan period
      * has been submitted.
      */
-    fun ensureRenewalBillIfPlanEnding(peopleGroupId: String): Boolean {
-        val enrollment = PlanEnrollmentStore.forPeopleGroup(peopleGroupId) ?: return false
+    fun ensureRenewalBillIfPlanEnding(soldPlanId: String): Boolean {
+        val enrollment = SoldPlanEnrollmentStore.forSoldPlan(soldPlanId) ?: return false
         if (!enrollment.planSnapshot.rolling) return false
         return ensureRenewalBillIfPlanEnding(enrollment)
     }
 
-    fun ensureRenewalBillIfPlanEnding(enrollment: PlanEnrollment): Boolean {
-        if (enrollment.status != PlanEnrollmentStatus.ACTIVE) return false
+    fun ensureRenewalBillIfPlanEnding(enrollment: SoldPlanEnrollment): Boolean {
+        if (enrollment.status != SoldPlanEnrollmentStatus.ACTIVE) return false
         if (!enrollment.planSnapshot.rolling) return false
         val planSize = enrollment.planSnapshot.lessonCount.coerceAtLeast(1)
         val submitted = countSubmittedPlanSessionsInPeriod(
-            peopleGroupId = enrollment.peopleGroupId,
+            soldPlanId = enrollment.soldPlanId,
             periodStartedAtMillis = enrollment.planPeriodStartedAtMillis,
         )
         if (submitted < planSize) return false
@@ -30,24 +30,24 @@ object RollingPlanBillingService {
         return true
     }
 
-    fun syncRollingPlanBilling(peopleGroupId: String) {
-        val enrollment = PlanEnrollmentStore.forPeopleGroup(peopleGroupId) ?: return
-        if (enrollment.status == PlanEnrollmentStatus.CANCELLING) {
+    fun syncRollingPlanBilling(soldPlanId: String) {
+        val enrollment = SoldPlanEnrollmentStore.forSoldPlan(soldPlanId) ?: return
+        if (enrollment.status == SoldPlanEnrollmentStatus.CANCELLING) {
             RollingPlanCancellationService.tryCompleteCancellingEnrollment(enrollment.id)
             return
         }
-        if (enrollment.status != PlanEnrollmentStatus.ACTIVE) return
-        ensureRenewalBillIfPlanEnding(peopleGroupId)
+        if (enrollment.status != SoldPlanEnrollmentStatus.ACTIVE) return
+        ensureRenewalBillIfPlanEnding(soldPlanId)
     }
 
     fun syncAllActiveRollingPlanBilling() {
-        PlanEnrollmentStore.all
-            .filter { it.status == PlanEnrollmentStatus.ACTIVE && it.planSnapshot.rolling }
+        SoldPlanEnrollmentStore.all
+            .filter { it.status == SoldPlanEnrollmentStatus.ACTIVE && it.planSnapshot.rolling }
             .forEach { ensureRenewalBillIfPlanEnding(it) }
     }
 
     fun onPlanBillPaid(enrollmentId: String, paidAtMillis: Long) {
-        PlanEnrollmentStore.resetPlanPeriod(enrollmentId, paidAtMillis)
+        SoldPlanEnrollmentStore.resetPlanPeriod(enrollmentId, paidAtMillis)
     }
 }
 

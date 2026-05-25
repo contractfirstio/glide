@@ -43,12 +43,13 @@ import androidx.compose.ui.unit.dp
 import glide.data.BillingPanelState
 import glide.data.ClientStore
 import glide.data.ClientsPanelState
-import glide.data.PeopleGroupStore
+import glide.data.SoldPlanStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
 import glide.data.StudentsPanelState
 import glide.data.StudentStore
 import glide.data.resolveMainClient
+import glide.data.findSoldPlanById
 import glide.model.Plan
 import glide.model.PlanKind
 import glide.model.formatMoney
@@ -60,7 +61,12 @@ import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
+import glide.ui.shared.ListFormPanelLayout
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
+import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
@@ -127,23 +133,36 @@ fun PlansPanel(modifier: Modifier = Modifier) {
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var listSearchQuery by remember { mutableStateOf("") }
 
-    val customerGroupId = BillingPanelState.peopleGroupId
+    val soldPlanId = BillingPanelState.soldPlanId
     val clientFilterId = ClientsPanelState.selectedClientId
     val studentFilterId = StudentsPanelState.selectedStudentId
     val outboundPlanFilterId = PlansPanelState.selectedPlanId
-    val plans = PlanStore.forPlansPanel(customerGroupId, clientFilterId, studentFilterId)
+    val plans = PlanStore.forPlansPanel(soldPlanId, clientFilterId, studentFilterId)
+    val filteredPlans = remember(plans, listSearchQuery) {
+        plans.filter { plan ->
+            matchesPanelListSearch(
+                listSearchQuery,
+                plan.name,
+                plan.kind.label,
+                plan.summaryLine(),
+                plan.notes,
+            )
+        }
+    }
+    val searchActive = listSearchQuery.isNotBlank()
     val outboundPlanFilterLabel = outboundPlanFilterId?.let {
         PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
-    val customerGroupLabel = customerGroupId?.let { id ->
-        PeopleGroupStore.findById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
+    val soldPlanLabel = soldPlanId?.let { id ->
+        findSoldPlanById(id)?.resolveMainClient()?.name?.takeIf { it.isNotBlank() }
     }
     val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val studentFilterLabel = studentFilterId?.let {
         StudentStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
-    val hasInboundFilter = customerGroupId != null ||
+    val hasInboundFilter = soldPlanId != null ||
         clientFilterId != null ||
         studentFilterId != null
 
@@ -183,7 +202,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
         formError = null
     }
 
-    LaunchedEffect(customerGroupId, clientFilterId, studentFilterId) {
+    LaunchedEffect(soldPlanId, clientFilterId, studentFilterId) {
         if (hasInboundFilter && selectedId != null) {
             clearLocalSelection()
         }
@@ -213,8 +232,8 @@ fun PlansPanel(modifier: Modifier = Modifier) {
             if (!compact) {
                 Text(
                     text = when {
-                        customerGroupId != null -> {
-                            val label = customerGroupLabel ?: "this customer group"
+                        soldPlanId != null -> {
+                            val label = soldPlanLabel ?: "this sold plan"
                             "Showing plans for $label. Use Show all in Customers to reset."
                         }
                         clientFilterId != null -> {
@@ -227,7 +246,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                         }
                         outboundPlanFilterId != null -> {
                             val label = outboundPlanFilterLabel ?: "this plan"
-                            "Filtering customer groups, clients, and students for $label. Use Clear filter to reset."
+                            "Filtering sold plans, clients, and students for $label. Use Clear filter to reset."
                         }
                         else -> "Define plan types and plans offered to customers."
                     },
@@ -245,7 +264,13 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${plans.size} plan${if (plans.size == 1) "" else "s"}",
+                            text = panelListCountLabel(
+                                singular = "plan",
+                                plural = "plans",
+                                filteredCount = filteredPlans.size,
+                                totalCount = plans.size,
+                                searchActive = searchActive,
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(spacing.field)) {
@@ -259,8 +284,8 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                                     Text("Clear filter")
                                 }
                             }
-                            if (customerGroupId != null) {
-                                GlideTextButton(onClick = { BillingPanelState.onCustomerGroupCleared() }) {
+                            if (soldPlanId != null) {
+                                GlideTextButton(onClick = { BillingPanelState.onSoldPlanCleared() }) {
                                     Text("Show all")
                                 }
                             }
@@ -274,6 +299,12 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             }
                         }
                     }
+                    PanelListSearchSpacer()
+                    PanelListSearchField(
+                        query = listSearchQuery,
+                        onQueryChange = { listSearchQuery = it },
+                        placeholder = "Plan name, type…",
+                    )
                     Spacer(modifier = Modifier.height(spacing.field))
 
                     if (plans.isEmpty()) {
@@ -295,14 +326,37 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                         ) {
                             Text(
                                 text = when {
-                                    customerGroupId != null ->
-                                        "No plan on this customer group."
+                                    soldPlanId != null ->
+                                        "No plan on this sold plan."
                                     clientFilterId != null ->
                                         "No plans linked to this client."
                                     studentFilterId != null ->
                                         "No plans linked to this student."
                                     else -> "No plans yet."
                                 },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else if (filteredPlans.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (listSectionHeight != null) {
+                                        Modifier.height(listSectionHeight)
+                                    } else {
+                                        Modifier.weight(1f)
+                                    },
+                                )
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    MaterialTheme.shapes.small,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No plans match your search.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -318,7 +372,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            items(plans, key = { it.id }) { plan ->
+                            items(filteredPlans, key = { it.id }) { plan ->
                                 PlanListItem(
                                     plan = plan,
                                     selected = plan.id == selectedId,
@@ -442,20 +496,14 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                 }
             }
 
-            if (compact) {
-                listSection(Modifier.fillMaxWidth())
-                HorizontalDivider(modifier = Modifier.padding(vertical = spacing.section))
-                formSection(Modifier.fillMaxWidth().weight(1f))
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(spacing.section),
-                ) {
-                    listSection(Modifier.weight(0.42f).fillMaxHeight())
-                    VerticalDivider(modifier = Modifier.fillMaxHeight())
-                    formSection(Modifier.weight(0.58f).fillMaxHeight())
-                }
-            }
+            ListFormPanelLayout(
+                hasSelection = selectedId != null || isCreating,
+                spacing = spacing,
+                onCloseForm = { clearSelection() },
+                modifier = Modifier.fillMaxSize(),
+                listSection = listSection,
+                formSection = formSection,
+            )
         }
     }
 

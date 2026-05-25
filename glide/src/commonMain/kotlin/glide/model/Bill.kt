@@ -2,6 +2,8 @@ package glide.model
 
 import java.util.UUID
 
+import kotlinx.serialization.Serializable
+@Serializable
 enum class BillStatus(val label: String) {
     /** Billing line scheduled; counts toward outstanding. */
     SCHEDULED("Scheduled"),
@@ -11,10 +13,11 @@ enum class BillStatus(val label: String) {
     VOID("Void"),
 }
 
+@Serializable
 data class Bill(
     val id: String = UUID.randomUUID().toString(),
     val enrollmentId: String,
-    val peopleGroupId: String,
+    val soldPlanId: String,
     val description: String,
     /** Plan total before attendance credits; null on older bills (inferred from credits). */
     val grossAmountMinor: Long? = null,

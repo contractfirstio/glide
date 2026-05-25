@@ -30,17 +30,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import glide.data.AbsentCreditPreview
 import glide.data.AttendanceCreditService
-import glide.data.ClassAttendanceStore
+import glide.data.AttendanceStore
 import glide.data.RollingPlanBillingService
 import glide.data.LocationStore
-import glide.data.ScheduledClassStore
+import glide.data.ClassStore
 import glide.data.attendeesForClass
 import glide.model.parseIsoLocalDate
 import glide.model.AttendanceStatus
 import glide.model.formatMoney
-import glide.model.ClassAttendee
-import glide.model.ClassSessionKey
-import glide.model.ScheduledClass
+import glide.model.AttendanceAttendee
+import glide.model.AttendanceSessionKey
+import glide.model.Class
 import glide.model.canTakeAttendance
 import glide.model.scheduleLine
 import java.time.LocalDate
@@ -49,13 +49,16 @@ import glide.ui.shared.FormPanelLinkedBox
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.FormPanelSectionsDivider
+import glide.ui.shared.PanelListSearchField
+import glide.ui.shared.PanelListSearchSpacer
+import glide.ui.shared.matchesPanelListSearch
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideOutlinedButton
 import glide.ui.theme.GlideTextButton
 import glide.ui.theme.glideListItemTitleColor
 
-fun attendancePanelTitle(scheduledClass: ScheduledClass?, sessionDate: String): String {
+fun attendancePanelTitle(scheduledClass: Class?, sessionDate: String): String {
     val className = scheduledClass?.name ?: "Class"
     val dateLabel = if (sessionDate.isNotBlank()) {
         formatIsoDateForDisplay(sessionDate)
@@ -70,10 +73,10 @@ fun attendancePanelTitle(scheduledClass: ScheduledClass?, sessionDate: String): 
 
 @Composable
 fun AttendancePanel(
-    session: ClassSessionKey,
+    session: AttendanceSessionKey,
     modifier: Modifier = Modifier,
 ) {
-    val scheduledClass = ScheduledClassStore.findById(session.scheduledClassId)
+    val scheduledClass = ClassStore.findById(session.classId)
     val sessionDate = remember(session.sessionDate) { parseIsoLocalDate(session.sessionDate) }
     val attendees = remember(scheduledClass, sessionDate) {
         if (scheduledClass == null || sessionDate == null) emptyList()
@@ -84,21 +87,32 @@ fun AttendancePanel(
     val isFutureSession = sessionDate != null && sessionDate.isAfter(today)
     val canTakeAttendance = scheduledClass != null && sessionDate != null &&
         scheduledClass.canTakeAttendance(sessionDate)
-    ClassAttendanceStore.records
-    val isSubmitted = ClassAttendanceStore.isSessionSubmitted(session)
+    AttendanceStore.records
+    val isSubmitted = AttendanceStore.isSessionSubmitted(session)
     val canEditAttendance = canTakeAttendance && !isSubmitted
 
     var draftByAttendeeKey by remember(session) {
-        mutableStateOf(ClassAttendanceStore.draftForSession(session, attendeeKeys))
+        mutableStateOf(AttendanceStore.draftForSession(session, attendeeKeys))
     }
     var saveMessage by remember(session) { mutableStateOf<String?>(null) }
     var saveMessageIsError by remember(session) { mutableStateOf(false) }
     var highlightUnmarked by remember(session) { mutableStateOf(false) }
     var showCreditDialog by remember(session) { mutableStateOf(false) }
     var creditDialogPreviews by remember(session) { mutableStateOf<List<AbsentCreditPreview>>(emptyList()) }
+    var listSearchQuery by remember(session) { mutableStateOf("") }
+
+    val filteredAttendees = remember(attendees, listSearchQuery) {
+        attendees.filter { attendee ->
+            matchesPanelListSearch(
+                listSearchQuery,
+                attendee.displayName,
+                attendee.householdLabel,
+            )
+        }
+    }
 
     LaunchedEffect(session, attendeeKeys) {
-        draftByAttendeeKey = ClassAttendanceStore.draftForSession(session, attendeeKeys)
+        draftByAttendeeKey = AttendanceStore.draftForSession(session, attendeeKeys)
         saveMessage = null
         saveMessageIsError = false
         highlightUnmarked = false
@@ -120,7 +134,7 @@ fun AttendancePanel(
                 className = scheduledClass?.name ?: "Class",
                 absentAttendees = absent,
             )
-            if (!ClassAttendanceStore.saveSession(session, draftByAttendeeKey, attendeeKeys)) {
+            if (!AttendanceStore.saveSession(session, draftByAttendeeKey, attendeeKeys)) {
                 saveMessageIsError = true
                 saveMessage = "Could not save attendance."
                 showCreditDialog = false
@@ -138,7 +152,7 @@ fun AttendancePanel(
                 else -> "Attendance submitted."
             }
         } else {
-            if (!ClassAttendanceStore.saveSession(session, draftByAttendeeKey, attendeeKeys)) {
+            if (!AttendanceStore.saveSession(session, draftByAttendeeKey, attendeeKeys)) {
                 saveMessageIsError = true
                 saveMessage = "Could not save attendance."
                 showCreditDialog = false
@@ -148,7 +162,7 @@ fun AttendancePanel(
             saveMessageIsError = false
             saveMessage = "Attendance submitted."
         }
-        attendees.map { it.peopleGroupId }.distinct().forEach { groupId ->
+        attendees.map { it.soldPlanId }.distinct().forEach { groupId ->
             RollingPlanBillingService.syncRollingPlanBilling(groupId)
         }
         showCreditDialog = false
@@ -160,7 +174,7 @@ fun AttendancePanel(
             saveMessage = "Attendance was already submitted and cannot be changed."
             return
         }
-        val unmarked = ClassAttendanceStore.unmarkedAttendeeKeys(draftByAttendeeKey, attendeeKeys)
+        val unmarked = AttendanceStore.unmarkedAttendeeKeys(draftByAttendeeKey, attendeeKeys)
         if (unmarked.isNotEmpty()) {
             highlightUnmarked = true
             saveMessageIsError = true
@@ -271,7 +285,20 @@ fun AttendancePanel(
 
             if (attendees.isEmpty()) {
                 Text(
-                    text = "No students enrolled. Assign customer groups in the Classes panel.",
+                    text = "No students enrolled. Assign sold plans in the Classes panel.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (filteredAttendees.isEmpty()) {
+                PanelListSearchSpacer()
+                PanelListSearchField(
+                    query = listSearchQuery,
+                    onQueryChange = { listSearchQuery = it },
+                    placeholder = "Student or household…",
+                )
+                Spacer(modifier = Modifier.height(spacing.field))
+                Text(
+                    text = "No students match your search.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -330,7 +357,15 @@ fun AttendancePanel(
                         }
                         Spacer(modifier = Modifier.height(spacing.section))
 
-                        val grouped = attendees.groupBy { it.peopleGroupId }
+                        PanelListSearchSpacer()
+                        PanelListSearchField(
+                            query = listSearchQuery,
+                            onQueryChange = { listSearchQuery = it },
+                            placeholder = "Student or household…",
+                        )
+                        Spacer(modifier = Modifier.height(spacing.field))
+
+                        val grouped = filteredAttendees.groupBy { it.soldPlanId }
                         grouped.forEach { (_, groupAttendees) ->
                             val household = groupAttendees.first().householdLabel
                             FormPanelLinkedBox(role = FormPanelSectionRole.Secondary) {
@@ -432,7 +467,7 @@ fun AttendancePanel(
 
 @Composable
 private fun AttendanceRow(
-    attendee: ClassAttendee,
+    attendee: AttendanceAttendee,
     status: AttendanceStatus?,
     needsMark: Boolean,
     previewMode: Boolean,
@@ -529,7 +564,7 @@ private fun AttendanceToggle(
 
 private fun markAllDraft(
     draft: Map<String, AttendanceStatus?>,
-    attendees: List<ClassAttendee>,
+    attendees: List<AttendanceAttendee>,
     status: AttendanceStatus,
 ): Map<String, AttendanceStatus?> {
     var updated = draft

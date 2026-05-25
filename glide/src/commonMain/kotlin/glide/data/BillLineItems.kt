@@ -4,7 +4,7 @@ import glide.model.Bill
 import glide.model.BillLineItem
 import glide.model.BillLineItemKind
 import glide.model.BillLineItemSource
-import glide.model.BillingCredit
+import glide.model.AttendanceCredit
 import glide.model.IssuedInvoiceSnapshot
 import glide.model.isBillingEditable
 import glide.model.isIssuedToCustomer
@@ -63,9 +63,9 @@ private fun IssuedInvoiceSnapshot.toDisplayLineItems(): List<BillLineItem> {
 }
 
 private fun Bill.attendanceCreditLineItems(): List<BillLineItem> =
-    BillingCreditStore.appliedToBill(id).map { it.toBillLineItem() }
+    AttendanceCreditStore.appliedToBill(id).map { it.toBillLineItem() }
 
-fun BillingCredit.toBillLineItem(): BillLineItem = BillLineItem(
+fun AttendanceCredit.toBillLineItem(): BillLineItem = BillLineItem(
     description = description,
     amountMinor = amountMinor,
     kind = BillLineItemKind.CREDIT,
@@ -89,7 +89,7 @@ fun Bill.baseLineItems(): List<BillLineItem> =
 fun Bill.subtotalBeforeAttendanceCreditsMinor(): Long =
     baseLineItems().netAmountMinor()
 
-fun Bill.recomputeFromLineItems(appliedCredits: List<BillingCredit>): Bill {
+fun Bill.recomputeFromLineItems(appliedCredits: List<AttendanceCredit>): Bill {
     val ensured = ensureLineItems()
     val baseItems = ensured.lineItems.filter { it.source != BillLineItemSource.ATTENDANCE_CREDIT }
     val attendanceItems = appliedCredits.map { it.toBillLineItem() }
