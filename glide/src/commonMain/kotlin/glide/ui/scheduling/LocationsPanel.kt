@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,9 +37,12 @@ import glide.data.LocationStore
 import glide.data.ClassStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
+import glide.debug.GlidePanelDebug
+import glide.debug.PanelDebugStateEffect
 import glide.model.Location
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
+import glide.ui.shared.DeleteActionButton
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.ListFormPanelLayout
@@ -47,7 +51,10 @@ import glide.ui.shared.PanelListSearchField
 import glide.ui.shared.PanelListSearchSpacer
 import glide.ui.shared.matchesPanelListSearch
 import glide.ui.shared.panelListCountLabel
+import glide.ui.shared.FormValidationState
+import glide.ui.shared.ValidatedGlideOutlinedField
 import glide.ui.shared.rememberFormDirtyTracker
+import glide.ui.shared.rememberFormValidation
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideOutlinedButton
@@ -77,6 +84,11 @@ private data class LocationFormState(
         return true
     }
 
+    fun validationFieldKeys(): List<String> = buildList {
+        if (name.isBlank()) add("name")
+        if (maxCapacityText.isNotBlank() && parsedMaxCapacity() == null) add("maxCapacity")
+    }
+
     fun toLocation(
         existingId: String? = null,
         createdAtMillis: Long = System.currentTimeMillis(),
@@ -99,6 +111,8 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    val formValidation = rememberFormValidation()
+    val saveScope = rememberCoroutineScope()
     var listSearchQuery by remember { mutableStateOf("") }
 
     val allLocations = LocationStore.sortedForPanel()
@@ -130,11 +144,27 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
         TermStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() }
     }
 
+    PanelDebugStateEffect(
+        GlidePanelDebug.Panel.LOCATIONS,
+        selectedId,
+        isCreating,
+        termFilterId,
+        locationFilterId,
+        classSyncId,
+        listSearchQuery,
+        locations.size,
+        allLocations.size,
+    ) {
+        "selected=$selectedId creating=$isCreating visible=${locations.size}/${allLocations.size} " +
+            "search='$listSearchQuery' || ${GlidePanelDebug.globalSnapshot()}"
+    }
+
     fun clearLocalSelection() {
         selectedId = null
         isCreating = true
         form.load(LocationFormState())
         formError = null
+        formValidation.clear()
     }
 
     fun clearSelection() {
@@ -154,6 +184,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
             location.toFormState(),
         )
         formError = null
+        formValidation.clear()
     }
 
     fun loadIntoForm(location: Location) {
@@ -164,6 +195,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
             location.toFormState(),
         )
         formError = null
+        formValidation.clear()
     }
 
     LaunchedEffect(allLocations, selectedId, termFilterId) {
@@ -336,6 +368,7 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                             state = form.draft,
                             onStateChange = { form.draft = it },
                             spacing = spacing,
+                            validation = formValidation,
                         )
 
                         if (!isCreating && selectedId != null) {
@@ -362,18 +395,20 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                     }
 
                     Spacer(modifier = Modifier.height(spacing.field))
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(spacing.field),
                     ) {
                         GlideButton(
                             onClick = {
-                                if (!form.draft.isValid()) {
+                                val invalidKeys = form.draft.validationFieldKeys()
+                                if (invalidKeys.isNotEmpty()) {
+                                    formValidation.reportInvalid(invalidKeys, saveScope)
                                     formError = "Location name is required. Capacity must be a positive number if set."
                                     return@GlideButton
                                 }
                                 formError = null
+                                formValidation.clear()
                                 if (isCreating) {
                                     val location = form.draft.toLocation()
                                     LocationStore.create(location)
@@ -397,12 +432,16 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                         }
 
                         if (!isCreating) {
-                            GlideOutlinedButton(
+                            DeleteActionButton(
                                 onClick = { showDeleteConfirm = true },
                                 enabled = selectedId?.let { LocationStore.canDelete(it) } == true,
-                            ) {
-                                Text("Delete", color = MaterialTheme.colorScheme.error)
-                            }
+                                blockedReason = selectedId
+                                    ?.let { id -> LocationStore.classCount(id) }
+                                    ?.takeIf { it > 0 }
+                                    ?.let { count ->
+                                        "Used by $count class${if (count == 1) "" else "es"}. Remove it from those classes first."
+                                    },
+                            )
                         }
                     }
                 }
@@ -441,6 +480,11 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
                 }
             },
             continueEnabled = !attachedToClass,
+            blockedReason = if (attachedToClass) {
+                "Remove this location from linked classes before deleting."
+            } else {
+                null
+            },
         )
     }
 }
@@ -520,6 +564,7 @@ private fun LocationForm(
     state: LocationFormState,
     onStateChange: (LocationFormState) -> Unit,
     spacing: GlideLayout.Spacing,
+    validation: FormValidationState,
 ) {
     FormPanelSection(
         title = "Location",
@@ -527,11 +572,13 @@ private fun LocationForm(
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {
-        GlideOutlinedField(
+        validation.ValidatedGlideOutlinedField(
+            fieldKey = "name",
             value = state.name,
             onValueChange = { onStateChange(state.copy(name = it)) },
             label = "Location name",
             placeholder = "e.g. Studio A",
+            required = true,
         )
     }
 
@@ -573,7 +620,8 @@ private fun LocationForm(
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
-        GlideOutlinedField(
+        validation.ValidatedGlideOutlinedField(
+            fieldKey = "maxCapacity",
             value = state.maxCapacityText,
             onValueChange = { onStateChange(state.copy(maxCapacityText = it)) },
             label = "Max capacity",

@@ -26,7 +26,10 @@ fun main() {
     application {
         AppSettingsStore.load()
 
-        GlideDataRepository.loadIntoStores()
+        remember {
+            GlideDataRepository.loadIntoStores()
+            Unit
+        }
 
         var closeRequested by remember { mutableStateOf(false) }
         val savedBounds = AppSettingsStore.windowBounds

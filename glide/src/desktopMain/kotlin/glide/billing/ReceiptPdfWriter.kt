@@ -3,6 +3,7 @@ package glide.billing
 import glide.billing.BillingPdfSupport.PdfPageContext
 import glide.billing.BillingPdfSupport.SECTION_GAP
 import glide.billing.BillingPdfSupport.colorAccent
+import glide.billing.BillingPdfSupport.colorAccentSoft
 import glide.billing.BillingPdfSupport.colorFill
 import glide.billing.BillingPdfSupport.colorInk
 import glide.billing.BillingPdfSupport.colorMuted
@@ -41,7 +42,7 @@ object ReceiptPdfWriter {
             ctx.startFirstPage()
 
             ctx.y = drawAccentBar(ctx.stream, ctx.contentLeftX, ctx.contentRightX, ctx.y, colorPaid)
-            ctx.y -= 18f
+            ctx.y -= 14f
 
             val headerBottomY = drawHeader(
                 stream = ctx.stream,
@@ -102,13 +103,17 @@ object ReceiptPdfWriter {
         y: Float,
     ): Float {
         val titleY = y
+        fillRect(stream, leftX, titleY - 76f, rightX - leftX, 70f, colorAccentSoft)
+        strokeRect(stream, leftX, titleY - 76f, rightX - leftX, 70f, colorRule, 0.6f)
+
+        drawAt(stream, fontBold, 8.5f, rightX - 12f, titleY - 10f, "CONFIRMATION", align = TextAlign.RIGHT, color = colorMuted)
         drawAt(stream, fontBold, 26f, rightX, titleY, "RECEIPT", align = TextAlign.RIGHT, color = colorPaid)
-        var metaY = titleY - lineStep(26f) - 2f
+        var metaY = titleY - lineStep(26f) - 8f
         metaY = drawAt(
             stream,
             fontBold,
             11f,
-            rightX,
+            rightX - 12f,
             metaY,
             "PAYMENT RECEIPT",
             align = TextAlign.RIGHT,
@@ -116,25 +121,25 @@ object ReceiptPdfWriter {
         )
         metaY -= 4f
 
-        var leftY = drawAt(stream, fontBold, 14f, leftX, y, content.fromName, color = colorInk)
+        var leftY = drawAt(stream, fontBold, 14f, leftX + 12f, y - 6f, content.fromName, color = colorInk)
         leftY = drawContactLines(
             stream = stream,
             lines = listOfNotNull(
                 content.fromEmail.takeIf { it.isNotBlank() },
                 content.fromPhone.takeIf { it.isNotBlank() },
             ),
-            x = leftX,
-            y = leftY - 2f,
+            x = leftX + 12f,
+            y = leftY,
             fontSize = 9.5f,
             muted = true,
         )
 
-        metaY = drawMetaRow(stream, rightX, metaY, "Receipt no.", content.receiptNumber)
-        metaY = drawMetaRow(stream, rightX, metaY, "Payment date", content.paidDateLabel)
-        metaY = drawMetaRow(stream, rightX, metaY, "Invoice ref.", content.invoiceNumber)
-        metaY = drawMetaRow(stream, rightX, metaY, "Document", "Payment receipt")
+        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Receipt no.", content.receiptNumber)
+        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Payment date", content.paidDateLabel)
+        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Invoice ref.", content.invoiceNumber)
+        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Document", "Payment receipt")
 
-        return minOf(leftY, metaY) - 4f
+        return minOf(leftY, metaY) - 10f
     }
 
     private fun drawPaymentReceivedSection(ctx: PdfPageContext, content: ReceiptContent) {
@@ -208,6 +213,6 @@ object ReceiptPdfWriter {
 
     private fun receiptDirectory(): File {
         val dir = File(glide.data.persistence.glideDocumentsExportDir())
-        return File(dir, "receipts")
+        return File(dir, "invoices")
     }
 }

@@ -1,6 +1,7 @@
 package glide.data
 
 import androidx.compose.runtime.mutableStateListOf
+import glide.debug.GlidePanelDebug
 import glide.model.Plan
 
 object PlanStore {
@@ -9,6 +10,11 @@ object PlanStore {
 
     fun create(plan: Plan) {
         _plans.add(plan)
+        GlidePanelDebug.log(
+            GlidePanelDebug.Panel.PLANS,
+            "PlanStore.create",
+            "id=${plan.id} name=${plan.name} totalPlans=${_plans.size} || ${GlidePanelDebug.globalSnapshot()}",
+        )
         persistAppData()
     }
 

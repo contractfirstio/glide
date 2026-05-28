@@ -8,6 +8,7 @@ import java.util.UUID
 internal object BackupEmlDraft {
     fun write(
         to: String,
+        from: String,
         subject: String,
         plainBody: String,
         attachment: File,
@@ -19,6 +20,7 @@ internal object BackupEmlDraft {
 
         val eml = buildString {
             appendLine("To: $to")
+            appendLine("From: $from")
             appendLine("Subject: $subject")
             appendLine("MIME-Version: 1.0")
             appendLine("Content-Type: multipart/mixed; boundary=\"$mixedBoundary\"")

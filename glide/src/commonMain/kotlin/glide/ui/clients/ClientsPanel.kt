@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,8 +44,11 @@ import glide.data.StudentStore
 import glide.data.resolveMainClient
 import glide.data.findSoldPlanById
 import glide.model.Client
+import glide.debug.GlidePanelDebug
+import glide.debug.PanelDebugStateEffect
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
+import glide.ui.shared.DeleteActionButton
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.ListFormPanelLayout
@@ -54,6 +58,9 @@ import glide.ui.shared.PanelListSearchSpacer
 import glide.ui.shared.matchesPanelListSearch
 import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.rememberFormDirtyTracker
+import glide.ui.shared.FormValidationState
+import glide.ui.shared.ValidatedGlideOutlinedField
+import glide.ui.shared.rememberFormValidation
 import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
 import glide.ui.theme.GlideButton
@@ -73,6 +80,10 @@ private data class ClientFormState(
 ) {
     fun isValid(): Boolean = name.isNotBlank()
 
+    fun validationFieldKeys(): List<String> = buildList {
+        if (name.isBlank()) add("name")
+    }
+
     fun toClient(existingId: String? = null, createdAtMillis: Long = System.currentTimeMillis()): Client =
         Client(
             id = existingId ?: UUID.randomUUID().toString(),
@@ -91,6 +102,8 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
     val form = rememberFormDirtyTracker(ClientFormState())
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    val formValidation = rememberFormValidation()
+    val saveScope = rememberCoroutineScope()
     var listSearchQuery by remember { mutableStateOf("") }
 
     val soldPlanId = BillingPanelState.soldPlanId
@@ -98,16 +111,14 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
     val planFilterId = PlansPanelState.selectedPlanId
     val studentFilterId = StudentsPanelState.selectedStudentId
     val clients = ClientStore.forClientsPanel(soldPlanId, planFilterId, studentFilterId)
-    val filteredClients = remember(clients, listSearchQuery) {
-        clients.filter { client ->
-            matchesPanelListSearch(
-                listSearchQuery,
-                formatPersonLabel(client.name, client.dateOfBirth),
-                client.email,
-                client.phone,
-                client.notes,
-            )
-        }
+    val filteredClients = clients.filter { client ->
+        matchesPanelListSearch(
+            listSearchQuery,
+            formatPersonLabel(client.name, client.dateOfBirth),
+            client.email,
+            client.phone,
+            client.notes,
+        )
     }
     val searchActive = listSearchQuery.isNotBlank()
     val soldPlanLabel = soldPlanId?.let { id ->
@@ -119,10 +130,26 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
         StudentStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
 
+    PanelDebugStateEffect(
+        GlidePanelDebug.Panel.CLIENTS,
+        selectedId,
+        soldPlanId,
+        clientFilterId,
+        planFilterId,
+        studentFilterId,
+        listSearchQuery,
+        clients.size,
+        ClientStore.all.size,
+    ) {
+        "selected=$selectedId visible=${clients.size}/${ClientStore.all.size} " +
+            "search='$listSearchQuery' || ${GlidePanelDebug.globalSnapshot()}"
+    }
+
     fun clearLocalSelection() {
         selectedId = null
         form.load(ClientFormState())
         formError = null
+        formValidation.clear()
     }
 
     fun clearSelection() {
@@ -155,6 +182,7 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
             ),
         )
         formError = null
+        formValidation.clear()
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -360,6 +388,7 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                                 state = form.draft,
                                 onStateChange = { form.draft = it },
                                 spacing = spacing,
+                                validation = formValidation,
                             )
 
                             val soldPlanCount = selectedId?.let { ClientStore.soldPlanCount(it) } ?: 0
@@ -390,11 +419,14 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                         ) {
                             GlideButton(
                                 onClick = {
-                                    if (!form.draft.isValid()) {
+                                    val invalidKeys = form.draft.validationFieldKeys()
+                                    if (invalidKeys.isNotEmpty()) {
+                                        formValidation.reportInvalid(invalidKeys, saveScope)
                                         formError = "Name is required."
                                         return@GlideButton
                                     }
                                     formError = null
+                                    formValidation.clear()
                                     val existing = selectedId?.let { ClientStore.findById(it) }
                                     if (existing != null) {
                                         val updated = form.draft.toClient(
@@ -411,12 +443,11 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                                 Text(saveLabel)
                             }
 
-                            GlideOutlinedButton(
+                            DeleteActionButton(
                                 onClick = { showDeleteConfirm = true },
                                 enabled = selectedId?.let { ClientStore.canDelete(it) } == true,
-                            ) {
-                                Text("Delete", color = MaterialTheme.colorScheme.error)
-                            }
+                                blockedReason = "This person is the main client on one or more sold plans.",
+                            )
                         }
                     }
                 }
@@ -454,6 +485,11 @@ fun ClientsPanel(modifier: Modifier = Modifier) {
                 }
             },
             continueEnabled = !onSoldPlan,
+            blockedReason = if (onSoldPlan) {
+                "Remove or reassign this client from sold plans first."
+            } else {
+                null
+            },
         )
     }
 }
@@ -514,6 +550,7 @@ private fun ClientForm(
     state: ClientFormState,
     onStateChange: (ClientFormState) -> Unit,
     spacing: GlideLayout.Spacing,
+    validation: FormValidationState,
 ) {
     FormPanelSection(
         title = "Identity",
@@ -521,10 +558,12 @@ private fun ClientForm(
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {
-        GlideOutlinedField(
+        validation.ValidatedGlideOutlinedField(
+            fieldKey = "name",
             value = state.name,
             onValueChange = { onStateChange(state.copy(name = it)) },
             label = "Name",
+            required = true,
         )
         Spacer(modifier = Modifier.height(spacing.field))
         DateOfBirthField(

@@ -3,6 +3,8 @@ package glide.data
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import glide.debug.GlidePanelDebug
+import glide.debug.panelStateLog
 
 enum class AppViewMode {
     CUSTOMER_MANAGEMENT,
@@ -15,6 +17,7 @@ object AppViewState {
 
     fun switchTo(newMode: AppViewMode) {
         if (mode == newMode) return
+        panelStateLog(GlidePanelDebug.Panel.APP, "switchTo", "$mode -> $newMode")
         when (newMode) {
             AppViewMode.SCHEDULING -> {
                 BillingPanelState.close()

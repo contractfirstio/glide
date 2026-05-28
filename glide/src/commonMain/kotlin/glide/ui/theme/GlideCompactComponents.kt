@@ -27,13 +27,38 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun GlideFieldLabel(text: String) {
+fun GlideFieldLabel(
+    text: String,
+    required: Boolean = false,
+) {
+    val labelText = if (required) "$text *" else text
     Text(
-        text = text.uppercase(),
+        text = labelText.uppercase(),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
     )
 }
+
+@Composable
+fun glideOutlinedFieldColors(isError: Boolean = false) = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+    cursorColor = MaterialTheme.colorScheme.primary,
+    focusedBorderColor = if (isError) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.primary
+    },
+    unfocusedBorderColor = if (isError) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.outlineVariant
+    },
+    errorBorderColor = MaterialTheme.colorScheme.error,
+    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+)
 
 @Composable
 fun GlideOutlinedField(
@@ -50,6 +75,8 @@ fun GlideOutlinedField(
     shape: Shape = MaterialTheme.shapes.small,
     trailingContent: @Composable (() -> Unit)? = null,
     fieldModifier: Modifier = Modifier,
+    isError: Boolean = false,
+    required: Boolean = false,
 ) {
     val textStyle = MaterialTheme.typography.bodySmall.copy(
         color = MaterialTheme.colorScheme.onSurface,
@@ -57,25 +84,17 @@ fun GlideOutlinedField(
     val placeholderStyle = textStyle.copy(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-        disabledTextColor = MaterialTheme.colorScheme.onSurface,
-        cursorColor = MaterialTheme.colorScheme.primary,
-        focusedBorderColor = MaterialTheme.colorScheme.primary,
-        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-    )
+    val fieldColors = glideOutlinedFieldColors(isError = isError)
 
     Column(modifier = modifier) {
-        GlideFieldLabel(label)
+        GlideFieldLabel(label, required = required)
         Spacer(modifier = Modifier.height(2.dp))
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             readOnly = readOnly,
             enabled = true,
+            isError = isError,
             singleLine = singleLine,
             minLines = minLines,
             maxLines = maxLines,
@@ -101,8 +120,15 @@ fun GlideOutlinedField(
 
 /** Dark text on solid pale-blue primary buttons. */
 @Composable
-private fun GlideFilledButtonText(content: @Composable () -> Unit) {
-    val textColor = MaterialTheme.colorScheme.onPrimary
+private fun GlideFilledButtonText(
+    enabled: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val textColor = if (enabled) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+    }
     CompositionLocalProvider(
         LocalContentColor provides textColor,
         LocalTextStyle provides MaterialTheme.typography.labelMedium.copy(color = textColor),
@@ -114,10 +140,15 @@ private fun GlideFilledButtonText(content: @Composable () -> Unit) {
 /** Light text on translucent outlined / text buttons (explicit [Text] colors, e.g. error red, still apply). */
 @Composable
 private fun GlideTranslucentButtonText(
+    enabled: Boolean,
     style: TextStyle,
     content: @Composable () -> Unit,
 ) {
-    val textColor = MaterialTheme.colorScheme.onSurface
+    val textColor = if (enabled) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+    }
     CompositionLocalProvider(
         LocalContentColor provides textColor,
         LocalTextStyle provides style.copy(color = textColor),
@@ -145,8 +176,10 @@ fun GlideButton(
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
         ),
-        content = { GlideFilledButtonText(content) },
+        content = { GlideFilledButtonText(enabled = enabled, content = content) },
     )
 }
 
@@ -165,12 +198,24 @@ fun GlideOutlinedButton(
             .heightIn(min = GlideDimensions.buttonHeight),
         contentPadding = GlideDimensions.buttonPadding,
         shape = MaterialTheme.shapes.small,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+        border = BorderStroke(
+            1.dp,
+            if (enabled) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+            } else {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+            },
+        ),
         colors = ButtonDefaults.outlinedButtonColors(
             contentColor = MaterialTheme.colorScheme.onSurface,
+            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
         ),
         content = {
-            GlideTranslucentButtonText(MaterialTheme.typography.labelMedium, content)
+            GlideTranslucentButtonText(
+                enabled = enabled,
+                style = MaterialTheme.typography.labelMedium,
+                content = content,
+            )
         },
     )
 }
@@ -190,9 +235,14 @@ fun GlideTextButton(
         contentPadding = contentPadding,
         colors = ButtonDefaults.textButtonColors(
             contentColor = MaterialTheme.colorScheme.onSurface,
+            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
         ),
         content = {
-            GlideTranslucentButtonText(MaterialTheme.typography.labelSmall, content)
+            GlideTranslucentButtonText(
+                enabled = enabled,
+                style = MaterialTheme.typography.labelSmall,
+                content = content,
+            )
         },
     )
 }

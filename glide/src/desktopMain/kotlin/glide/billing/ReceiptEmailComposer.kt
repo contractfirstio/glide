@@ -24,7 +24,7 @@ internal object ReceiptEmailComposer {
 
         return when {
             osName.contains("mac") || osName.contains("darwin") ->
-                composeOnMac(recipient, subject, htmlBody, plainBody, pdf)
+                composeOnMac(recipient, content.fromEmail, subject, htmlBody, plainBody, pdf)
             osName.contains("win") ->
                 composeOnWindows(recipient, subject, htmlBody, plainBody, pdf)
             else ->
@@ -34,12 +34,13 @@ internal object ReceiptEmailComposer {
 
     private fun composeOnMac(
         recipient: String,
+        fromEmail: String,
         subject: String,
         htmlBody: String,
         plainBody: String,
         pdf: File,
     ): InvoiceExportResult {
-        if (openEmlDraftInMail(recipient, subject, htmlBody, plainBody, pdf)) {
+        if (openEmlDraftInMail(recipient, fromEmail, subject, htmlBody, plainBody, pdf)) {
             return InvoiceExportResult.Success
         }
         if (runMacMailScript(recipient, subject, htmlBody, plainBody, pdf)) {
@@ -50,6 +51,7 @@ internal object ReceiptEmailComposer {
 
     private fun openEmlDraftInMail(
         recipient: String,
+        fromEmail: String,
         subject: String,
         htmlBody: String,
         plainBody: String,
@@ -57,6 +59,7 @@ internal object ReceiptEmailComposer {
     ): Boolean = runCatching {
         val eml = InvoiceEmlDraft.write(
             to = recipient,
+            from = fromEmail,
             subject = subject,
             plainBody = plainBody,
             htmlBody = htmlBody,

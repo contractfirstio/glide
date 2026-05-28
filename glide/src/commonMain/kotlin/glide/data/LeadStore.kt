@@ -13,16 +13,18 @@ object LeadStore {
 
     val all: List<Lead> get() = _leads
 
+    private fun Lead.normalizedReferences(): Lead =
+        copy(
+            mainClientId = mainClientId?.takeIf { ClientStore.findById(it) != null },
+            studentIds = studentIds.distinct().filter { StudentStore.findById(it) != null },
+        )
+
     fun create(lead: Lead) {
-        if (lead.mainClientId != null) {
-            require(ClientStore.findById(lead.mainClientId) != null) {
-                "Linked client not found."
-            }
-        }
-        require(lead.hasResolvableMainClient()) {
+        val normalized = lead.normalizedReferences()
+        require(normalized.hasResolvableMainClient()) {
             "Link a client or enter a main client name."
         }
-        _leads.add(lead)
+        _leads.add(normalized)
         persistAppData()
     }
 
@@ -34,11 +36,12 @@ object LeadStore {
     fun update(lead: Lead): Boolean {
         val index = _leads.indexOfFirst { it.id == lead.id }
         if (index < 0) return false
-        _leads[index] = lead.copy(
-            clientName = if (lead.mainClientId != null) "" else lead.clientName,
-            dateOfBirth = if (lead.mainClientId != null) "" else lead.dateOfBirth,
-            email = if (lead.mainClientId != null) "" else lead.email,
-            phone = if (lead.mainClientId != null) "" else lead.phone,
+        val normalized = lead.normalizedReferences()
+        _leads[index] = normalized.copy(
+            clientName = if (normalized.mainClientId != null) "" else normalized.clientName,
+            dateOfBirth = if (normalized.mainClientId != null) "" else normalized.dateOfBirth,
+            email = if (normalized.mainClientId != null) "" else normalized.email,
+            phone = if (normalized.mainClientId != null) "" else normalized.phone,
         )
         persistAppData()
         return true

@@ -16,7 +16,9 @@ import glide.model.Client
 import glide.ui.layout.GlideLayout
 import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
-import glide.ui.theme.GlideOutlinedField
+import glide.ui.shared.FormValidationAnchor
+import glide.ui.shared.FormValidationState
+import glide.ui.shared.ValidatedGlideOutlinedField
 import glide.ui.theme.GlideTextButton
 
 @Composable
@@ -28,21 +30,18 @@ fun LeadMainClientSection(
     phone: String,
     onStateChange: (mainClientId: String?, clientName: String, dateOfBirth: String, email: String, phone: String) -> Unit,
     spacing: GlideLayout.Spacing,
+    validation: FormValidationState,
 ) {
     var clientSearchQuery by remember { mutableStateOf("") }
 
     val clientResults = remember(clientSearchQuery, ClientStore.all) {
         val query = clientSearchQuery.trim()
-        if (query.isEmpty()) {
-            emptyList()
-        } else {
-            ClientStore.all
-                .filter { client ->
-                    listOf(client.name, client.email, client.phone, client.dateOfBirth)
-                        .any { it.matchesEntitySearch(query) }
-                }
-                .map { it.toSearchItem() }
-        }
+        ClientStore.all
+            .filter { client ->
+                listOf(client.name, client.email, client.phone, client.dateOfBirth)
+                    .any { it.matchesEntitySearch(query) }
+            }
+            .map { it.toSearchItem() }
     }
 
     LeadPanelSection(
@@ -70,17 +69,26 @@ fun LeadMainClientSection(
                 description = "Search clients already saved from previous customers.",
                 spacing = spacing,
             ) {
-                EntitySearchPicker(
-                    label = "Search saved clients",
-                    placeholder = "Type name, email, or phone…",
-                    query = clientSearchQuery,
-                    onQueryChange = { clientSearchQuery = it },
-                    results = clientResults,
-                    onSelect = { id ->
-                        onStateChange(id, "", "", "", "")
-                    },
-                    noResultsText = "No saved clients match. Create a new client below instead.",
-                )
+                FormValidationAnchor(validation = validation, fieldKey = "clientLink") {
+                    EntitySearchPicker(
+                        label = "Search saved clients",
+                        placeholder = "Type name, email, or phone…",
+                        query = clientSearchQuery,
+                        onQueryChange = {
+                            clientSearchQuery = it
+                            validation.clearKey("clientLink")
+                            validation.clearKey("clientName")
+                        },
+                        results = clientResults,
+                        onSelect = { id ->
+                            onStateChange(id, "", "", "", "")
+                            validation.clearKey("clientLink")
+                            validation.clearKey("clientName")
+                        },
+                        noResultsText = "No saved clients match. Create a new client below instead.",
+                        isError = validation.isInvalid("clientLink"),
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(spacing.section))
@@ -91,10 +99,12 @@ fun LeadMainClientSection(
                 spacing = spacing,
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    GlideOutlinedField(
+                    validation.ValidatedGlideOutlinedField(
+                        fieldKey = "clientName",
                         value = clientName,
                         onValueChange = { onStateChange(null, it, dateOfBirth, email, phone) },
                         label = "New client name",
+                        required = true,
                     )
                     Spacer(modifier = Modifier.height(spacing.field))
                     DateOfBirthField(
@@ -102,13 +112,16 @@ fun LeadMainClientSection(
                         onValueChange = { onStateChange(null, clientName, it, email, phone) },
                     )
                     Spacer(modifier = Modifier.height(spacing.field))
-                    GlideOutlinedField(
+                    validation.ValidatedGlideOutlinedField(
+                        fieldKey = "clientEmail",
                         value = email,
                         onValueChange = { onStateChange(null, clientName, dateOfBirth, it, phone) },
                         label = "New client email",
+                        required = true,
                     )
                     Spacer(modifier = Modifier.height(spacing.field))
-                    GlideOutlinedField(
+                    validation.ValidatedGlideOutlinedField(
+                        fieldKey = "clientPhone",
                         value = phone,
                         onValueChange = { onStateChange(null, clientName, dateOfBirth, email, it) },
                         label = "New client phone",

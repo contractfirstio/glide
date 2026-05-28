@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,8 +44,11 @@ import glide.data.StudentStore
 import glide.data.resolveMainClient
 import glide.data.findSoldPlanById
 import glide.model.Student
+import glide.debug.GlidePanelDebug
+import glide.debug.PanelDebugStateEffect
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
+import glide.ui.shared.DeleteActionButton
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.ListFormPanelLayout
@@ -53,7 +57,10 @@ import glide.ui.shared.PanelListSearchField
 import glide.ui.shared.PanelListSearchSpacer
 import glide.ui.shared.matchesPanelListSearch
 import glide.ui.shared.panelListCountLabel
+import glide.ui.shared.FormValidationState
+import glide.ui.shared.ValidatedGlideOutlinedField
 import glide.ui.shared.rememberFormDirtyTracker
+import glide.ui.shared.rememberFormValidation
 import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
 import glide.ui.theme.GlideButton
@@ -70,6 +77,10 @@ private data class StudentFormState(
     val notes: String = "",
 ) {
     fun isValid(): Boolean = name.isNotBlank()
+
+    fun validationFieldKeys(): List<String> = buildList {
+        if (name.isBlank()) add("name")
+    }
 
     fun toStudent(
         existingId: String? = null,
@@ -90,6 +101,8 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
     val form = rememberFormDirtyTracker(StudentFormState())
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    val formValidation = rememberFormValidation()
+    val saveScope = rememberCoroutineScope()
     var listSearchQuery by remember { mutableStateOf("") }
 
     val soldPlanId = BillingPanelState.soldPlanId
@@ -102,14 +115,12 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
         planFilterId,
         studentFilterId,
     )
-    val filteredPeople = remember(people, listSearchQuery) {
-        people.filter { person ->
-            matchesPanelListSearch(
-                listSearchQuery,
-                formatPersonLabel(person.name, person.dateOfBirth),
-                person.notes,
-            )
-        }
+    val filteredPeople = people.filter { person ->
+        matchesPanelListSearch(
+            listSearchQuery,
+            formatPersonLabel(person.name, person.dateOfBirth),
+            person.notes,
+        )
     }
     val searchActive = listSearchQuery.isNotBlank()
     val soldPlanLabel = soldPlanId?.let { id ->
@@ -118,10 +129,26 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
     val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
 
+    PanelDebugStateEffect(
+        GlidePanelDebug.Panel.STUDENTS,
+        selectedId,
+        soldPlanId,
+        clientFilterId,
+        planFilterId,
+        studentFilterId,
+        listSearchQuery,
+        people.size,
+        StudentStore.all.size,
+    ) {
+        "selected=$selectedId visible=${people.size}/${StudentStore.all.size} " +
+            "search='$listSearchQuery' || ${GlidePanelDebug.globalSnapshot()}"
+    }
+
     fun clearLocalSelection() {
         selectedId = null
         form.load(StudentFormState())
         formError = null
+        formValidation.clear()
     }
 
     fun clearSelection() {
@@ -146,6 +173,7 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
             ),
         )
         formError = null
+        formValidation.clear()
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -354,6 +382,7 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                                 state = form.draft,
                                 onStateChange = { form.draft = it },
                                 spacing = spacing,
+                                validation = formValidation,
                             )
 
                             val soldPlanCount = selectedId?.let { StudentStore.soldPlanCount(it) } ?: 0
@@ -384,11 +413,14 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                         ) {
                             GlideButton(
                                 onClick = {
-                                    if (!form.draft.isValid()) {
+                                    val invalidKeys = form.draft.validationFieldKeys()
+                                    if (invalidKeys.isNotEmpty()) {
+                                        formValidation.reportInvalid(invalidKeys, saveScope)
                                         formError = "Name is required."
                                         return@GlideButton
                                     }
                                     formError = null
+                                    formValidation.clear()
                                     val existing = selectedId?.let { StudentStore.findById(it) }
                                     if (existing != null) {
                                         val updated = form.draft.toStudent(
@@ -405,12 +437,11 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                                 Text(saveLabel)
                             }
 
-                            GlideOutlinedButton(
+                            DeleteActionButton(
                                 onClick = { showDeleteConfirm = true },
                                 enabled = selectedId?.let { StudentStore.canDelete(it) } == true,
-                            ) {
-                                Text("Delete", color = MaterialTheme.colorScheme.error)
-                            }
+                                blockedReason = "This person is currently linked to one or more sold plans.",
+                            )
                         }
                     }
                 }
@@ -448,6 +479,11 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                 }
             },
             continueEnabled = !onSoldPlan,
+            blockedReason = if (onSoldPlan) {
+                "Remove this person from sold plans first."
+            } else {
+                null
+            },
         )
     }
 }
@@ -499,6 +535,7 @@ private fun StudentForm(
     state: StudentFormState,
     onStateChange: (StudentFormState) -> Unit,
     spacing: GlideLayout.Spacing,
+    validation: FormValidationState,
 ) {
     FormPanelSection(
         title = "Identity",
@@ -506,10 +543,12 @@ private fun StudentForm(
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {
-        GlideOutlinedField(
+        validation.ValidatedGlideOutlinedField(
+            fieldKey = "name",
             value = state.name,
             onValueChange = { onStateChange(state.copy(name = it)) },
             label = "Name",
+            required = true,
         )
         Spacer(modifier = Modifier.height(spacing.field))
         DateOfBirthField(

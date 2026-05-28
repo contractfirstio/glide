@@ -34,6 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import glide.data.BillStore
+import glide.debug.GlidePanelDebug
+import glide.debug.PanelDebugStateEffect
 import glide.data.AttendanceCreditStore
 import glide.data.attendanceBlocksBillIssuanceMessage
 import glide.data.creditAppliedMinor
@@ -43,8 +45,12 @@ import glide.data.displayBillingLineItems
 import glide.data.displayBillingTotalMinor
 import glide.data.openPendingAttendanceSession
 import glide.data.openSoldPlanClassAssignment
+import glide.data.rollingTermCoverageAlertForSoldPlan
 import glide.data.soldPlanBlocksBillIssuance
 import glide.data.soldPlanBlocksBillIssuanceMessage
+import glide.data.rollingTermCoverageWarningMessage
+import glide.data.rollingTermsBlockBillIssuance
+import glide.data.rollingTermsBlockBillIssuanceMessage
 import glide.ui.scheduling.rememberPendingAttendanceSessions
 import glide.data.SoldPlanEnrollmentStore
 import glide.data.RollingPlanBillingService
@@ -122,12 +128,43 @@ fun BillingPanel(
     var showVoidBillConfirm by remember(soldPlanId) { mutableStateOf(false) }
 
     val pendingAttendance = rememberPendingAttendanceSessions()
+    val rollingCoverageAlert = rollingTermCoverageAlertForSoldPlan(soldPlanId)
+    val billingBlockedByRollingTerms = rollingTermsBlockBillIssuance(soldPlanId)
     val billingBlockedByAttendance = pendingAttendance.isNotEmpty()
     val billingBlockedByUnassignedClass = soldPlanBlocksBillIssuance(soldPlanId)
-    val billingBlocked = billingBlockedByAttendance || billingBlockedByUnassignedClass
+    val billingBlocked = billingBlockedByRollingTerms ||
+        billingBlockedByAttendance ||
+        billingBlockedByUnassignedClass
+    val invoiceBlockedReason = when {
+        billingBlockedByRollingTerms -> rollingTermsBlockBillIssuanceMessage()
+        billingBlockedByAttendance -> attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+        billingBlockedByUnassignedClass -> soldPlanBlocksBillIssuanceMessage()
+        else -> null
+    }
+    fun billingBlockedMessage(): String? = when {
+        billingBlockedByRollingTerms -> rollingTermsBlockBillIssuanceMessage()
+        billingBlockedByAttendance -> attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+        billingBlockedByUnassignedClass -> soldPlanBlocksBillIssuanceMessage()
+        else -> null
+    }
 
     val spacing = GlideLayout.comfortable
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
+
+    PanelDebugStateEffect(
+        GlidePanelDebug.Panel.BILLING,
+        soldPlanId,
+        group?.id,
+        enrollment?.id,
+        bills.size,
+        selectedBillId,
+        outstanding,
+        billingBlocked,
+    ) {
+        "soldPlan=$soldPlanId enrollment=${enrollment?.id} bills=${bills.size} " +
+            "selectedBill=$selectedBillId outstanding=$outstanding blocked=$billingBlocked || " +
+            GlidePanelDebug.globalSnapshot()
+    }
 
     LaunchedEffect(ongoingEnrollment?.id, ongoingEnrollment?.status) {
         ongoingEnrollment?.let { RollingPlanBillingService.syncRollingPlanBilling(it.soldPlanId) }
@@ -202,6 +239,22 @@ fun BillingPanel(
                 }
             }
 
+            rollingCoverageAlert?.let { alert ->
+                Spacer(modifier = Modifier.height(spacing.field))
+                Text(
+                    text = rollingTermCoverageWarningMessage(alert.weeksRemaining),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (alert.blocksBilling) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                )
+                GlideTextButton(onClick = { openSoldPlanClassAssignment(soldPlanId) }) {
+                    Text("Open scheduling")
+                }
+            }
+
             if (billingBlockedByUnassignedClass) {
                 Spacer(modifier = Modifier.height(spacing.field))
                 Text(
@@ -255,6 +308,11 @@ fun BillingPanel(
                 }
                 GlideOutlinedButton(
                     onClick = {
+                        billingBlockedMessage()?.let { blockedMessage ->
+                            billingActionMessage = blockedMessage
+                            selectedBillId = null
+                            return@GlideOutlinedButton
+                        }
                         if (!BillingService.addRenewalBill(soldPlanId)) {
                             billingActionMessage = when (ongoingEnrollment?.status) {
                                 SoldPlanEnrollmentStatus.CANCELLING ->
@@ -295,33 +353,23 @@ fun BillingPanel(
                         selected = bill.id == selectedBillId,
                         payment = PaymentStore.forBill(bill.id),
                         billingBlocked = billingBlocked,
+                        invoiceBlockedReason = invoiceBlockedReason,
                         onClick = { selectedBillId = bill.id },
                         onIssuedChange = { issued ->
-                            if (issued && billingBlockedByAttendance) {
-                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                                return@BillRow
-                            }
-                            if (issued && billingBlockedByUnassignedClass) {
-                                billingActionMessage = soldPlanBlocksBillIssuanceMessage()
+                            val blockedMessage = if (issued) billingBlockedMessage() else null
+                            if (blockedMessage != null) {
+                                billingActionMessage = blockedMessage
                                 return@BillRow
                             }
                             if (!BillStore.setIssued(bill.id, issued = true)) {
-                                if (issued && billingBlockedByAttendance) {
-                                    billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                                } else if (issued && billingBlockedByUnassignedClass) {
-                                    billingActionMessage = soldPlanBlocksBillIssuanceMessage()
-                                }
+                                billingActionMessage = blockedMessage
                                 return@BillRow
                             }
                             billingActionMessage = null
                         },
                         onGenerateInvoice = {
-                            if (billingBlockedByAttendance) {
-                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                                return@BillRow
-                            }
-                            if (billingBlockedByUnassignedClass) {
-                                billingActionMessage = soldPlanBlocksBillIssuanceMessage()
+                            billingBlockedMessage()?.let { blockedMessage ->
+                                billingActionMessage = blockedMessage
                                 return@BillRow
                             }
                             billingActionMessage = BillStore.generateInvoice(bill.id)
@@ -338,18 +386,15 @@ fun BillingPanel(
                     BillDetailActions(
                         bill = selectedBill,
                         billingBlocked = billingBlocked,
+                        invoiceBlockedReason = invoiceBlockedReason,
                         onRecordPayment = {
                             paymentError = null
                             showPaymentDialog = true
                         },
                         onVoid = { showVoidBillConfirm = true },
                         onGenerateInvoice = {
-                            if (billingBlockedByAttendance) {
-                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                                return@BillDetailActions
-                            }
-                            if (billingBlockedByUnassignedClass) {
-                                billingActionMessage = soldPlanBlocksBillIssuanceMessage()
+                            billingBlockedMessage()?.let { blockedMessage ->
+                                billingActionMessage = blockedMessage
                                 return@BillDetailActions
                             }
                             billingActionMessage = BillStore.generateInvoice(selectedBill.id)
@@ -531,11 +576,13 @@ private fun BillRow(
     selected: Boolean,
     payment: glide.model.Payment?,
     billingBlocked: Boolean,
+    invoiceBlockedReason: String?,
     onClick: () -> Unit,
     onIssuedChange: (Boolean) -> Unit,
     onGenerateInvoice: () -> Unit,
 ) {
     val canIssue = !billingBlocked || bill.isIssuedToCustomer()
+    var showInvoiceBlockedDialog by remember(bill.id) { mutableStateOf(false) }
     val background = if (selected) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
@@ -610,8 +657,14 @@ private fun BillRow(
                     )
                 }
                 GlideTextButton(
-                    onClick = onGenerateInvoice,
-                    enabled = canIssue,
+                    onClick = {
+                        if (!canIssue) {
+                            showInvoiceBlockedDialog = true
+                        } else {
+                            onGenerateInvoice()
+                        }
+                    },
+                    enabled = true,
                 ) {
                     Text("Invoice")
                 }
@@ -625,18 +678,37 @@ private fun BillRow(
             )
         }
     }
+    if (showInvoiceBlockedDialog) {
+        AlertDialog(
+            onDismissRequest = { showInvoiceBlockedDialog = false },
+            title = { Text("Cannot generate invoice") },
+            text = {
+                Text(
+                    invoiceBlockedReason
+                        ?: "This invoice cannot be generated right now.",
+                )
+            },
+            confirmButton = {
+                GlideTextButton(onClick = { showInvoiceBlockedDialog = false }) {
+                    Text("OK")
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun BillDetailActions(
     bill: Bill,
     billingBlocked: Boolean,
+    invoiceBlockedReason: String?,
     onRecordPayment: () -> Unit,
     onVoid: () -> Unit,
     onGenerateInvoice: () -> Unit,
     onGenerateReceipt: () -> Unit,
 ) {
     val canIssue = !billingBlocked || bill.isIssuedToCustomer()
+    var showInvoiceBlockedDialog by remember(bill.id) { mutableStateOf(false) }
     Column(
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -656,9 +728,15 @@ private fun BillDetailActions(
                 BillLineItemsSection(bill = bill)
                 Spacer(modifier = Modifier.height(8.dp))
                 GlideOutlinedButton(
-                    onClick = onGenerateInvoice,
+                    onClick = {
+                        if (!canIssue) {
+                            showInvoiceBlockedDialog = true
+                        } else {
+                            onGenerateInvoice()
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = canIssue,
+                    enabled = true,
                 ) {
                     Text("Generate invoice PDF")
                 }
@@ -689,9 +767,15 @@ private fun BillDetailActions(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 GlideOutlinedButton(
-                    onClick = onGenerateInvoice,
+                    onClick = {
+                        if (!canIssue) {
+                            showInvoiceBlockedDialog = true
+                        } else {
+                            onGenerateInvoice()
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = canIssue,
+                    enabled = true,
                 ) {
                     Text("Generate invoice PDF")
                 }
@@ -735,6 +819,23 @@ private fun BillDetailActions(
                 )
             }
         }
+    }
+    if (showInvoiceBlockedDialog) {
+        AlertDialog(
+            onDismissRequest = { showInvoiceBlockedDialog = false },
+            title = { Text("Cannot generate invoice") },
+            text = {
+                Text(
+                    invoiceBlockedReason
+                        ?: "This invoice cannot be generated right now.",
+                )
+            },
+            confirmButton = {
+                GlideTextButton(onClick = { showInvoiceBlockedDialog = false }) {
+                    Text("OK")
+                }
+            },
+        )
     }
 }
 

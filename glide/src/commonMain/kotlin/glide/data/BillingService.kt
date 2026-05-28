@@ -22,6 +22,9 @@ object BillingService {
     fun addRenewalBill(soldPlanId: String): Boolean {
         val enrollment = SoldPlanEnrollmentStore.forSoldPlan(soldPlanId) ?: return false
         if (enrollment.status != SoldPlanEnrollmentStatus.ACTIVE) return false
+        if (enrollment.planSnapshot.rolling) {
+            return RollingPlanBillingService.ensureRenewalBillIfPlanEnding(enrollment)
+        }
         BillStore.createRenewalBill(enrollment)
         return true
     }

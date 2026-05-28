@@ -11,6 +11,14 @@ object SoldPlanStore {
 
     val all: List<SoldPlan> get() = _soldPlans
 
+    private fun SoldPlan.normalizedReferences(): SoldPlan? {
+        if (ClientStore.findById(mainClientId) == null) return null
+        return copy(
+            studentIds = studentIds.distinct().filter { StudentStore.findById(it) != null },
+            planId = planId?.takeIf { PlanStore.findById(it) != null },
+        )
+    }
+
     /**
      * Sold plans for the Sold Plans panel — all plans, those on [planId], whose main
      * client is [clientId], or those that include [studentId].
@@ -51,16 +59,17 @@ object SoldPlanStore {
     }
 
     fun create(soldPlan: SoldPlan) {
-        require(ClientStore.findById(soldPlan.mainClientId) != null) {
+        val normalized = soldPlan.normalizedReferences()
+        require(normalized != null) {
             "Linked client not found."
         }
-        _soldPlans.add(soldPlan)
+        _soldPlans.add(normalized)
         persistAppData()
     }
 
     internal fun replaceAll(soldPlans: List<SoldPlan>) {
         _soldPlans.clear()
-        _soldPlans.addAll(soldPlans)
+        _soldPlans.addAll(soldPlans.mapNotNull { it.normalizedReferences() })
     }
 
     fun findById(id: String): SoldPlan? = _soldPlans.find { it.id == id }
