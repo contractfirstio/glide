@@ -295,7 +295,6 @@ fun shouldAutoLinkNewTermToClass(scheduledClass: Class, newTerm: Term): Boolean 
     if (!newTerm.acceptsRollingPlans) return false
     if (scheduledClass.isSingleDay()) return false
     if (scheduledClass.isWeekly()) return false
-    if (!scheduledClassHasRollingCustomerGroup(scheduledClass)) return false
 
     val newRange = newTerm.dateRange() ?: return false
     if (newRange.endInclusive.isBefore(planScheduleStartDate())) return false
@@ -309,7 +308,7 @@ fun shouldAutoLinkNewTermToClass(scheduledClass: Class, newTerm: Term): Boolean 
     return !newRange.start.isBefore(latestEnd)
 }
 
-/** Adds [newTerm] to recurring classes with rolling groups and refreshes their plan schedules. */
+/** Adds [newTerm] to recurring weekly classes and refreshes rolling plan schedules. */
 fun extendClassesWithRollingGroupsForNewTerm(newTerm: Term) {
     ClassStore.classes.toList().forEach { scheduledClass ->
         if (!shouldAutoLinkNewTermToClass(scheduledClass, newTerm)) return@forEach
