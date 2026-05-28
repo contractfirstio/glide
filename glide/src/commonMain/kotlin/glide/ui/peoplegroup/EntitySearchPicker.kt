@@ -34,6 +34,7 @@ fun EntitySearchPicker(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
     noResultsText: String = "No matches.",
+    isError: Boolean = false,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         GlideOutlinedField(
@@ -41,35 +42,34 @@ fun EntitySearchPicker(
             onValueChange = onQueryChange,
             label = label,
             placeholder = placeholder,
+            isError = isError,
         )
-        if (query.isNotBlank()) {
-            Spacer(modifier = Modifier.height(4.dp))
-            if (results.isEmpty()) {
-                Text(
-                    text = noResultsText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 140.dp)
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                            MaterialTheme.shapes.small,
-                        )
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    results.take(12).forEach { item ->
-                        SearchResultRow(
-                            item = item,
-                            onClick = {
-                                onSelect(item.id)
-                                onQueryChange("")
-                            },
-                        )
-                    }
+        Spacer(modifier = Modifier.height(4.dp))
+        if (results.isEmpty()) {
+            Text(
+                text = noResultsText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 140.dp)
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        MaterialTheme.shapes.small,
+                    )
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                results.take(12).forEach { item ->
+                    SearchResultRow(
+                        item = item,
+                        onClick = {
+                            onSelect(item.id)
+                            onQueryChange("")
+                        },
+                    )
                 }
             }
         }
@@ -104,6 +104,6 @@ private fun SearchResultRow(
 
 fun String.matchesEntitySearch(query: String): Boolean {
     val needle = query.trim().lowercase()
-    if (needle.isEmpty()) return false
+    if (needle.isEmpty()) return true
     return lowercase().contains(needle)
 }

@@ -125,6 +125,11 @@ fun BillingPanel(
     val billingBlockedByAttendance = pendingAttendance.isNotEmpty()
     val billingBlockedByUnassignedClass = soldPlanBlocksBillIssuance(soldPlanId)
     val billingBlocked = billingBlockedByAttendance || billingBlockedByUnassignedClass
+    val invoiceBlockedReason = when {
+        billingBlockedByAttendance -> attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+        billingBlockedByUnassignedClass -> soldPlanBlocksBillIssuanceMessage()
+        else -> null
+    }
 
     val spacing = GlideLayout.comfortable
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
@@ -295,6 +300,7 @@ fun BillingPanel(
                         selected = bill.id == selectedBillId,
                         payment = PaymentStore.forBill(bill.id),
                         billingBlocked = billingBlocked,
+                        invoiceBlockedReason = invoiceBlockedReason,
                         onClick = { selectedBillId = bill.id },
                         onIssuedChange = { issued ->
                             if (issued && billingBlockedByAttendance) {
@@ -338,6 +344,7 @@ fun BillingPanel(
                     BillDetailActions(
                         bill = selectedBill,
                         billingBlocked = billingBlocked,
+                        invoiceBlockedReason = invoiceBlockedReason,
                         onRecordPayment = {
                             paymentError = null
                             showPaymentDialog = true
@@ -531,11 +538,13 @@ private fun BillRow(
     selected: Boolean,
     payment: glide.model.Payment?,
     billingBlocked: Boolean,
+    invoiceBlockedReason: String?,
     onClick: () -> Unit,
     onIssuedChange: (Boolean) -> Unit,
     onGenerateInvoice: () -> Unit,
 ) {
     val canIssue = !billingBlocked || bill.isIssuedToCustomer()
+    var showInvoiceBlockedDialog by remember(bill.id) { mutableStateOf(false) }
     val background = if (selected) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
@@ -610,8 +619,14 @@ private fun BillRow(
                     )
                 }
                 GlideTextButton(
-                    onClick = onGenerateInvoice,
-                    enabled = canIssue,
+                    onClick = {
+                        if (!canIssue) {
+                            showInvoiceBlockedDialog = true
+                        } else {
+                            onGenerateInvoice()
+                        }
+                    },
+                    enabled = true,
                 ) {
                     Text("Invoice")
                 }
@@ -625,18 +640,37 @@ private fun BillRow(
             )
         }
     }
+    if (showInvoiceBlockedDialog) {
+        AlertDialog(
+            onDismissRequest = { showInvoiceBlockedDialog = false },
+            title = { Text("Cannot generate invoice") },
+            text = {
+                Text(
+                    invoiceBlockedReason
+                        ?: "This invoice cannot be generated right now.",
+                )
+            },
+            confirmButton = {
+                GlideTextButton(onClick = { showInvoiceBlockedDialog = false }) {
+                    Text("OK")
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun BillDetailActions(
     bill: Bill,
     billingBlocked: Boolean,
+    invoiceBlockedReason: String?,
     onRecordPayment: () -> Unit,
     onVoid: () -> Unit,
     onGenerateInvoice: () -> Unit,
     onGenerateReceipt: () -> Unit,
 ) {
     val canIssue = !billingBlocked || bill.isIssuedToCustomer()
+    var showInvoiceBlockedDialog by remember(bill.id) { mutableStateOf(false) }
     Column(
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -656,9 +690,15 @@ private fun BillDetailActions(
                 BillLineItemsSection(bill = bill)
                 Spacer(modifier = Modifier.height(8.dp))
                 GlideOutlinedButton(
-                    onClick = onGenerateInvoice,
+                    onClick = {
+                        if (!canIssue) {
+                            showInvoiceBlockedDialog = true
+                        } else {
+                            onGenerateInvoice()
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = canIssue,
+                    enabled = true,
                 ) {
                     Text("Generate invoice PDF")
                 }
@@ -689,9 +729,15 @@ private fun BillDetailActions(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 GlideOutlinedButton(
-                    onClick = onGenerateInvoice,
+                    onClick = {
+                        if (!canIssue) {
+                            showInvoiceBlockedDialog = true
+                        } else {
+                            onGenerateInvoice()
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = canIssue,
+                    enabled = true,
                 ) {
                     Text("Generate invoice PDF")
                 }
@@ -735,6 +781,23 @@ private fun BillDetailActions(
                 )
             }
         }
+    }
+    if (showInvoiceBlockedDialog) {
+        AlertDialog(
+            onDismissRequest = { showInvoiceBlockedDialog = false },
+            title = { Text("Cannot generate invoice") },
+            text = {
+                Text(
+                    invoiceBlockedReason
+                        ?: "This invoice cannot be generated right now.",
+                )
+            },
+            confirmButton = {
+                GlideTextButton(onClick = { showInvoiceBlockedDialog = false }) {
+                    Text("OK")
+                }
+            },
+        )
     }
 }
 

@@ -44,6 +44,7 @@ fun IsoDateField(
     modifier: Modifier = Modifier.fillMaxWidth(),
     yearRange: IntRange = (LocalDate.now().year - 2)..(LocalDate.now().year + 5),
     readOnly: Boolean = false,
+    isError: Boolean = false,
 ) {
     var showPicker by remember { mutableStateOf(false) }
     val displayValue = formatIsoDateForDisplay(value)
@@ -54,11 +55,13 @@ fun IsoDateField(
     val textStyle = MaterialTheme.typography.bodySmall.copy(
         color = MaterialTheme.colorScheme.onSurface,
     )
+    val errorColor = MaterialTheme.colorScheme.error
     val pickerFieldColors = OutlinedTextFieldDefaults.colors(
         disabledTextColor = MaterialTheme.colorScheme.onSurface,
-        disabledBorderColor = MaterialTheme.colorScheme.outline,
+        disabledBorderColor = if (isError) errorColor else MaterialTheme.colorScheme.outline,
         disabledContainerColor = Color.Transparent,
         disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        errorBorderColor = errorColor,
     )
 
     Column(modifier = modifier) {

@@ -34,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +60,7 @@ import glide.model.summaryLine
 import glide.model.DEFAULT_CURRENCY_CODE
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
+import glide.ui.shared.DeleteActionButton
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.ListFormPanelLayout
@@ -67,7 +69,11 @@ import glide.ui.shared.PanelListSearchField
 import glide.ui.shared.PanelListSearchSpacer
 import glide.ui.shared.matchesPanelListSearch
 import glide.ui.shared.panelListCountLabel
+import glide.ui.shared.FormValidationState
+import glide.ui.shared.ValidatedGlideOutlinedField
 import glide.ui.shared.rememberFormDirtyTracker
+import glide.ui.shared.rememberFormValidation
+import glide.ui.theme.glideOutlinedFieldColors
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideFieldLabel
@@ -92,6 +98,16 @@ private data class PlanFormState(
             PlanKind.SINGLE_LESSON_PLAN -> true
             PlanKind.MULTI_LESSON_PLAN -> lessonCount.toIntOrNull()?.let { it > 0 } == true
             PlanKind.CAMP -> lessonCount.toIntOrNull()?.let { it > 0 } == true
+        }
+    }
+
+    fun validationFieldKeys(): List<String> = buildList {
+        if (name.isBlank()) add("name")
+        if (parseMajorAmount(priceMajor) == null) add("priceMajor")
+        when (kind) {
+            PlanKind.MULTI_LESSON_PLAN, PlanKind.CAMP ->
+                if (lessonCount.toIntOrNull()?.let { it > 0 } != true) add("lessonCount")
+            PlanKind.SINGLE_LESSON_PLAN -> Unit
         }
     }
 
@@ -133,6 +149,8 @@ fun PlansPanel(modifier: Modifier = Modifier) {
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    val formValidation = rememberFormValidation()
+    val saveScope = rememberCoroutineScope()
     var listSearchQuery by remember { mutableStateOf("") }
 
     val soldPlanId = BillingPanelState.soldPlanId
@@ -140,16 +158,14 @@ fun PlansPanel(modifier: Modifier = Modifier) {
     val studentFilterId = StudentsPanelState.selectedStudentId
     val outboundPlanFilterId = PlansPanelState.selectedPlanId
     val plans = PlanStore.forPlansPanel(soldPlanId, clientFilterId, studentFilterId)
-    val filteredPlans = remember(plans, listSearchQuery) {
-        plans.filter { plan ->
-            matchesPanelListSearch(
-                listSearchQuery,
-                plan.name,
-                plan.kind.label,
-                plan.summaryLine(),
-                plan.notes,
-            )
-        }
+    val filteredPlans = plans.filter { plan ->
+        matchesPanelListSearch(
+            listSearchQuery,
+            plan.name,
+            plan.kind.label,
+            plan.summaryLine(),
+            plan.notes,
+        )
     }
     val searchActive = listSearchQuery.isNotBlank()
     val outboundPlanFilterLabel = outboundPlanFilterId?.let {
@@ -171,6 +187,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
         isCreating = false
         form.load(PlanFormState())
         formError = null
+        formValidation.clear()
     }
 
     fun clearSelection() {
@@ -183,6 +200,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
         isCreating = true
         form.load(PlanFormState())
         formError = null
+        formValidation.clear()
     }
 
     fun loadIntoForm(plan: Plan) {
@@ -200,6 +218,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
             ),
         )
         formError = null
+        formValidation.clear()
     }
 
     LaunchedEffect(soldPlanId, clientFilterId, studentFilterId) {
@@ -408,6 +427,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                             onStateChange = { form.draft = it },
                             spacing = spacing,
                             readOnly = planReadOnly,
+                            validation = formValidation,
                         )
 
                         if (planReadOnly) {
@@ -431,14 +451,15 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                     }
 
                     Spacer(modifier = Modifier.height(spacing.field))
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(spacing.field),
                     ) {
                         GlideButton(
                             onClick = {
-                                if (!form.draft.isValid()) {
+                                val invalidKeys = form.draft.validationFieldKeys()
+                                if (invalidKeys.isNotEmpty()) {
+                                    formValidation.reportInvalid(invalidKeys, saveScope)
                                     formError = when (form.draft.kind) {
                                         PlanKind.SINGLE_LESSON_PLAN -> "Name and a valid price per person are required."
                                         PlanKind.MULTI_LESSON_PLAN -> "Name, class count, and a valid price per person are required."
@@ -448,10 +469,12 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                                 }
                                 val plan = form.draft.toPlan()
                                 if (plan == null) {
+                                    formValidation.reportInvalid(listOf("lessonCount"), saveScope)
                                     formError = "Count must be a positive number."
                                     return@GlideButton
                                 }
                                 formError = null
+                                formValidation.clear()
                                 if (isCreating) {
                                     PlanStore.create(plan)
                                     loadIntoForm(plan)
@@ -485,12 +508,11 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                         }
 
                         if (!isCreating) {
-                            GlideOutlinedButton(
+                            DeleteActionButton(
                                 onClick = { showDeleteConfirm = true },
                                 enabled = selectedId?.let { PlanStore.canDelete(it) } == true,
-                            ) {
-                                Text("Delete", color = MaterialTheme.colorScheme.error)
-                            }
+                                blockedReason = selectedId?.let { PlanStore.planDeletionBlockReason(it) },
+                            )
                         }
                     }
                 }
@@ -525,6 +547,7 @@ fun PlansPanel(modifier: Modifier = Modifier) {
                 }
             },
             continueEnabled = blockReason == null,
+            blockedReason = blockReason,
         )
     }
 }
@@ -587,6 +610,7 @@ private fun PlanForm(
     onStateChange: (PlanFormState) -> Unit,
     spacing: GlideLayout.Spacing,
     readOnly: Boolean = false,
+    validation: FormValidationState,
 ) {
     var kindExpanded by remember { mutableStateOf(false) }
 
@@ -596,7 +620,8 @@ private fun PlanForm(
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {
-        GlideOutlinedField(
+        validation.ValidatedGlideOutlinedField(
+            fieldKey = "name",
             value = state.name,
             onValueChange = { onStateChange(state.copy(name = it)) },
             label = "Plan name",
@@ -621,10 +646,7 @@ private fun PlanForm(
                     textStyle = MaterialTheme.typography.bodySmall.copy(
                         color = MaterialTheme.colorScheme.onSurface,
                     ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    ),
+                    colors = glideOutlinedFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
@@ -684,7 +706,8 @@ private fun PlanForm(
     ) {
         when (state.kind) {
             PlanKind.MULTI_LESSON_PLAN -> {
-                GlideOutlinedField(
+                validation.ValidatedGlideOutlinedField(
+                    fieldKey = "lessonCount",
                     value = state.lessonCount,
                     onValueChange = { onStateChange(state.copy(lessonCount = it.filter { c -> c.isDigit() })) },
                     label = "Number of classes",
@@ -715,7 +738,8 @@ private fun PlanForm(
                 }
             }
             PlanKind.CAMP -> {
-                GlideOutlinedField(
+                validation.ValidatedGlideOutlinedField(
+                    fieldKey = "lessonCount",
                     value = state.lessonCount,
                     onValueChange = { onStateChange(state.copy(lessonCount = it.filter { c -> c.isDigit() })) },
                     label = "Number of days",
@@ -746,7 +770,8 @@ private fun PlanForm(
         spacing = spacing,
         role = FormPanelSectionRole.Tertiary,
     ) {
-        GlideOutlinedField(
+        validation.ValidatedGlideOutlinedField(
+            fieldKey = "priceMajor",
             value = state.priceMajor,
             onValueChange = { onStateChange(state.copy(priceMajor = it)) },
             label = "Price per person",

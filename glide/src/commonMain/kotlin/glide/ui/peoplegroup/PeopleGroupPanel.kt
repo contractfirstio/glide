@@ -35,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -96,7 +97,12 @@ import glide.ui.shared.PanelListSearchField
 import glide.ui.shared.PanelListSearchSpacer
 import glide.ui.shared.matchesPanelListSearch
 import glide.ui.shared.panelListCountLabel
+import glide.ui.shared.FormValidationAnchor
+import glide.ui.shared.FormValidationState
+import glide.ui.shared.ValidatedIsoDateField
 import glide.ui.shared.rememberFormDirtyTracker
+import glide.ui.shared.rememberFormValidation
+import glide.ui.theme.glideOutlinedFieldColors
 import glide.ui.theme.GlideTextButton
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -190,6 +196,31 @@ private data class LeadFormState(
 
     fun hasPlanSelected(): Boolean = !planId.isNullOrBlank()
 
+    fun hasClassParticipant(): Boolean {
+        val mainClientAttends = mainClientId != null || clientName.isNotBlank()
+        return (mainClientAttends && this.mainClientAttendsClass) || studentIds.isNotEmpty()
+    }
+
+    fun leadSaveValidationKeys(): List<String> = buildList {
+        val linkedClientExists = mainClientId != null && ClientStore.findById(mainClientId) != null
+        if (!linkedClientExists && clientName.isBlank()) {
+            add("clientLink")
+            add("clientName")
+        }
+    }
+
+    fun soldValidationKeys(): List<String> = buildList {
+        val linkedClientExists = mainClientId != null && ClientStore.findById(mainClientId) != null
+        if (!linkedClientExists && clientName.isBlank()) {
+            add("clientLink")
+            add("clientName")
+        }
+        if (!linkedClientExists && email.isBlank()) add("clientEmail")
+        if (!hasPlanSelected()) add("plan")
+        if (planStartDate.isBlank() || parseIsoLocalDate(planStartDate) == null) add("planStartDate")
+        if (!hasClassParticipant()) add("students")
+    }
+
     fun toLead(
         existingId: String? = null,
         createdAtMillis: Long = System.currentTimeMillis(),
@@ -256,6 +287,8 @@ private fun PeopleGroupPanel(
     var isCreating by remember(ui.allowCreate) { mutableStateOf(ui.allowCreate) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    val formValidation = rememberFormValidation()
+    val saveScope = rememberCoroutineScope()
     var cloneMessage by remember { mutableStateOf<String?>(null) }
     var listSearchQuery by remember { mutableStateOf("") }
 
@@ -309,12 +342,9 @@ private fun PeopleGroupPanel(
         )
         else -> SoldPlanStore.forSoldPlansPanel(clientFilterId, studentFilterId, planFilterId)
     }
-    val filteredLeads = remember(leads, listSearchQuery) {
-        leads.filter { lead -> leadMatchesPanelSearch(lead, listSearchQuery) }
-    }
-    val filteredSoldPlans = remember(soldPlans, listSearchQuery) {
-        soldPlans.filter { group -> soldPlanMatchesPanelSearch(group, listSearchQuery) }
-    }
+    // Do not remember filtered lists: store lists keep the same reference when items are added.
+    val filteredLeads = leads.filter { lead -> leadMatchesPanelSearch(lead, listSearchQuery) }
+    val filteredSoldPlans = soldPlans.filter { group -> soldPlanMatchesPanelSearch(group, listSearchQuery) }
     val searchActive = listSearchQuery.isNotBlank()
     val groupCount = if (ui.isLeadPanel) leads.size else soldPlans.size
     val filteredGroupCount = if (ui.isLeadPanel) filteredLeads.size else filteredSoldPlans.size
@@ -339,6 +369,7 @@ private fun PeopleGroupPanel(
         isCreating = ui.allowCreate
         form.load(LeadFormState(planStartDate = todayIsoDate()))
         formError = null
+        formValidation.clear()
     }
 
     fun clearLocalSelection() {
@@ -346,6 +377,7 @@ private fun PeopleGroupPanel(
         isCreating = false
         form.load(LeadFormState(planStartDate = todayIsoDate()))
         formError = null
+        formValidation.clear()
     }
 
     fun clearSelection() {
@@ -361,6 +393,7 @@ private fun PeopleGroupPanel(
         selectedId = group.id
         isCreating = false
         formError = null
+        formValidation.clear()
         if (schedulingSoldPlansPanel) {
             SchedulePanelState.onSoldPlanSelected(group.id)
         }
@@ -386,6 +419,7 @@ private fun PeopleGroupPanel(
             ),
         )
         formError = null
+        formValidation.clear()
     }
 
     val pendingLeadId = LeadNavigation.pendingLeadId
@@ -794,6 +828,7 @@ private fun PeopleGroupPanel(
                                     isSoldPlan = !ui.isLeadPanel,
                                     showPipelineStatus = ui.showPipelineStatus,
                                     showPlanPicker = ui.showPlanPicker,
+                                    validation = formValidation,
                                 )
 
                                 formError?.let { error ->
@@ -832,10 +867,15 @@ private fun PeopleGroupPanel(
                                 GlideButton(
                                     onClick = {
                                         formError = null
-                                        if (ui.isLeadPanel && !form.draft.isValidForLead()) {
-                                            formError = "Link a client or enter a new client name."
-                                            return@GlideButton
+                                        if (ui.isLeadPanel) {
+                                            val invalidKeys = form.draft.leadSaveValidationKeys()
+                                            if (invalidKeys.isNotEmpty()) {
+                                                formValidation.reportInvalid(invalidKeys, saveScope)
+                                                formError = "Link a client or enter a new client name."
+                                                return@GlideButton
+                                            }
                                         }
+                                        formValidation.clear()
                                         if (isCreating && ui.allowCreate) {
                                             val group = form.draft.toLead()
                                             LeadStore.create(group)
@@ -864,18 +904,28 @@ private fun PeopleGroupPanel(
                                 if (ui.showConvertToCustomer && !isCreating && selectedId != null) {
                                     GlideOutlinedButton(
                                         onClick = {
-                                            if (!form.draft.isValidForLead()) {
-                                                formError = "Main client name is required."
+                                            formError = null
+                                            if (form.isDirty) {
+                                                formError = "Save changes before marking as sold."
                                                 return@GlideOutlinedButton
                                             }
-                                            if (!form.draft.hasPlanSelected()) {
-                                                formError = "Select a plan before marking as sold."
-                                                return@GlideOutlinedButton
-                                            }
-                                            if (form.draft.planStartDate.isBlank() ||
-                                                parseIsoLocalDate(form.draft.planStartDate) == null
-                                            ) {
-                                                formError = "Plan start date is required before marking as sold."
+                                            val soldInvalidKeys = form.draft.soldValidationKeys()
+                                            if (soldInvalidKeys.isNotEmpty()) {
+                                                formValidation.reportInvalid(soldInvalidKeys, saveScope)
+                                                formError = when {
+                                                    "clientName" in soldInvalidKeys || "clientLink" in soldInvalidKeys ->
+                                                        "Main client name is required."
+                                                    "clientEmail" in soldInvalidKeys ->
+                                                        "Email is required before marking as sold."
+                                                    "plan" in soldInvalidKeys ->
+                                                        "Select a plan before marking as sold."
+                                                    "planStartDate" in soldInvalidKeys ->
+                                                        "Plan start date is required before marking as sold."
+                                                    "students" in soldInvalidKeys ->
+                                                        "At least one class participant is required before marking as sold."
+                                                    else ->
+                                                        "Complete all required fields before marking as sold."
+                                                }
                                                 return@GlideOutlinedButton
                                             }
                                             val existing = LeadStore.findById(selectedId!!)
@@ -884,11 +934,6 @@ private fun PeopleGroupPanel(
                                                 existingId = existing.id,
                                                 createdAtMillis = existing.createdAtMillis,
                                             )
-                                            if (!updated.hasClassParticipant()) {
-                                                formError =
-                                                    "At least one class participant is required before marking as sold."
-                                                return@GlideOutlinedButton
-                                            }
                                             LeadStore.update(updated)
                                             if (!LeadStore.convertToSoldPlan(selectedId!!)) {
                                                 formError =
@@ -896,13 +941,10 @@ private fun PeopleGroupPanel(
                                                 return@GlideOutlinedButton
                                             }
                                             formError = null
+                                            formValidation.clear()
                                             resetFormForCreate()
                                         },
-                                        enabled = canMarkLeadSold(
-                                            groupId = selectedId,
-                                            isDirty = form.isDirty,
-                                            hasPlanSelected = form.draft.hasPlanSelected(),
-                                        ),
+                                        enabled = true,
                                     ) {
                                         Text("Sold")
                                     }
@@ -964,6 +1006,7 @@ private fun PeopleGroupPanel(
                 }
             },
             continueEnabled = soldPlanBlockReason == null,
+            blockedReason = soldPlanBlockReason,
         )
     }
 }
@@ -1440,6 +1483,7 @@ private fun LeadForm(
     isSoldPlan: Boolean,
     showPipelineStatus: Boolean,
     showPlanPicker: Boolean,
+    validation: FormValidationState,
 ) {
     var statusExpanded by remember { mutableStateOf(false) }
 
@@ -1464,6 +1508,7 @@ private fun LeadForm(
                 )
             },
             spacing = spacing,
+            validation = validation,
         )
     }
     if (!isSoldPlan) {
@@ -1483,6 +1528,7 @@ private fun LeadForm(
             selectedIds = state.studentIds,
             onSelectionChange = { onStateChange(state.copy(studentIds = it)) },
             spacing = spacing,
+            validation = validation,
         )
     }
 
@@ -1499,7 +1545,11 @@ private fun LeadForm(
         ) {
             PlanDropdown(
                 selectedPlanId = state.planId,
-                onPlanSelected = { onStateChange(state.copy(planId = it)) },
+                onPlanSelected = {
+                    validation.clearKey("plan")
+                    onStateChange(state.copy(planId = it))
+                },
+                validation = validation,
             )
             if (!isSoldPlan) {
                 Spacer(modifier = Modifier.height(spacing.field))
@@ -1594,7 +1644,8 @@ private fun LeadForm(
             spacing = spacing,
             role = FormPanelSectionRole.Tertiary,
         ) {
-            IsoDateField(
+            validation.ValidatedIsoDateField(
+                fieldKey = "planStartDate",
                 label = "Start date",
                 value = state.planStartDate,
                 onValueChange = { onStateChange(state.copy(planStartDate = it)) },
@@ -1608,6 +1659,7 @@ private fun LeadForm(
 private fun PlanDropdown(
     selectedPlanId: String?,
     onPlanSelected: (String) -> Unit,
+    validation: FormValidationState,
 ) {
     val plans = PlanStore.plans
     var expanded by remember { mutableStateOf(false) }
@@ -1615,6 +1667,7 @@ private fun PlanDropdown(
     val displayValue = selectedPlan?.let { "${it.name} (${it.summaryLine()})" }
         ?: if (plans.isEmpty()) "No plans available" else "Select a plan"
 
+    FormValidationAnchor(validation = validation, fieldKey = "plan") {
     Column {
         GlideFieldLabel("Plan")
         Spacer(modifier = Modifier.height(2.dp))
@@ -1627,15 +1680,13 @@ private fun PlanDropdown(
                 onValueChange = {},
                 readOnly = true,
                 enabled = plans.isNotEmpty(),
+                isError = validation.isInvalid("plan"),
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 shape = MaterialTheme.shapes.small,
                 textStyle = MaterialTheme.typography.bodySmall.copy(
                     color = MaterialTheme.colorScheme.onSurface,
                 ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                ),
+                colors = glideOutlinedFieldColors(isError = validation.isInvalid("plan")),
                 modifier = Modifier
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
@@ -1673,5 +1724,6 @@ private fun PlanDropdown(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
     }
 }

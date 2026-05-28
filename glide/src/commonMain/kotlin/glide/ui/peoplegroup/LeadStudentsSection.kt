@@ -1,5 +1,6 @@
 package glide.ui.peoplegroup
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +21,8 @@ import glide.ui.leads.DateOfBirthField
 import glide.ui.shared.formatPersonLabel
 import glide.ui.theme.GlideFieldLabel
 import glide.ui.theme.GlideOutlinedButton
+import glide.ui.shared.FormValidationAnchor
+import glide.ui.shared.FormValidationState
 import glide.ui.theme.GlideOutlinedField
 
 @Composable
@@ -27,6 +30,7 @@ fun LeadStudentsSection(
     selectedIds: List<String>,
     onSelectionChange: (List<String>) -> Unit,
     spacing: GlideLayout.Spacing,
+    validation: FormValidationState,
 ) {
     var studentSearchQuery by remember { mutableStateOf("") }
     var newName by remember { mutableStateOf("") }
@@ -36,24 +40,28 @@ fun LeadStudentsSection(
     val linked = selectedIds.mapNotNull { StudentStore.findById(it) }
     val studentSearchResults = remember(studentSearchQuery, selectedIds, StudentStore.all) {
         val query = studentSearchQuery.trim()
-        if (query.isEmpty()) {
-            emptyList()
-        } else {
-            StudentStore.all
-                .filter { it.id !in selectedIds }
-                .filter { person ->
-                    listOf(person.name, person.dateOfBirth, person.notes)
-                        .any { it.matchesEntitySearch(query) }
-                }
-                .map { it.toSearchItem() }
-        }
+        StudentStore.all
+            .filter { it.id !in selectedIds }
+            .filter { person ->
+                listOf(person.name, person.dateOfBirth, person.notes)
+                    .any { it.matchesEntitySearch(query) }
+            }
+            .map { it.toSearchItem() }
     }
 
+    FormValidationAnchor(validation = validation, fieldKey = "students") {
     LeadPanelSection(
         title = "Students",
         description = "Family or others on this lead — separate from the main client.",
         spacing = spacing,
         role = LeadPanelSectionRole.Secondary,
+        modifier = Modifier.then(
+            if (validation.isInvalid("students")) {
+                Modifier.border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.small)
+            } else {
+                Modifier
+            },
+        ),
     ) {
         if (linked.isNotEmpty()) {
             LeadStudentsLinkedBox {
@@ -62,7 +70,10 @@ fun LeadStudentsSection(
                 linked.forEachIndexed { index, person ->
                     LeadStudentLinkedRow(
                         person = person,
-                        onRemove = { onSelectionChange(selectedIds.filter { it != person.id }) },
+                        onRemove = {
+                            onSelectionChange(selectedIds.filter { it != person.id })
+                            validation.clearKey("students")
+                        },
                     )
                     if (index < linked.lastIndex) {
                         Spacer(modifier = Modifier.height(spacing.field))
@@ -83,7 +94,10 @@ fun LeadStudentsSection(
                 query = studentSearchQuery,
                 onQueryChange = { studentSearchQuery = it },
                 results = studentSearchResults,
-                onSelect = { id -> onSelectionChange(selectedIds + id) },
+                onSelect = { id ->
+                    onSelectionChange(selectedIds + id)
+                    validation.clearKey("students")
+                },
                 noResultsText = "No saved people match. Create a new student below instead.",
             )
         }
@@ -120,6 +134,7 @@ fun LeadStudentsSection(
                         val person = Student(name = trimmed, dateOfBirth = newDateOfBirth.trim())
                         StudentStore.create(person)
                         onSelectionChange(selectedIds + person.id)
+                        validation.clearKey("students")
                         newName = ""
                         newDateOfBirth = ""
                         addError = null
@@ -145,6 +160,7 @@ fun LeadStudentsSection(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
     }
 }
 

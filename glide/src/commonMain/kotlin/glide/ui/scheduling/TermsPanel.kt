@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +43,7 @@ import glide.model.Term
 import glide.model.findOverlappingTerm
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
+import glide.ui.shared.DeleteActionButton
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
 import glide.ui.shared.ListFormPanelLayout
@@ -50,7 +52,11 @@ import glide.ui.shared.PanelListSearchField
 import glide.ui.shared.PanelListSearchSpacer
 import glide.ui.shared.matchesPanelListSearch
 import glide.ui.shared.panelListCountLabel
+import glide.ui.shared.FormValidationState
+import glide.ui.shared.ValidatedGlideOutlinedField
+import glide.ui.shared.ValidatedIsoDateField
 import glide.ui.shared.rememberFormDirtyTracker
+import glide.ui.shared.rememberFormValidation
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.leads.parseIsoDateToMillis
 import glide.ui.shared.IsoDateField
@@ -74,6 +80,15 @@ private data class TermFormState(
         val startMillis = parseIsoDateToMillis(startDate) ?: return false
         val endMillis = parseIsoDateToMillis(endDate) ?: return false
         return endMillis >= startMillis
+    }
+
+    fun validationFieldKeys(): List<String> = buildList {
+        if (name.isBlank()) add("name")
+        val startMillis = parseIsoDateToMillis(startDate)
+        val endMillis = parseIsoDateToMillis(endDate)
+        if (startMillis == null) add("startDate")
+        if (endMillis == null) add("endDate")
+        if (startMillis != null && endMillis != null && endMillis < startMillis) add("endDate")
     }
 
     fun toTerm(
@@ -106,6 +121,8 @@ fun TermsPanel(modifier: Modifier = Modifier) {
     var isCreating by remember { mutableStateOf(true) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    val formValidation = rememberFormValidation()
+    val saveScope = rememberCoroutineScope()
     var listSearchQuery by remember { mutableStateOf("") }
 
     val allTerms = TermStore.sortedForPanel()
@@ -142,6 +159,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
         isCreating = true
         form.load(TermFormState())
         formError = null
+        formValidation.clear()
     }
 
     fun clearSelection() {
@@ -167,6 +185,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
             ),
         )
         formError = null
+        formValidation.clear()
     }
 
     fun loadIntoForm(term: Term) {
@@ -183,6 +202,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
             ),
         )
         formError = null
+        formValidation.clear()
     }
 
     LaunchedEffect(allTerms, selectedId, locationFilterId) {
@@ -366,6 +386,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                             onStateChange = { form.draft = it },
                             spacing = spacing,
                             readOnly = termReadOnly,
+                            validation = formValidation,
                         )
 
                         if (termReadOnly) {
@@ -389,14 +410,15 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                     }
 
                     Spacer(modifier = Modifier.height(spacing.field))
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(spacing.field),
                     ) {
                         GlideButton(
                             onClick = {
-                                if (!form.draft.isValid()) {
+                                val invalidKeys = form.draft.validationFieldKeys()
+                                if (invalidKeys.isNotEmpty()) {
+                                    formValidation.reportInvalid(invalidKeys, saveScope)
                                     formError = "Name, start date, and end date are required. End must be on or after start."
                                     return@GlideButton
                                 }
@@ -412,6 +434,7 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                                     return@GlideButton
                                 }
                                 formError = null
+                                formValidation.clear()
                                 if (isCreating) {
                                     if (!TermStore.create(candidate)) {
                                         formError = "Could not create term — dates overlap an existing term."
@@ -445,12 +468,16 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                         }
 
                         if (!isCreating) {
-                            GlideOutlinedButton(
+                            DeleteActionButton(
                                 onClick = { showDeleteConfirm = true },
                                 enabled = selectedId?.let { TermStore.canDelete(it) } == true,
-                            ) {
-                                Text("Delete", color = MaterialTheme.colorScheme.error)
-                            }
+                                blockedReason = selectedId
+                                    ?.let { id -> TermStore.classCount(id) }
+                                    ?.takeIf { it > 0 }
+                                    ?.let { count ->
+                                        "Used by $count class${if (count == 1) "" else "es"}. Remove it from those classes first."
+                                    },
+                            )
                         }
                     }
                 }
@@ -489,6 +516,11 @@ fun TermsPanel(modifier: Modifier = Modifier) {
                 }
             },
             continueEnabled = !attachedToClass,
+            blockedReason = if (attachedToClass) {
+                "Remove this term from linked classes before deleting."
+            } else {
+                null
+            },
         )
     }
 }
@@ -555,6 +587,7 @@ private fun TermForm(
     onStateChange: (TermFormState) -> Unit,
     spacing: GlideLayout.Spacing,
     readOnly: Boolean = false,
+    validation: FormValidationState,
 ) {
     FormPanelSection(
         title = "Term identity",
@@ -562,7 +595,8 @@ private fun TermForm(
         spacing = spacing,
         role = FormPanelSectionRole.Primary,
     ) {
-        GlideOutlinedField(
+        validation.ValidatedGlideOutlinedField(
+            fieldKey = "name",
             value = state.name,
             onValueChange = { onStateChange(state.copy(name = it)) },
             label = "Term name",
@@ -579,14 +613,16 @@ private fun TermForm(
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
-        IsoDateField(
+        validation.ValidatedIsoDateField(
+            fieldKey = "startDate",
             label = "Start date",
             value = state.startDate,
             onValueChange = { onStateChange(state.copy(startDate = it)) },
             readOnly = readOnly,
         )
         Spacer(modifier = Modifier.height(spacing.field))
-        IsoDateField(
+        validation.ValidatedIsoDateField(
+            fieldKey = "endDate",
             label = "End date",
             value = state.endDate,
             onValueChange = { onStateChange(state.copy(endDate = it)) },

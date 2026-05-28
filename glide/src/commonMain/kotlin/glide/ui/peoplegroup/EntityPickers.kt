@@ -215,23 +215,19 @@ fun StudentLinkSection(
     val linked = selectedIds.mapNotNull { StudentStore.findById(it) }
     val studentSearchResults = remember(studentSearchQuery, selectedIds, StudentStore.all) {
         val query = studentSearchQuery.trim()
-        if (query.isEmpty()) {
-            emptyList()
-        } else {
-            StudentStore.all
-                .filter { it.id !in selectedIds }
-                .filter { person ->
-                    listOf(person.name, person.dateOfBirth, person.notes)
-                        .any { it.matchesEntitySearch(query) }
-                }
-                .map { person ->
-                    SearchResultItem(
-                        id = person.id,
-                        primaryLabel = formatPersonLabel(person.name, person.dateOfBirth),
-                        secondaryLabel = person.notes.takeIf { it.isNotBlank() },
-                    )
-                }
-        }
+        StudentStore.all
+            .filter { it.id !in selectedIds }
+            .filter { person ->
+                listOf(person.name, person.dateOfBirth, person.notes)
+                    .any { it.matchesEntitySearch(query) }
+            }
+            .map { person ->
+                SearchResultItem(
+                    id = person.id,
+                    primaryLabel = formatPersonLabel(person.name, person.dateOfBirth),
+                    secondaryLabel = person.notes.takeIf { it.isNotBlank() },
+                )
+            }
     }
 
     Text(
