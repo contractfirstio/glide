@@ -44,6 +44,8 @@ import glide.data.StudentStore
 import glide.data.resolveMainClient
 import glide.data.findSoldPlanById
 import glide.model.Student
+import glide.debug.GlidePanelDebug
+import glide.debug.PanelDebugStateEffect
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.DeleteActionButton
@@ -126,6 +128,21 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
     }
     val clientFilterLabel = clientFilterId?.let { ClientStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val planFilterLabel = planFilterId?.let { PlanStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+
+    PanelDebugStateEffect(
+        GlidePanelDebug.Panel.STUDENTS,
+        selectedId,
+        soldPlanId,
+        clientFilterId,
+        planFilterId,
+        studentFilterId,
+        listSearchQuery,
+        people.size,
+        StudentStore.all.size,
+    ) {
+        "selected=$selectedId visible=${people.size}/${StudentStore.all.size} " +
+            "search='$listSearchQuery' || ${GlidePanelDebug.globalSnapshot()}"
+    }
 
     fun clearLocalSelection() {
         selectedId = null
@@ -531,6 +548,7 @@ private fun StudentForm(
             value = state.name,
             onValueChange = { onStateChange(state.copy(name = it)) },
             label = "Name",
+            required = true,
         )
         Spacer(modifier = Modifier.height(spacing.field))
         DateOfBirthField(

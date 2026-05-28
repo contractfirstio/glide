@@ -95,6 +95,7 @@ fun FormValidationState.ValidatedGlideOutlinedField(
     placeholder: String? = null,
     fieldHeight: Dp = GlideDimensions.fieldHeight,
     fieldModifier: Modifier = Modifier,
+    required: Boolean = false,
 ) {
     FormValidationAnchor(validation = this, fieldKey = fieldKey, modifier = modifier) {
         GlideOutlinedField(
@@ -112,6 +113,7 @@ fun FormValidationState.ValidatedGlideOutlinedField(
             fieldHeight = fieldHeight,
             fieldModifier = fieldModifier,
             isError = isInvalid(fieldKey),
+            required = required,
         )
     }
 }
@@ -124,6 +126,7 @@ fun FormValidationState.ValidatedIsoDateField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
     readOnly: Boolean = false,
+    required: Boolean = false,
 ) {
     FormValidationAnchor(validation = this, fieldKey = fieldKey, modifier = modifier) {
         IsoDateField(
@@ -135,6 +138,7 @@ fun FormValidationState.ValidatedIsoDateField(
             },
             readOnly = readOnly,
             isError = isInvalid(fieldKey),
+            required = required,
         )
     }
 }
@@ -149,6 +153,7 @@ fun FormValidationState.ValidatedIsoDateRangeField(
     onValueChange: (startIso: String, endIso: String) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
     readOnly: Boolean = false,
+    required: Boolean = false,
 ) {
     FormValidationAnchor(validation = this, fieldKey = startFieldKey, modifier = modifier) {
         IsoDateRangeField(
@@ -162,6 +167,7 @@ fun FormValidationState.ValidatedIsoDateRangeField(
             },
             readOnly = readOnly,
             isError = isInvalid(startFieldKey) || isInvalid(endFieldKey),
+            required = required,
         )
     }
 }

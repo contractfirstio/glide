@@ -39,6 +39,8 @@ import glide.data.ClassStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
 import glide.data.validateTermDisablingRollingPlans
+import glide.debug.GlidePanelDebug
+import glide.debug.PanelDebugStateEffect
 import glide.model.Term
 import glide.model.findOverlappingTerm
 import glide.ui.layout.GlideLayout
@@ -151,6 +153,21 @@ fun TermsPanel(modifier: Modifier = Modifier) {
     val highlightedTermId = termFilterId ?: selectedId
     val locationFilterLabel = locationFilterId?.let {
         LocationStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() }
+    }
+
+    PanelDebugStateEffect(
+        GlidePanelDebug.Panel.TERMS,
+        selectedId,
+        isCreating,
+        termFilterId,
+        locationFilterId,
+        classSyncId,
+        listSearchQuery,
+        terms.size,
+        allTerms.size,
+    ) {
+        "selected=$selectedId creating=$isCreating visible=${terms.size}/${allTerms.size} " +
+            "search='$listSearchQuery' || ${GlidePanelDebug.globalSnapshot()}"
     }
 
     fun clearLocalSelection() {
@@ -601,6 +618,7 @@ private fun TermForm(
             label = "Term name",
             placeholder = "e.g. Spring 2026",
             readOnly = readOnly,
+            required = true,
         )
     }
 
@@ -622,6 +640,7 @@ private fun TermForm(
                 onStateChange(state.copy(startDate = startIso, endDate = endIso))
             },
             readOnly = readOnly,
+            required = true,
         )
     }
 

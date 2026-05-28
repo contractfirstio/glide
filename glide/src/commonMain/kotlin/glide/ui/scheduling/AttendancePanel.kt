@@ -35,6 +35,8 @@ import glide.data.RollingPlanBillingService
 import glide.data.LocationStore
 import glide.data.ClassStore
 import glide.data.attendeesForClass
+import glide.debug.GlidePanelDebug
+import glide.debug.PanelDebugStateEffect
 import glide.model.parseIsoLocalDate
 import glide.model.AttendanceStatus
 import glide.model.formatMoney
@@ -109,6 +111,20 @@ fun AttendancePanel(
                 attendee.householdLabel,
             )
         }
+    }
+
+    PanelDebugStateEffect(
+        GlidePanelDebug.Panel.ATTENDANCE,
+        session.classId,
+        session.sessionDate,
+        scheduledClass?.id,
+        attendees.size,
+        isSubmitted,
+        canEditAttendance,
+        listSearchQuery,
+    ) {
+        "class=${session.classId} date=${session.sessionDate} attendees=${filteredAttendees.size}/${attendees.size} " +
+            "submitted=$isSubmitted canEdit=$canEditAttendance || ${GlidePanelDebug.globalSnapshot()}"
     }
 
     LaunchedEffect(session, attendeeKeys) {

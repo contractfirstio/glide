@@ -27,9 +27,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun GlideFieldLabel(text: String) {
+fun GlideFieldLabel(
+    text: String,
+    required: Boolean = false,
+) {
+    val labelText = if (required) "$text *" else text
     Text(
-        text = text.uppercase(),
+        text = labelText.uppercase(),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
     )
@@ -72,6 +76,7 @@ fun GlideOutlinedField(
     trailingContent: @Composable (() -> Unit)? = null,
     fieldModifier: Modifier = Modifier,
     isError: Boolean = false,
+    required: Boolean = false,
 ) {
     val textStyle = MaterialTheme.typography.bodySmall.copy(
         color = MaterialTheme.colorScheme.onSurface,
@@ -82,7 +87,7 @@ fun GlideOutlinedField(
     val fieldColors = glideOutlinedFieldColors(isError = isError)
 
     Column(modifier = modifier) {
-        GlideFieldLabel(label)
+        GlideFieldLabel(label, required = required)
         Spacer(modifier = Modifier.height(2.dp))
         OutlinedTextField(
             value = value,

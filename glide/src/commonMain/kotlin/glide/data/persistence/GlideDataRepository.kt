@@ -14,12 +14,22 @@ import glide.data.SoldPlanEnrollmentStore
 import glide.data.SoldPlanStore
 import glide.data.StudentStore
 import glide.data.TermStore
+import glide.debug.GlidePanelDebug
 
 object GlideDataRepository {
     private const val SAVE_DEBOUNCE_MS = 400L
 
     fun loadIntoStores() {
-        val snapshot = readDataSnapshot() ?: return
+        val snapshot = readDataSnapshot()
+        if (snapshot == null) {
+            GlidePanelDebug.log(GlidePanelDebug.Panel.DATA, "loadIntoStores", "no snapshot file")
+            return
+        }
+        GlidePanelDebug.log(
+            GlidePanelDebug.Panel.DATA,
+            "loadIntoStores",
+            "plans=${snapshot.plans.size} soldPlans=${snapshot.soldPlans.size} classes=${snapshot.classes.size}",
+        )
         PlanStore.replaceAll(snapshot.plans)
         ClientStore.replaceAll(snapshot.clients)
         StudentStore.replaceAll(snapshot.students)
@@ -46,7 +56,13 @@ object GlideDataRepository {
     }
 
     fun saveNow() {
-        writeDataSnapshot(collectSnapshotFromStores())
+        val snapshot = collectSnapshotFromStores()
+        GlidePanelDebug.log(
+            GlidePanelDebug.Panel.DATA,
+            "saveNow",
+            "plans=${snapshot.plans.size} soldPlans=${snapshot.soldPlans.size} classes=${snapshot.classes.size}",
+        )
+        writeDataSnapshot(snapshot)
     }
 
     internal fun onStoresMutated() {

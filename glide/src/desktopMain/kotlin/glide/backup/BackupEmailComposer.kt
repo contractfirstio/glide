@@ -1,5 +1,6 @@
 package glide.backup
 
+import glide.data.AppSettingsStore
 import java.awt.Desktop
 import java.io.File
 import java.net.URI
@@ -46,6 +47,7 @@ internal object BackupEmailComposer {
     ): Boolean = runCatching {
         val eml = BackupEmlDraft.write(
             to = recipient,
+            from = AppSettingsStore.companyEmail,
             subject = subject,
             plainBody = plainBody,
             attachment = zip,

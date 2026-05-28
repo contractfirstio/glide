@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import glide.data.AppViewMode
 import glide.data.AppViewState
+import glide.debug.GlidePanelDebug
 import glide.data.PanelLayoutSnapshot
 import glide.data.WorkspacePreset
 import glide.data.WorkspaceUiSettings
@@ -85,6 +86,11 @@ object PanelWorkspace {
     }
 
     fun setVisible(slot: Int, visible: Boolean, mode: AppViewMode = AppViewState.mode) {
+        GlidePanelDebug.log(
+            GlidePanelDebug.Panel.WORKSPACE,
+            "setVisible",
+            "slot=$slot visible=$visible mode=$mode",
+        )
         when (mode) {
             AppViewMode.CUSTOMER_MANAGEMENT -> {
                 hiddenCustomerPanels = if (visible) {
@@ -168,6 +174,11 @@ object PanelWorkspace {
         slot in modeState(mode).dockedSlots
 
     fun expandFromDock(slot: Int, mode: AppViewMode = AppViewState.mode) {
+        GlidePanelDebug.log(
+            GlidePanelDebug.Panel.WORKSPACE,
+            "expandFromDock",
+            "slot=$slot mode=$mode",
+        )
         undock(slot, mode)
         expandFromDockRequest = mode to slot
         PanelZOrder.bringToFront(slot)
@@ -194,6 +205,11 @@ object PanelWorkspace {
         fill: Boolean = false,
         mode: AppViewMode = AppViewState.mode,
     ) {
+        GlidePanelDebug.log(
+            GlidePanelDebug.Panel.WORKSPACE,
+            "focusPanel",
+            "slot=$slot fill=$fill mode=$mode width=$windowWidthPx",
+        )
         if (!isVisible(slot, mode)) {
             setVisible(slot, visible = true, mode = mode)
         }

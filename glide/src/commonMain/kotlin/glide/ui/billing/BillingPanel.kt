@@ -34,6 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import glide.data.BillStore
+import glide.debug.GlidePanelDebug
+import glide.debug.PanelDebugStateEffect
 import glide.data.AttendanceCreditStore
 import glide.data.attendanceBlocksBillIssuanceMessage
 import glide.data.creditAppliedMinor
@@ -133,6 +135,21 @@ fun BillingPanel(
 
     val spacing = GlideLayout.comfortable
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
+
+    PanelDebugStateEffect(
+        GlidePanelDebug.Panel.BILLING,
+        soldPlanId,
+        group?.id,
+        enrollment?.id,
+        bills.size,
+        selectedBillId,
+        outstanding,
+        billingBlocked,
+    ) {
+        "soldPlan=$soldPlanId enrollment=${enrollment?.id} bills=${bills.size} " +
+            "selectedBill=$selectedBillId outstanding=$outstanding blocked=$billingBlocked || " +
+            GlidePanelDebug.globalSnapshot()
+    }
 
     LaunchedEffect(ongoingEnrollment?.id, ongoingEnrollment?.status) {
         ongoingEnrollment?.let { RollingPlanBillingService.syncRollingPlanBilling(it.soldPlanId) }

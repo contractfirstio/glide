@@ -13,6 +13,7 @@ import glide.data.AppViewMode
 import glide.data.AppViewState
 import glide.data.AttendancePanelState
 import glide.data.BillingPanelState
+import glide.debug.GlidePanelDebug
 import glide.ui.billing.BillingFloatingPanel
 import glide.ui.scheduling.PendingAttendanceAlertBanner
 import glide.ui.scheduling.rememberPendingAttendanceSessions
@@ -67,6 +68,25 @@ fun FloatingPanelsHost(modifier: Modifier = Modifier) {
 
             val attendanceVisible = AttendancePanelState.visible && viewMode == AppViewMode.SCHEDULING
             val attendanceSession = AttendancePanelState.sessionKey
+
+            LaunchedEffect(
+                viewMode,
+                billingVisible,
+                billingSoldPlanId,
+                attendanceVisible,
+                attendanceSession,
+                PanelWorkspace.maximizedSlot,
+                PanelWorkspace.tabActiveSlot,
+            ) {
+                GlidePanelDebug.log(
+                    GlidePanelDebug.Panel.FLOATING,
+                    "host",
+                    "mode=$viewMode billing={visible=$billingVisible soldPlan=$billingSoldPlanId} " +
+                        "attendance={visible=$attendanceVisible session=$attendanceSession} " +
+                        "workspace={max=${PanelWorkspace.maximizedSlot} tab=${PanelWorkspace.tabActiveSlot}} || " +
+                        GlidePanelDebug.globalSnapshot(),
+                )
+            }
 
             LaunchedEffect(billingVisible) {
                 if (billingVisible) {

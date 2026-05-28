@@ -104,6 +104,7 @@ fun LeadMainClientSection(
                         value = clientName,
                         onValueChange = { onStateChange(null, it, dateOfBirth, email, phone) },
                         label = "New client name",
+                        required = true,
                     )
                     Spacer(modifier = Modifier.height(spacing.field))
                     DateOfBirthField(
@@ -116,6 +117,7 @@ fun LeadMainClientSection(
                         value = email,
                         onValueChange = { onStateChange(null, clientName, dateOfBirth, it, phone) },
                         label = "New client email",
+                        required = true,
                     )
                     Spacer(modifier = Modifier.height(spacing.field))
                     validation.ValidatedGlideOutlinedField(

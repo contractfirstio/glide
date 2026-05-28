@@ -132,7 +132,10 @@ fun computeAllClassSessionDates(
 fun planScheduleCheckForClass(soldPlanId: String, scheduledClass: Class): PlanScheduleCheck? {
     val snapshot = SoldPlanEnrollmentStore.forSoldPlan(soldPlanId)?.planSnapshot ?: return null
     val required = requiredClassSessionsForPlan(snapshot)
-    val available = computeAllClassSessionDates(scheduledClass).size
+    val available = computeAllClassSessionDates(
+        scheduledClass = scheduledClass,
+        startFrom = soldPlanPlanPeriodStartDate(soldPlanId),
+    ).size
     return PlanScheduleCheck(required, available)
 }
 
@@ -158,7 +161,11 @@ fun assignSoldPlanClassSchedule(soldPlanId: String, scheduledClass: Class): Plan
         SoldPlanClassScheduleStore.remove(soldPlanId, scheduledClass.id)
         return PlanScheduleAssignment.Unlimited
     }
-    val dates = computeClassSessionDates(scheduledClass, limit)
+    val dates = computeClassSessionDates(
+        scheduledClass = scheduledClass,
+        maxSessions = limit,
+        startFrom = soldPlanPlanPeriodStartDate(soldPlanId),
+    )
     if (dates.size < limit) {
         SoldPlanClassScheduleStore.remove(soldPlanId, scheduledClass.id)
         return if (dates.isEmpty()) {
@@ -172,7 +179,7 @@ fun assignSoldPlanClassSchedule(soldPlanId: String, scheduledClass: Class): Plan
 }
 
 fun ensureSoldPlanClassSchedule(soldPlanId: String, scheduledClass: Class) {
-    val limit = sessionLimitForSoldPlan(soldPlanId) ?: return
+    if (sessionLimitForSoldPlan(soldPlanId) == null) return
     if (SoldPlanClassScheduleStore.sessionDatesFor(soldPlanId, scheduledClass.id) != null) return
     val check = planScheduleCheckForClass(soldPlanId, scheduledClass) ?: return
     if (!check.canFullySchedule) return

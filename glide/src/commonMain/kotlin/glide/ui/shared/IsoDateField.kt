@@ -47,6 +47,7 @@ fun IsoDateField(
     yearRange: IntRange = (LocalDate.now().year - 2)..(LocalDate.now().year + 5),
     readOnly: Boolean = false,
     isError: Boolean = false,
+    required: Boolean = false,
 ) {
     var showPicker by remember { mutableStateOf(false) }
     val displayValue = formatIsoDateForDisplay(value)
@@ -67,7 +68,7 @@ fun IsoDateField(
     )
 
     Column(modifier = modifier) {
-        GlideFieldLabel(label)
+        GlideFieldLabel(label, required = required)
         Spacer(modifier = Modifier.height(2.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -169,6 +170,7 @@ fun IsoDateRangeField(
     yearRange: IntRange = (LocalDate.now().year - 2)..(LocalDate.now().year + 5),
     readOnly: Boolean = false,
     isError: Boolean = false,
+    required: Boolean = false,
 ) {
     var showPicker by remember { mutableStateOf(false) }
     val displayValue = buildString {
@@ -195,7 +197,7 @@ fun IsoDateRangeField(
     )
 
     Column(modifier = modifier) {
-        GlideFieldLabel(label)
+        GlideFieldLabel(label, required = required)
         Spacer(modifier = Modifier.height(2.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),

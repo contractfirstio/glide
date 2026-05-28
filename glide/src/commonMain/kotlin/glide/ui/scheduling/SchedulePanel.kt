@@ -67,6 +67,8 @@ import glide.data.PlanStore
 import glide.data.ClassStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
+import glide.debug.GlidePanelDebug
+import glide.debug.PanelDebugStateEffect
 import glide.data.resolveMainClient
 import glide.data.toScheduleMessage
 import glide.data.toUserMessage
@@ -139,6 +141,8 @@ private data class ClassFormState(
 ) {
     fun isValid(): Boolean {
         if (name.isBlank()) return false
+        if (termIds.isEmpty()) return false
+        if (locationId == null) return false
         if (!isValidTime24h(startTime) || !isValidTime24h(endTime)) return false
         if (compareTime24h(startTime, endTime) >= 0) return false
         return when (scheduleKind) {
@@ -151,6 +155,8 @@ private data class ClassFormState(
 
     fun validationFieldKeys(): List<String> = buildList {
         if (name.isBlank()) add("name")
+        if (termIds.isEmpty()) add("termIds")
+        if (locationId == null) add("locationId")
         if (!isValidTime24h(startTime)) add("startTime")
         if (!isValidTime24h(endTime)) add("endTime")
         if (isValidTime24h(startTime) && isValidTime24h(endTime) && compareTime24h(startTime, endTime) >= 0) {
@@ -267,6 +273,21 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
     }
     val termFilterLabel = termFilterId?.let { TermStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
     val locationFilterLabel = locationFilterId?.let { LocationStore.findById(it)?.name?.takeIf { it.isNotBlank() } }
+
+    PanelDebugStateEffect(
+        GlidePanelDebug.Panel.CLASSES,
+        selectedId,
+        isCreating,
+        soldPlanFilterId,
+        termFilterId,
+        locationFilterId,
+        listSearchQuery,
+        classes.size,
+        ClassStore.classes.size,
+    ) {
+        "selected=$selectedId creating=$isCreating visible=${classes.size}/${ClassStore.classes.size} " +
+            "search='$listSearchQuery' || ${GlidePanelDebug.globalSnapshot()}"
+    }
 
     fun clearLocalSelection() {
         selectedId = null
@@ -624,11 +645,11 @@ fun SchedulePanel(modifier: Modifier = Modifier) {
                                     formValidation.reportInvalid(invalidKeys, saveScope)
                                     formError = when (form.draft.scheduleKind) {
                                         ClassScheduleKind.RECURRING ->
-                                            "Name, valid start/end times (HH:MM), and end after start are required."
+                                            "Name, term, location, valid start/end times (HH:MM), and end after start are required."
                                         ClassScheduleKind.WEEKLY ->
-                                            "Name, week date, at least one day, valid start/end times (HH:MM), and end after start are required."
+                                            "Name, term, location, week date, at least one day, valid start/end times (HH:MM), and end after start are required."
                                         ClassScheduleKind.SINGLE_DAY ->
-                                            "Name, class date, valid start/end times (HH:MM), and end after start are required."
+                                            "Name, term, location, class date, valid start/end times (HH:MM), and end after start are required."
                                     }
                                     return@GlideButton
                                 }
@@ -1158,6 +1179,7 @@ private fun ClassForm(
             onValueChange = { onStateChange(state.copy(name = it)) },
             label = "Class name",
             placeholder = "e.g. Tuesday Beginner Ballet",
+            required = true,
         )
         Spacer(modifier = Modifier.height(spacing.field))
         Row(
@@ -1204,6 +1226,7 @@ private fun ClassForm(
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
+        FormValidationAnchor(validation = validation, fieldKey = "termIds") {
         if (terms.isEmpty()) {
             Text(
                 text = "Create terms in the Terms panel, then select which terms this class runs in.",
@@ -1224,59 +1247,75 @@ private fun ClassForm(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.height(spacing.field))
-            terms.forEach { term ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(
-                            if (termsReadOnly) {
-                                Modifier
-                            } else {
-                                Modifier.clickable {
-                                    val next = if (term.id in state.termIds) {
-                                        state.termIds - term.id
-                                    } else {
-                                        state.termIds + term.id
-                                    }
-                                    onStateChange(state.copy(termIds = next))
-                                }
-                            },
-                        ),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(
-                        checked = term.id in state.termIds,
-                        onCheckedChange = { checked ->
-                            if (termsReadOnly) return@Checkbox
-                            val next = if (checked) {
-                                state.termIds + term.id
-                            } else {
-                                state.termIds - term.id
-                            }
-                            onStateChange(state.copy(termIds = next))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (validation.isInvalid("termIds")) {
+                            Modifier.border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.small)
+                        } else {
+                            Modifier
                         },
-                        enabled = !termsReadOnly,
                     )
-                    Column(modifier = Modifier.padding(start = 4.dp)) {
-                        Text(
-                            text = term.name,
-                            style = MaterialTheme.typography.bodySmall,
+                    .padding(if (validation.isInvalid("termIds")) 4.dp else 0.dp),
+            ) {
+                terms.forEach { term ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (termsReadOnly) {
+                                    Modifier
+                                } else {
+                                    Modifier.clickable {
+                                        val next = if (term.id in state.termIds) {
+                                            state.termIds - term.id
+                                        } else {
+                                            state.termIds + term.id
+                                        }
+                                        onStateChange(state.copy(termIds = next))
+                                        validation.clearKey("termIds")
+                                    }
+                                },
+                            ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = term.id in state.termIds,
+                            onCheckedChange = { checked ->
+                                if (termsReadOnly) return@Checkbox
+                                val next = if (checked) {
+                                    state.termIds + term.id
+                                } else {
+                                    state.termIds - term.id
+                                }
+                                onStateChange(state.copy(termIds = next))
+                                validation.clearKey("termIds")
+                            },
+                            enabled = !termsReadOnly,
                         )
-                        val dateLine = buildString {
-                            if (term.startDate.isNotBlank()) append(formatIsoDateForDisplay(term.startDate))
-                            if (term.startDate.isNotBlank() && term.endDate.isNotBlank()) append(" – ")
-                            if (term.endDate.isNotBlank()) append(formatIsoDateForDisplay(term.endDate))
-                        }
-                        if (dateLine.isNotBlank()) {
+                        Column(modifier = Modifier.padding(start = 4.dp)) {
                             Text(
-                                text = dateLine,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                text = term.name,
+                                style = MaterialTheme.typography.bodySmall,
                             )
+                            val dateLine = buildString {
+                                if (term.startDate.isNotBlank()) append(formatIsoDateForDisplay(term.startDate))
+                                if (term.startDate.isNotBlank() && term.endDate.isNotBlank()) append(" – ")
+                                if (term.endDate.isNotBlank()) append(formatIsoDateForDisplay(term.endDate))
+                            }
+                            if (dateLine.isNotBlank()) {
+                                Text(
+                                    text = dateLine,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
             }
+        }
         }
     }
 
@@ -1286,6 +1325,7 @@ private fun ClassForm(
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
+        FormValidationAnchor(validation = validation, fieldKey = "locationId") {
         if (locations.isEmpty()) {
             Text(
                 text = "Create locations in the Locations panel, then assign a room to this class.",
@@ -1302,6 +1342,7 @@ private fun ClassForm(
                     onValueChange = {},
                     readOnly = true,
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = locationExpanded) },
+                    isError = validation.isInvalid("locationId"),
                     shape = MaterialTheme.shapes.small,
                     textStyle = MaterialTheme.typography.bodySmall.copy(
                         color = MaterialTheme.colorScheme.onSurface,
@@ -1331,12 +1372,14 @@ private fun ClassForm(
                             text = { Text(location.name, style = MaterialTheme.typography.bodySmall) },
                             onClick = {
                                 onStateChange(state.copy(locationId = location.id))
+                                validation.clearKey("locationId")
                                 locationExpanded = false
                             },
                         )
                     }
                 }
             }
+        }
         }
     }
 
@@ -1476,6 +1519,7 @@ private fun ClassForm(
                     )
                 },
                 readOnly = termsReadOnly,
+                required = true,
             )
             Spacer(modifier = Modifier.height(spacing.field))
             FormValidationAnchor(validation = validation, fieldKey = "weeklyDays") {
@@ -1601,6 +1645,7 @@ private fun ClassForm(
                     )
                 },
                 readOnly = termsReadOnly,
+                required = true,
             )
             Spacer(modifier = Modifier.height(4.dp))
             val autoTerm = state.termIds.singleOrNull()?.let { id -> terms.find { it.id == id } }
@@ -1631,27 +1676,14 @@ private fun ClassForm(
         }
 
         Spacer(modifier = Modifier.height(spacing.field))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(spacing.field),
-        ) {
-            validation.ValidatedGlideOutlinedField(
-                fieldKey = "startTime",
-                value = state.startTime,
-                onValueChange = { onStateChange(state.copy(startTime = it)) },
-                label = "Start time",
-                placeholder = "09:00",
-                modifier = Modifier.weight(1f),
-            )
-            validation.ValidatedGlideOutlinedField(
-                fieldKey = "endTime",
-                value = state.endTime,
-                onValueChange = { onStateChange(state.copy(endTime = it)) },
-                label = "End time",
-                placeholder = "10:00",
-                modifier = Modifier.weight(1f),
-            )
-        }
+        ClassTimeRangePicker(
+            startTime = state.startTime,
+            endTime = state.endTime,
+            onStartTimeChange = { newStart -> onStateChange(state.copy(startTime = newStart)) },
+            onEndTimeChange = { newEnd -> onStateChange(state.copy(endTime = newEnd)) },
+            validation = validation,
+            spacing = spacing,
+        )
         Spacer(modifier = Modifier.height(spacing.field))
         GlideOutlinedField(
             value = state.notes,
@@ -1663,4 +1695,132 @@ private fun ClassForm(
             fieldHeight = GlideDimensions.notesMinHeight,
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ClassTimeRangePicker(
+    startTime: String,
+    endTime: String,
+    onStartTimeChange: (String) -> Unit,
+    onEndTimeChange: (String) -> Unit,
+    validation: FormValidationState,
+    spacing: GlideLayout.Spacing,
+) {
+    var startExpanded by remember { mutableStateOf(false) }
+    var endExpanded by remember { mutableStateOf(false) }
+    val options = remember(startTime, endTime) { classTimeOptions(startTime, endTime) }
+
+    GlideFieldLabel("Class time range")
+    Spacer(modifier = Modifier.height(2.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(spacing.field),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        FormValidationAnchor(
+            validation = validation,
+            fieldKey = "startTime",
+            modifier = Modifier.weight(1f),
+        ) {
+            ExposedDropdownMenuBox(
+                expanded = startExpanded,
+                onExpandedChange = { startExpanded = it },
+            ) {
+                OutlinedTextField(
+                    value = startTime,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Start time") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = startExpanded) },
+                    isError = validation.isInvalid("startTime"),
+                    shape = MaterialTheme.shapes.small,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    colors = glideOutlinedFieldColors(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
+                        .menuAnchor(),
+                )
+                ExposedDropdownMenu(
+                    expanded = startExpanded,
+                    onDismissRequest = { startExpanded = false },
+                ) {
+                    options.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option, style = MaterialTheme.typography.bodySmall) },
+                            onClick = {
+                                onStartTimeChange(option)
+                                validation.clearKey("startTime")
+                                startExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        Text(
+            text = "to",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FormValidationAnchor(
+            validation = validation,
+            fieldKey = "endTime",
+            modifier = Modifier.weight(1f),
+        ) {
+            ExposedDropdownMenuBox(
+                expanded = endExpanded,
+                onExpandedChange = { endExpanded = it },
+            ) {
+                OutlinedTextField(
+                    value = endTime,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("End time") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = endExpanded) },
+                    isError = validation.isInvalid("endTime"),
+                    shape = MaterialTheme.shapes.small,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    colors = glideOutlinedFieldColors(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = GlideDimensions.fieldHeight)
+                        .menuAnchor(),
+                )
+                ExposedDropdownMenu(
+                    expanded = endExpanded,
+                    onDismissRequest = { endExpanded = false },
+                ) {
+                    options.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option, style = MaterialTheme.typography.bodySmall) },
+                            onClick = {
+                                onEndTimeChange(option)
+                                validation.clearKey("endTime")
+                                endExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun classTimeOptions(startTime: String, endTime: String): List<String> {
+    val generated = buildList {
+        for (hour in 0..23) {
+            for (minute in listOf(0, 15, 30, 45)) {
+                add("%02d:%02d".format(hour, minute))
+            }
+        }
+    }
+    return (generated + listOf(startTime, endTime).filter { isValidTime24h(it) })
+        .distinct()
+        .sortedWith { a, b -> compareTime24h(a, b) }
 }

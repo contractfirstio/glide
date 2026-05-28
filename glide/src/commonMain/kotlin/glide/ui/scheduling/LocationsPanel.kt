@@ -37,6 +37,8 @@ import glide.data.LocationStore
 import glide.data.ClassStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
+import glide.debug.GlidePanelDebug
+import glide.debug.PanelDebugStateEffect
 import glide.model.Location
 import glide.ui.layout.GlideLayout
 import glide.ui.shared.DeleteConfirmDialog
@@ -140,6 +142,21 @@ fun LocationsPanel(modifier: Modifier = Modifier) {
     val searchActive = listSearchQuery.isNotBlank()
     val termFilterLabel = termFilterId?.let {
         TermStore.findById(it)?.name?.takeIf { name -> name.isNotBlank() }
+    }
+
+    PanelDebugStateEffect(
+        GlidePanelDebug.Panel.LOCATIONS,
+        selectedId,
+        isCreating,
+        termFilterId,
+        locationFilterId,
+        classSyncId,
+        listSearchQuery,
+        locations.size,
+        allLocations.size,
+    ) {
+        "selected=$selectedId creating=$isCreating visible=${locations.size}/${allLocations.size} " +
+            "search='$listSearchQuery' || ${GlidePanelDebug.globalSnapshot()}"
     }
 
     fun clearLocalSelection() {
@@ -561,6 +578,7 @@ private fun LocationForm(
             onValueChange = { onStateChange(state.copy(name = it)) },
             label = "Location name",
             placeholder = "e.g. Studio A",
+            required = true,
         )
     }
 

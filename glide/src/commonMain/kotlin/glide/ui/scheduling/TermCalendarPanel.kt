@@ -49,6 +49,8 @@ import glide.data.SchedulePanelState
 import glide.data.ClassStore
 import glide.data.TermStore
 import glide.data.millisUntilNextAttendanceReminderCheck
+import glide.debug.GlidePanelDebug
+import glide.debug.PanelDebugStateEffect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
@@ -127,6 +129,23 @@ fun TermCalendarPanel(modifier: Modifier = Modifier) {
         attendanceSessionDate = activeAttendanceSession?.sessionDate,
         attendanceVisible = attendanceVisible,
     )
+
+    PanelDebugStateEffect(
+        GlidePanelDebug.Panel.CALENDAR,
+        viewMode,
+        displayTermId,
+        termFilterId,
+        locationFilterId,
+        classSyncId,
+        attendanceVisible,
+        activeAttendanceSession,
+        termsChronological.size,
+        allClasses.size,
+    ) {
+        "term=$displayTermId filters={term=$termFilterId loc=$locationFilterId class=$classSyncId} " +
+            "attendance=$attendanceVisible session=$activeAttendanceSession || " +
+            GlidePanelDebug.globalSnapshot()
+    }
 
     val spacing = GlideLayout.comfortable
 

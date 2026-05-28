@@ -21,13 +21,13 @@ object SoldPlanClassScheduleStore {
 
     fun set(soldPlanId: String, classId: String, sessionDates: List<String>) {
         remove(soldPlanId, classId)
-        val futureDates = filterFutureSessionDates(sessionDates).distinct().sorted()
-        if (futureDates.isEmpty()) return
+        val scheduleDates = filterSessionDatesFromPlanPeriodStart(soldPlanId, sessionDates)
+        if (scheduleDates.isEmpty()) return
         _schedules.add(
             SoldPlanClassSchedule(
                 soldPlanId = soldPlanId,
                 classId = classId,
-                sessionDates = futureDates,
+                sessionDates = scheduleDates,
             ),
         )
         persistAppData()
@@ -59,16 +59,24 @@ object SoldPlanClassScheduleStore {
     }
 
     fun scheduledSessionCount(soldPlanId: String, classId: String): Int? =
-        sessionDatesFor(soldPlanId, classId)?.let { filterFutureSessionDates(it).size }
+        sessionDatesFor(soldPlanId, classId)?.let { filterSessionDatesFromPlanPeriodStart(soldPlanId, it).size }
 
     fun formatSessionDatesLabel(soldPlanId: String, classId: String): String? {
-        val dates = sessionDatesFor(soldPlanId, classId)?.let { filterFutureSessionDates(it) }
+        val dates = sessionDatesFor(soldPlanId, classId)?.let { filterSessionDatesFromPlanPeriodStart(soldPlanId, it) }
             ?: return null
         if (dates.isEmpty()) return null
         return dates.joinToString(", ") { iso ->
             parseIsoLocalDate(iso)?.let { formatScheduleDateShort(it) } ?: iso
         }
     }
+}
+
+private fun filterSessionDatesFromPlanPeriodStart(soldPlanId: String, sessionDates: List<String>): List<String> {
+    val planPeriodStart = soldPlanPlanPeriodStartDate(soldPlanId)
+    return sessionDates
+        .filter { iso -> parseIsoLocalDate(iso)?.let { !it.isBefore(planPeriodStart) } == true }
+        .distinct()
+        .sorted()
 }
 
 private fun formatScheduleDateShort(date: LocalDate): String {

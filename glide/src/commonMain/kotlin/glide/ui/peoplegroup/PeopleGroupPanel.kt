@@ -64,6 +64,8 @@ import glide.data.findSoldPlanById
 import glide.data.soldPlanDeletionBlockReason
 import glide.data.PlanStore
 import glide.data.ClassStore
+import glide.debug.GlidePanelDebug
+import glide.debug.PanelDebugStateEffect
 import glide.model.formatMoney
 import glide.data.classAttendeeCount
 import glide.data.hasClassParticipant
@@ -363,6 +365,27 @@ private fun PeopleGroupPanel(
         LocationStore.findById(it)?.name?.takeIf { it.isNotBlank() }
     }
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
+    val panelTag = if (ui.isLeadPanel) GlidePanelDebug.Panel.LEADS else GlidePanelDebug.Panel.SOLD_PLANS
+
+    PanelDebugStateEffect(
+        panelTag,
+        selectedId,
+        isCreating,
+        clientFilterId,
+        planFilterId,
+        studentFilterId,
+        soldPlanFilterId,
+        classFilterId,
+        termFilterId,
+        locationFilterId,
+        listSearchQuery,
+        groupCount,
+        filteredGroupCount,
+    ) {
+        "selected=$selectedId creating=$isCreating groups=$filteredGroupCount/$groupCount " +
+            "search='$listSearchQuery' scheduling=$schedulingSoldPlansPanel || " +
+            GlidePanelDebug.globalSnapshot()
+    }
 
     fun resetFormForCreate() {
         selectedId = null
@@ -1649,6 +1672,7 @@ private fun LeadForm(
                 label = "Start date",
                 value = state.planStartDate,
                 onValueChange = { onStateChange(state.copy(planStartDate = it)) },
+                required = true,
             )
         }
     }
@@ -1673,13 +1697,13 @@ private fun PlanDropdown(
         Spacer(modifier = Modifier.height(2.dp))
         ExposedDropdownMenuBox(
             expanded = expanded,
-            onExpandedChange = { if (plans.isNotEmpty()) expanded = it },
+            onExpandedChange = { expanded = it },
         ) {
             OutlinedTextField(
                 value = displayValue,
                 onValueChange = {},
                 readOnly = true,
-                enabled = plans.isNotEmpty(),
+                enabled = true,
                 isError = validation.isInvalid("plan"),
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 shape = MaterialTheme.shapes.small,
@@ -1696,30 +1720,44 @@ private fun PlanDropdown(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
             ) {
-                plans.forEach { plan ->
+                if (plans.isEmpty()) {
                     DropdownMenuItem(
                         text = {
-                            Column {
-                                Text(plan.name, style = MaterialTheme.typography.bodySmall)
-                                Text(
-                                    plan.summaryLine(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                            Text(
+                                text = "No plans yet — create one in the Plans panel.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         },
-                        onClick = {
-                            onPlanSelected(plan.id)
-                            expanded = false
-                        },
+                        onClick = { expanded = false },
+                        enabled = false,
                     )
+                } else {
+                    plans.forEach { plan ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(plan.name, style = MaterialTheme.typography.bodySmall)
+                                    Text(
+                                        plan.summaryLine(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            },
+                            onClick = {
+                                onPlanSelected(plan.id)
+                                expanded = false
+                            },
+                        )
+                    }
                 }
             }
         }
         if (plans.isEmpty()) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Add multi lesson plans in the Plans panel.",
+                text = "Create a plan in the Plans panel, then return here to select it.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -8,6 +8,7 @@ import java.util.UUID
 internal object InvoiceEmlDraft {
     fun write(
         to: String,
+        from: String,
         subject: String,
         plainBody: String,
         htmlBody: String,
@@ -20,6 +21,7 @@ internal object InvoiceEmlDraft {
 
         val eml = buildString {
             appendHeader("To", to)
+            appendHeader("From", from)
             appendHeader("Subject", subject)
             appendLine("MIME-Version: 1.0")
             appendLine("Content-Type: multipart/mixed; boundary=\"$mixedBoundary\"")
