@@ -12,12 +12,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -148,6 +150,137 @@ fun IsoDateField(
             },
         ) {
             DatePicker(
+                state = pickerState,
+                showModeToggle = true,
+                colors = DatePickerDefaults.colors(),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun IsoDateRangeField(
+    label: String,
+    startValue: String,
+    endValue: String,
+    onValueChange: (startIso: String, endIso: String) -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    yearRange: IntRange = (LocalDate.now().year - 2)..(LocalDate.now().year + 5),
+    readOnly: Boolean = false,
+    isError: Boolean = false,
+) {
+    var showPicker by remember { mutableStateOf(false) }
+    val displayValue = buildString {
+        val start = formatIsoDateForDisplay(startValue)
+        val end = formatIsoDateForDisplay(endValue)
+        if (start.isNotBlank()) append(start)
+        if (start.isNotBlank() && end.isNotBlank()) append(" - ")
+        if (end.isNotBlank()) append(end)
+    }
+    val openPicker = {
+        if (!readOnly) showPicker = true
+    }
+
+    val textStyle = MaterialTheme.typography.bodySmall.copy(
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    val errorColor = MaterialTheme.colorScheme.error
+    val pickerFieldColors = OutlinedTextFieldDefaults.colors(
+        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+        disabledBorderColor = if (isError) errorColor else MaterialTheme.colorScheme.outline,
+        disabledContainerColor = Color.Transparent,
+        disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        errorBorderColor = errorColor,
+    )
+
+    Column(modifier = modifier) {
+        GlideFieldLabel(label)
+        Spacer(modifier = Modifier.height(2.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = openPicker,
+                    ),
+            ) {
+                OutlinedTextField(
+                    value = displayValue,
+                    onValueChange = {},
+                    readOnly = true,
+                    enabled = false,
+                    singleLine = true,
+                    textStyle = textStyle,
+                    placeholder = {
+                        Text(
+                            "Pick start and end date",
+                            style = textStyle.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
+                        )
+                    },
+                    shape = MaterialTheme.shapes.small,
+                    colors = pickerFieldColors,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (!readOnly) {
+                GlideTextButton(onClick = openPicker) {
+                    Text("Pick")
+                }
+            }
+        }
+        if (!readOnly && (startValue.isNotBlank() || endValue.isNotBlank())) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                GlideTextButton(onClick = { onValueChange("", "") }) {
+                    Text("Clear")
+                }
+            }
+        }
+    }
+
+    if (showPicker) {
+        val initialStartMillis = remember(startValue) {
+            parseIsoDateToMillis(startValue)
+        }
+        val initialEndMillis = remember(endValue) {
+            parseIsoDateToMillis(endValue)
+        }
+        val pickerState = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = initialStartMillis,
+            initialSelectedEndDateMillis = initialEndMillis,
+            yearRange = yearRange,
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                GlideTextButton(
+                    onClick = {
+                        val start = pickerState.selectedStartDateMillis?.let { millisToIsoDate(it) }.orEmpty()
+                        val end = pickerState.selectedEndDateMillis?.let { millisToIsoDate(it) }.orEmpty()
+                        onValueChange(start, end)
+                        showPicker = false
+                    },
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                GlideTextButton(onClick = { showPicker = false }) {
+                    Text("Cancel")
+                }
+            },
+        ) {
+            DateRangePicker(
                 state = pickerState,
                 showModeToggle = true,
                 colors = DatePickerDefaults.colors(),

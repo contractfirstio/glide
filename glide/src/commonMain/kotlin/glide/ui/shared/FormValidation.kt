@@ -140,6 +140,33 @@ fun FormValidationState.ValidatedIsoDateField(
 }
 
 @Composable
+fun FormValidationState.ValidatedIsoDateRangeField(
+    startFieldKey: String,
+    endFieldKey: String,
+    label: String,
+    startValue: String,
+    endValue: String,
+    onValueChange: (startIso: String, endIso: String) -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    readOnly: Boolean = false,
+) {
+    FormValidationAnchor(validation = this, fieldKey = startFieldKey, modifier = modifier) {
+        IsoDateRangeField(
+            label = label,
+            startValue = startValue,
+            endValue = endValue,
+            onValueChange = { startIso, endIso ->
+                clearKey(startFieldKey)
+                clearKey(endFieldKey)
+                onValueChange(startIso, endIso)
+            },
+            readOnly = readOnly,
+            isError = isInvalid(startFieldKey) || isInvalid(endFieldKey),
+        )
+    }
+}
+
+@Composable
 fun FormValidationState.ValidatedDateOfBirthField(
     fieldKey: String,
     value: String,

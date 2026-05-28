@@ -54,12 +54,11 @@ import glide.ui.shared.matchesPanelListSearch
 import glide.ui.shared.panelListCountLabel
 import glide.ui.shared.FormValidationState
 import glide.ui.shared.ValidatedGlideOutlinedField
-import glide.ui.shared.ValidatedIsoDateField
+import glide.ui.shared.ValidatedIsoDateRangeField
 import glide.ui.shared.rememberFormDirtyTracker
 import glide.ui.shared.rememberFormValidation
 import glide.ui.leads.formatIsoDateForDisplay
 import glide.ui.leads.parseIsoDateToMillis
-import glide.ui.shared.IsoDateField
 import glide.ui.theme.GlideButton
 import glide.ui.theme.GlideDimensions
 import glide.ui.theme.GlideOutlinedButton
@@ -613,19 +612,15 @@ private fun TermForm(
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
-        validation.ValidatedIsoDateField(
-            fieldKey = "startDate",
-            label = "Start date",
-            value = state.startDate,
-            onValueChange = { onStateChange(state.copy(startDate = it)) },
-            readOnly = readOnly,
-        )
-        Spacer(modifier = Modifier.height(spacing.field))
-        validation.ValidatedIsoDateField(
-            fieldKey = "endDate",
-            label = "End date",
-            value = state.endDate,
-            onValueChange = { onStateChange(state.copy(endDate = it)) },
+        validation.ValidatedIsoDateRangeField(
+            startFieldKey = "startDate",
+            endFieldKey = "endDate",
+            label = "Start and end date",
+            startValue = state.startDate,
+            endValue = state.endDate,
+            onValueChange = { startIso, endIso ->
+                onStateChange(state.copy(startDate = startIso, endDate = endIso))
+            },
             readOnly = readOnly,
         )
     }
