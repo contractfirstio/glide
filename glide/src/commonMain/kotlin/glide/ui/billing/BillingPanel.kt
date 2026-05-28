@@ -45,8 +45,12 @@ import glide.data.displayBillingLineItems
 import glide.data.displayBillingTotalMinor
 import glide.data.openPendingAttendanceSession
 import glide.data.openSoldPlanClassAssignment
+import glide.data.rollingTermCoverageAlertForSoldPlan
 import glide.data.soldPlanBlocksBillIssuance
 import glide.data.soldPlanBlocksBillIssuanceMessage
+import glide.data.rollingTermCoverageWarningMessage
+import glide.data.rollingTermsBlockBillIssuance
+import glide.data.rollingTermsBlockBillIssuanceMessage
 import glide.ui.scheduling.rememberPendingAttendanceSessions
 import glide.data.SoldPlanEnrollmentStore
 import glide.data.RollingPlanBillingService
@@ -124,10 +128,21 @@ fun BillingPanel(
     var showVoidBillConfirm by remember(soldPlanId) { mutableStateOf(false) }
 
     val pendingAttendance = rememberPendingAttendanceSessions()
+    val rollingCoverageAlert = rollingTermCoverageAlertForSoldPlan(soldPlanId)
+    val billingBlockedByRollingTerms = rollingTermsBlockBillIssuance(soldPlanId)
     val billingBlockedByAttendance = pendingAttendance.isNotEmpty()
     val billingBlockedByUnassignedClass = soldPlanBlocksBillIssuance(soldPlanId)
-    val billingBlocked = billingBlockedByAttendance || billingBlockedByUnassignedClass
+    val billingBlocked = billingBlockedByRollingTerms ||
+        billingBlockedByAttendance ||
+        billingBlockedByUnassignedClass
     val invoiceBlockedReason = when {
+        billingBlockedByRollingTerms -> rollingTermsBlockBillIssuanceMessage()
+        billingBlockedByAttendance -> attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
+        billingBlockedByUnassignedClass -> soldPlanBlocksBillIssuanceMessage()
+        else -> null
+    }
+    fun billingBlockedMessage(): String? = when {
+        billingBlockedByRollingTerms -> rollingTermsBlockBillIssuanceMessage()
         billingBlockedByAttendance -> attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
         billingBlockedByUnassignedClass -> soldPlanBlocksBillIssuanceMessage()
         else -> null
@@ -224,6 +239,22 @@ fun BillingPanel(
                 }
             }
 
+            rollingCoverageAlert?.let { alert ->
+                Spacer(modifier = Modifier.height(spacing.field))
+                Text(
+                    text = rollingTermCoverageWarningMessage(alert.weeksRemaining),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (alert.blocksBilling) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                )
+                GlideTextButton(onClick = { openSoldPlanClassAssignment(soldPlanId) }) {
+                    Text("Open scheduling")
+                }
+            }
+
             if (billingBlockedByUnassignedClass) {
                 Spacer(modifier = Modifier.height(spacing.field))
                 Text(
@@ -277,6 +308,11 @@ fun BillingPanel(
                 }
                 GlideOutlinedButton(
                     onClick = {
+                        billingBlockedMessage()?.let { blockedMessage ->
+                            billingActionMessage = blockedMessage
+                            selectedBillId = null
+                            return@GlideOutlinedButton
+                        }
                         if (!BillingService.addRenewalBill(soldPlanId)) {
                             billingActionMessage = when (ongoingEnrollment?.status) {
                                 SoldPlanEnrollmentStatus.CANCELLING ->
@@ -320,31 +356,20 @@ fun BillingPanel(
                         invoiceBlockedReason = invoiceBlockedReason,
                         onClick = { selectedBillId = bill.id },
                         onIssuedChange = { issued ->
-                            if (issued && billingBlockedByAttendance) {
-                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                                return@BillRow
-                            }
-                            if (issued && billingBlockedByUnassignedClass) {
-                                billingActionMessage = soldPlanBlocksBillIssuanceMessage()
+                            val blockedMessage = if (issued) billingBlockedMessage() else null
+                            if (blockedMessage != null) {
+                                billingActionMessage = blockedMessage
                                 return@BillRow
                             }
                             if (!BillStore.setIssued(bill.id, issued = true)) {
-                                if (issued && billingBlockedByAttendance) {
-                                    billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                                } else if (issued && billingBlockedByUnassignedClass) {
-                                    billingActionMessage = soldPlanBlocksBillIssuanceMessage()
-                                }
+                                billingActionMessage = blockedMessage
                                 return@BillRow
                             }
                             billingActionMessage = null
                         },
                         onGenerateInvoice = {
-                            if (billingBlockedByAttendance) {
-                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                                return@BillRow
-                            }
-                            if (billingBlockedByUnassignedClass) {
-                                billingActionMessage = soldPlanBlocksBillIssuanceMessage()
+                            billingBlockedMessage()?.let { blockedMessage ->
+                                billingActionMessage = blockedMessage
                                 return@BillRow
                             }
                             billingActionMessage = BillStore.generateInvoice(bill.id)
@@ -368,12 +393,8 @@ fun BillingPanel(
                         },
                         onVoid = { showVoidBillConfirm = true },
                         onGenerateInvoice = {
-                            if (billingBlockedByAttendance) {
-                                billingActionMessage = attendanceBlocksBillIssuanceMessage(pendingAttendance.size)
-                                return@BillDetailActions
-                            }
-                            if (billingBlockedByUnassignedClass) {
-                                billingActionMessage = soldPlanBlocksBillIssuanceMessage()
+                            billingBlockedMessage()?.let { blockedMessage ->
+                                billingActionMessage = blockedMessage
                                 return@BillDetailActions
                             }
                             billingActionMessage = BillStore.generateInvoice(selectedBill.id)

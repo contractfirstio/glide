@@ -3,6 +3,7 @@ package glide.billing
 import glide.billing.BillingPdfSupport.PdfPageContext
 import glide.billing.BillingPdfSupport.SECTION_GAP
 import glide.billing.BillingPdfSupport.colorAccent
+import glide.billing.BillingPdfSupport.colorAccentSoft
 import glide.billing.BillingPdfSupport.colorFill
 import glide.billing.BillingPdfSupport.colorInk
 import glide.billing.BillingPdfSupport.colorMuted
@@ -43,7 +44,7 @@ object InvoicePdfWriter {
             ctx.startFirstPage()
 
             ctx.y = drawAccentBar(ctx.stream, ctx.contentLeftX, ctx.contentRightX, ctx.y)
-            ctx.y -= 18f
+            ctx.y -= 14f
 
             val headerBottomY = drawHeader(
                 stream = ctx.stream,
@@ -106,26 +107,30 @@ object InvoicePdfWriter {
         y: Float,
     ): Float {
         val titleY = y
+        fillRect(stream, leftX, titleY - 70f, rightX - leftX, 64f, colorAccentSoft)
+        strokeRect(stream, leftX, titleY - 70f, rightX - leftX, 64f, colorRule, 0.6f)
+
+        drawAt(stream, fontBold, 8.5f, rightX - 12f, titleY - 10f, "TAX DOCUMENT", align = TextAlign.RIGHT, color = colorMuted)
         drawAt(stream, fontBold, 26f, rightX, titleY, "INVOICE", align = TextAlign.RIGHT, color = colorAccent)
-        var leftY = drawAt(stream, fontBold, 14f, leftX, y, content.fromName, color = colorInk)
+        var leftY = drawAt(stream, fontBold, 14f, leftX + 12f, y - 6f, content.fromName, color = colorInk)
         leftY = drawContactLines(
             stream = stream,
             lines = listOfNotNull(
                 content.fromEmail.takeIf { it.isNotBlank() },
                 content.fromPhone.takeIf { it.isNotBlank() },
             ),
-            x = leftX,
-            y = leftY - 2f,
+            x = leftX + 12f,
+            y = leftY,
             fontSize = 9.5f,
             muted = true,
         )
 
-        var metaY = titleY - lineStep(26f) - 6f
-        metaY = drawMetaRow(stream, rightX, metaY, "Invoice no.", content.invoiceNumber)
-        metaY = drawMetaRow(stream, rightX, metaY, "Issue date", content.issuedDateLabel)
-        metaY = drawMetaRow(stream, rightX, metaY, "Payment due", content.dueDateLabel)
+        var metaY = titleY - lineStep(26f) - 10f
+        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Invoice no.", content.invoiceNumber)
+        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Issue date", content.issuedDateLabel)
+        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Payment due", content.dueDateLabel)
 
-        return minOf(leftY, metaY) - 4f
+        return minOf(leftY, metaY) - 10f
     }
 
     private fun drawPaymentSection(
@@ -150,7 +155,7 @@ object InvoicePdfWriter {
         strokeRect(ctx.stream, leftX, contentBottomY, rightX - leftX, boxHeight, colorRule, 0.5f)
 
         var innerY = topY - padding - 10f
-        innerY = drawAt(ctx.stream, fontBold, 10f, textX, innerY, "Payment", color = colorInk)
+        innerY = drawAt(ctx.stream, fontBold, 10f, textX, innerY, "PAYMENT DETAILS", color = colorInk)
         innerY -= 4f
         innerY = drawAt(
             ctx.stream,

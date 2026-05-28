@@ -4,6 +4,9 @@ import glide.model.Bill
 import glide.model.BillStatus
 import glide.model.SoldPlanEnrollment
 import glide.model.SoldPlanEnrollmentStatus
+import glide.model.parseIsoLocalDate
+import java.time.Instant
+import java.time.ZoneId
 
 object RollingPlanBillingService {
     /**
@@ -26,6 +29,7 @@ object RollingPlanBillingService {
         )
         if (submitted < planSize) return false
         if (BillStore.hasScheduledRenewalBill(enrollment.id)) return false
+        if (!hasFullWindowForNextBill(enrollment, planSize)) return false
         BillStore.createRenewalBill(enrollment)
         return true
     }
@@ -49,6 +53,30 @@ object RollingPlanBillingService {
     fun onPlanBillPaid(enrollmentId: String, paidAtMillis: Long) {
         SoldPlanEnrollmentStore.resetPlanPeriod(enrollmentId, paidAtMillis)
     }
+
+    /**
+     * Guard renewal billing: only create the next bill when a full plan-sized session window exists.
+     * This prevents issuing a 10-class renewal that can only list part of the dates (e.g. 5).
+     */
+    private fun hasFullWindowForNextBill(enrollment: SoldPlanEnrollment, planSize: Int): Boolean {
+        val scheduledClass = ClassStore.findClassContainingSoldPlan(enrollment.soldPlanId) ?: return false
+        val periodStart = localDateFromMillis(enrollment.planPeriodStartedAtMillis) ?: return false
+        val nextBillIndex = BillStore.forEnrollment(enrollment.id)
+            .count { it.status != BillStatus.VOID }
+        val available = computeAllClassSessionDates(scheduledClass, startFrom = periodStart)
+            .filter { iso ->
+                val date = parseIsoLocalDate(iso) ?: return@filter false
+                isSoldPlanOnClassSession(enrollment.soldPlanId, scheduledClass, date)
+            }
+            .drop(nextBillIndex * planSize)
+            .size
+        return available >= planSize
+    }
+
+    private fun localDateFromMillis(millis: Long) =
+        runCatching {
+            Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+        }.getOrNull()
 }
 
 fun Bill.isRenewalBill(): Boolean = description.contains("(renewal)", ignoreCase = true)

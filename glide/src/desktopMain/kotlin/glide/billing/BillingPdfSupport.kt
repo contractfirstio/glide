@@ -26,7 +26,9 @@ internal object BillingPdfSupport {
     val colorMuted = rgb(0.42f, 0.45f, 0.50f)
     val colorRule = rgb(0.82f, 0.84f, 0.88f)
     val colorFill = rgb(0.96f, 0.97f, 0.98f)
+    val colorSurface = rgb(0.99f, 0.99f, 1f)
     val colorAccent = rgb(0.18f, 0.32f, 0.48f)
+    val colorAccentSoft = rgb(0.92f, 0.95f, 0.98f)
     val colorPaid = rgb(0.10f, 0.45f, 0.32f)
 
     class PdfPageContext(
@@ -226,6 +228,7 @@ internal object BillingPdfSupport {
 
         var rowIndex = 0
         var firstTable = true
+        var isStriped = false
         while (rowIndex < rows.size || firstTable) {
             ctx.ensureSpace(headerHeight + lineStep(rowFontSize) + 8f, continuation = !firstTable)
             var rowY = drawTableHeader(ctx.y)
@@ -235,6 +238,16 @@ internal object BillingPdfSupport {
                 val row = rows[rowIndex]
                 val rowHeight = tableRowHeight(row.description, descriptionMaxWidth, rowFontSize)
                 if (rowY - rowHeight < ctx.minContentBottomY) break
+                if (isStriped) {
+                    fillRect(
+                        ctx.stream,
+                        leftX,
+                        rowY - rowHeight + 2f,
+                        rightX - leftX,
+                        rowHeight - 2f,
+                        colorSurface,
+                    )
+                }
                 rowY = drawTableRow(
                     stream = ctx.stream,
                     y = rowY,
@@ -246,6 +259,7 @@ internal object BillingPdfSupport {
                     fontSize = rowFontSize,
                 )
                 rowIndex++
+                isStriped = !isStriped
             }
             ctx.y = rowY
             if (rowIndex < rows.size) continue
@@ -260,6 +274,23 @@ internal object BillingPdfSupport {
 
         val totalFontSize = 12f
         val amountWidth = stringWidth(fontBold, totalFontSize, formattedTotal)
+        fillRect(
+            ctx.stream,
+            amountRightX - amountWidth - COLUMN_GAP - 102f,
+            rowY - 10f,
+            amountWidth + COLUMN_GAP + 110f,
+            22f,
+            colorAccentSoft,
+        )
+        strokeRect(
+            ctx.stream,
+            amountRightX - amountWidth - COLUMN_GAP - 102f,
+            rowY - 10f,
+            amountWidth + COLUMN_GAP + 110f,
+            22f,
+            colorRule,
+            0.5f,
+        )
         drawAt(
             ctx.stream,
             fontRegular,

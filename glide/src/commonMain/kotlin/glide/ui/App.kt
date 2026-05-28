@@ -32,8 +32,10 @@ import glide.ui.components.AppChrome
 import glide.ui.components.FloatingPanelsHost
 import glide.ui.billing.OverdueBillPaymentAlertBanner
 import glide.ui.billing.PendingBillIssuanceAlertBanner
+import glide.ui.billing.RollingTermCoverageAlertBanner
 import glide.ui.billing.rememberOverdueBillPayments
 import glide.ui.billing.rememberPendingBillsToIssue
+import glide.ui.billing.rememberRollingTermCoverageAlerts
 import glide.ui.scheduling.PendingAttendanceAlertBanner
 import glide.ui.scheduling.UnassignedSoldPlanAlertBanner
 import glide.ui.scheduling.rememberPendingAttendanceSessions
@@ -62,6 +64,7 @@ fun App(
         val pendingAttendance = rememberPendingAttendanceSessions()
         val pendingBillsToIssue = rememberPendingBillsToIssue()
         val overdueBillPayments = rememberOverdueBillPayments()
+        val rollingTermCoverageAlerts = rememberRollingTermCoverageAlerts()
         val unassignedSoldPlans = rememberUnassignedSoldPlans()
         LaunchedEffect(Unit) {
             PanelWorkspace.startSession(appSettings.workspaceUi)
@@ -153,6 +156,7 @@ fun App(
                 }
                 PendingBillIssuanceAlertBanner(pending = pendingBillsToIssue)
                 OverdueBillPaymentAlertBanner(overdue = overdueBillPayments)
+                RollingTermCoverageAlertBanner(alerts = rollingTermCoverageAlerts)
                 UnassignedSoldPlanAlertBanner(unassigned = unassignedSoldPlans)
                 FloatingPanelsHost(modifier = Modifier.weight(1f))
             }
