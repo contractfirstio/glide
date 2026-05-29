@@ -1,5 +1,6 @@
 package glide.billing
 
+import glide.billing.BillingPdfSupport.CONTENT_PADDING
 import glide.billing.BillingPdfSupport.PdfPageContext
 import glide.billing.BillingPdfSupport.SECTION_GAP
 import glide.billing.BillingPdfSupport.colorAccent
@@ -44,7 +45,7 @@ object InvoicePdfWriter {
             ctx.startFirstPage()
 
             ctx.y = drawAccentBar(ctx.stream, ctx.contentLeftX, ctx.contentRightX, ctx.y)
-            ctx.y -= 14f
+            ctx.y -= 8f
 
             val headerBottomY = drawHeader(
                 stream = ctx.stream,
@@ -53,12 +54,12 @@ object InvoicePdfWriter {
                 rightX = ctx.contentRightX,
                 y = ctx.y,
             )
-            ctx.y = headerBottomY - SECTION_GAP
+            ctx.y = headerBottomY - 10f
 
             drawHorizontalRule(ctx.stream, ctx.contentLeftX, ctx.contentRightX, ctx.y, colorRule, 0.5f)
-            ctx.y -= SECTION_GAP
+            ctx.y -= 10f
 
-            ctx.y = drawSectionHeading(ctx.stream, ctx.contentLeftX, ctx.y, "Bill to")
+            ctx.y = drawSectionHeading(ctx.stream, ctx.textLeftX, ctx.y, "Bill to")
             ctx.y = drawContactLines(
                 stream = ctx.stream,
                 lines = listOfNotNull(
@@ -66,9 +67,9 @@ object InvoicePdfWriter {
                     content.billToEmail.takeIf { it.isNotBlank() },
                     content.billToPhone.takeIf { it.isNotBlank() },
                 ),
-                x = ctx.contentLeftX,
+                x = ctx.textLeftX,
                 y = ctx.y,
-                fontSize = 10.5f,
+                fontSize = 9.5f,
             )
             ctx.y -= SECTION_GAP
 
@@ -107,30 +108,53 @@ object InvoicePdfWriter {
         y: Float,
     ): Float {
         val titleY = y
-        fillRect(stream, leftX, titleY - 70f, rightX - leftX, 64f, colorAccentSoft)
-        strokeRect(stream, leftX, titleY - 70f, rightX - leftX, 64f, colorRule, 0.6f)
+        val verticalPadding = 6f
+        val titleFontSize = 22f
+        val fromNameFontSize = 12f
+        val contactFontSize = 9f
+        val textLeftX = leftX + CONTENT_PADDING
+        val textRightX = rightX - CONTENT_PADDING
+        val contactLines = listOfNotNull(
+            content.fromEmail.takeIf { it.isNotBlank() },
+            content.fromPhone.takeIf { it.isNotBlank() },
+        )
 
-        drawAt(stream, fontBold, 8.5f, rightX - 12f, titleY - 10f, "TAX DOCUMENT", align = TextAlign.RIGHT, color = colorMuted)
-        drawAt(stream, fontBold, 26f, rightX, titleY, "INVOICE", align = TextAlign.RIGHT, color = colorAccent)
-        var leftY = drawAt(stream, fontBold, 14f, leftX + 12f, y - 6f, content.fromName, color = colorInk)
+        var metaY = titleY - lineStep(titleFontSize) - 4f
+        repeat(3) { metaY = layoutMetaRow(metaY) }
+        var leftY = titleY - 4f - lineStep(fromNameFontSize)
+        leftY = layoutContactLines(leftY, contactLines.size, contactFontSize)
+
+        val contentBottomY = minOf(leftY, metaY) - verticalPadding
+        val contentTopY = titleY + 4f
+        val boxHeight = contentTopY - contentBottomY
+        fillRect(stream, leftX, contentBottomY, rightX - leftX, boxHeight, colorAccentSoft)
+        strokeRect(stream, leftX, contentBottomY, rightX - leftX, boxHeight, colorRule, 0.6f)
+
+        drawAt(stream, fontBold, titleFontSize, textRightX, titleY, "INVOICE", align = TextAlign.RIGHT, color = colorAccent)
+        leftY = drawAt(stream, fontBold, fromNameFontSize, textLeftX, y - 4f, content.fromName, color = colorInk)
         leftY = drawContactLines(
             stream = stream,
-            lines = listOfNotNull(
-                content.fromEmail.takeIf { it.isNotBlank() },
-                content.fromPhone.takeIf { it.isNotBlank() },
-            ),
-            x = leftX + 12f,
+            lines = contactLines,
+            x = textLeftX,
             y = leftY,
-            fontSize = 9.5f,
+            fontSize = contactFontSize,
             muted = true,
         )
 
-        var metaY = titleY - lineStep(26f) - 10f
-        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Invoice no.", content.invoiceNumber)
-        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Issue date", content.issuedDateLabel)
-        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Payment due", content.dueDateLabel)
+        metaY = titleY - lineStep(titleFontSize) - 4f
+        metaY = drawMetaRow(stream, textRightX, metaY, "Invoice no.", content.invoiceNumber)
+        metaY = drawMetaRow(stream, textRightX, metaY, "Issue date", content.issuedDateLabel)
+        metaY = drawMetaRow(stream, textRightX, metaY, "Payment due", content.dueDateLabel)
 
-        return minOf(leftY, metaY) - 10f
+        return minOf(leftY, metaY) - 6f
+    }
+
+    private fun layoutMetaRow(y: Float): Float = y - lineStep(9f) - 1f
+
+    private fun layoutContactLines(y: Float, lineCount: Int, fontSize: Float): Float {
+        var rowY = y
+        repeat(lineCount) { rowY -= lineStep(fontSize) }
+        return rowY
     }
 
     private fun drawPaymentSection(
@@ -138,10 +162,10 @@ object InvoicePdfWriter {
         fpsNumber: String,
         invoiceNumber: String,
     ) {
-        val padding = 14f
+        val padding = CONTENT_PADDING
         val leftX = ctx.contentLeftX
         val rightX = ctx.contentRightX
-        val textX = leftX + padding
+        val textX = ctx.textLeftX
         val innerWidth = rightX - leftX - padding * 2
         val referenceText = "Please quote invoice $invoiceNumber as your payment reference."
         val sectionHeight = ctx.y - layoutPaymentSectionBottom(ctx.y, padding, innerWidth, referenceText)
@@ -154,26 +178,26 @@ object InvoicePdfWriter {
         fillRect(ctx.stream, leftX, contentBottomY, rightX - leftX, boxHeight, colorFill)
         strokeRect(ctx.stream, leftX, contentBottomY, rightX - leftX, boxHeight, colorRule, 0.5f)
 
-        var innerY = topY - padding - 10f
-        innerY = drawAt(ctx.stream, fontBold, 10f, textX, innerY, "PAYMENT DETAILS", color = colorInk)
-        innerY -= 4f
+        var innerY = topY - padding - 6f
+        innerY = drawAt(ctx.stream, fontBold, 9.5f, textX, innerY, "PAYMENT DETAILS", color = colorInk)
+        innerY -= 2f
         innerY = drawAt(
             ctx.stream,
             fontRegular,
-            9.5f,
+            9f,
             textX,
             innerY,
             "Pay by bank transfer using Faster Payment (FPS).",
             color = colorMuted,
         )
-        innerY = drawAt(ctx.stream, fontBold, 10.5f, textX, innerY, "FPS number: $fpsNumber", color = colorInk)
+        innerY = drawAt(ctx.stream, fontBold, 10f, textX, innerY, "FPS number: $fpsNumber", color = colorInk)
         drawWrappedLines(
             stream = ctx.stream,
             x = textX,
-            y = innerY - 2f,
+            y = innerY - 1f,
             maxWidth = innerWidth,
             text = referenceText,
-            fontSize = 9f,
+            fontSize = 8.5f,
             color = colorMuted,
             font = fontOblique,
         )
@@ -186,17 +210,17 @@ object InvoicePdfWriter {
         innerWidth: Float,
         referenceText: String,
     ): Float {
-        var innerY = topY - padding - 10f
-        innerY = innerY - lineStep(10f)
-        innerY -= 4f
+        var innerY = topY - padding - 6f
         innerY = innerY - lineStep(9.5f)
-        innerY = innerY - lineStep(10.5f)
+        innerY -= 2f
+        innerY = innerY - lineStep(9f)
+        innerY = innerY - lineStep(10f)
         val wrappedLines = referenceText.trim().split(Regex("\\s+"))
         var current = ""
         var lineCount = 0
         for (word in wrappedLines) {
             val candidate = if (current.isEmpty()) word else "$current $word"
-            if (stringWidth(fontOblique, 9f, candidate) <= innerWidth) {
+            if (stringWidth(fontOblique, 8.5f, candidate) <= innerWidth) {
                 current = candidate
             } else {
                 if (current.isNotEmpty()) lineCount++
@@ -204,7 +228,7 @@ object InvoicePdfWriter {
             }
         }
         if (current.isNotEmpty()) lineCount++
-        innerY -= lineCount * lineStep(9f)
+        innerY -= lineCount * lineStep(8.5f)
         return innerY - padding
     }
 

@@ -34,8 +34,10 @@ fun EntitySearchPicker(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
     noResultsText: String = "No matches.",
+    emptyQueryText: String = "Type to search.",
     isError: Boolean = false,
 ) {
+    val hasQuery = query.trim().isNotEmpty()
     Column(modifier = modifier.fillMaxWidth()) {
         GlideOutlinedField(
             value = query,
@@ -45,7 +47,13 @@ fun EntitySearchPicker(
             isError = isError,
         )
         Spacer(modifier = Modifier.height(4.dp))
-        if (results.isEmpty()) {
+        if (!hasQuery) {
+            Text(
+                text = emptyQueryText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else if (results.isEmpty()) {
             Text(
                 text = noResultsText,
                 style = MaterialTheme.typography.labelSmall,
