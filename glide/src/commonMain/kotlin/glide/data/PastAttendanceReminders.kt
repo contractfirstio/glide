@@ -71,7 +71,7 @@ private fun collectPastSessionsNeedingAttendance(
     }
 }
 
-private fun pendingAttendanceForSession(
+internal fun pendingAttendanceForSession(
     scheduledClass: Class,
     sessionDate: LocalDate,
 ): PendingAttendanceSession? {

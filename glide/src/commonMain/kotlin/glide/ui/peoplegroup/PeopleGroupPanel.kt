@@ -56,6 +56,7 @@ import glide.data.StudentsPanelState
 import glide.data.StudentStore
 import glide.data.SchedulePanelState
 import glide.data.TermStore
+import glide.data.SoldPlanClassScheduleStore
 import glide.data.SoldPlanEnrollmentStore
 import glide.data.LeadNavigation
 import glide.data.LeadStore
@@ -64,6 +65,7 @@ import glide.data.findSoldPlanById
 import glide.data.soldPlanDeletionBlockReason
 import glide.data.PlanStore
 import glide.data.ClassStore
+import glide.data.isSoldPlanAssignedToClass
 import glide.debug.GlidePanelDebug
 import glide.debug.PanelDebugStateEffect
 import glide.model.formatMoney
@@ -89,6 +91,7 @@ import glide.ui.theme.GlideFieldLabel
 import glide.ui.theme.glideListItemTitleColor
 import glide.ui.theme.GlideOutlinedButton
 import glide.ui.theme.GlideOutlinedField
+import glide.ui.scheduling.SoldPlanClassTransferDialog
 import glide.ui.shared.DeleteConfirmDialog
 import glide.ui.shared.FormPanelSection
 import glide.ui.shared.FormPanelSectionRole
@@ -292,6 +295,8 @@ private fun PeopleGroupPanel(
     val formValidation = rememberFormValidation()
     val saveScope = rememberCoroutineScope()
     var cloneMessage by remember { mutableStateOf<String?>(null) }
+    var transferMessage by remember { mutableStateOf<String?>(null) }
+    var pendingTransferSoldPlanId by remember { mutableStateOf<String?>(null) }
     var listSearchQuery by remember { mutableStateOf("") }
 
     val clientFilterId = if (!ui.isLeadPanel) {
@@ -818,6 +823,7 @@ private fun PeopleGroupPanel(
                                             onOpenBilling = {
                                                 BillingPanelState.reopenForCurrentSoldPlan()
                                             },
+                                            onRequestTransfer = { pendingTransferSoldPlanId = group.id },
                                             onDelete = { showDeleteConfirm = true },
                                             onCloneToLead = {
                                                 cloneMessage = null
@@ -835,6 +841,14 @@ private fun PeopleGroupPanel(
                                 }
 
                                 cloneMessage?.let { message ->
+                                    Spacer(modifier = Modifier.height(spacing.field))
+                                    Text(
+                                        text = message,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                                transferMessage?.let { message ->
                                     Spacer(modifier = Modifier.height(spacing.field))
                                     Text(
                                         text = message,
@@ -993,6 +1007,17 @@ private fun PeopleGroupPanel(
                 formSection = formSection,
             )
         }
+    }
+
+    pendingTransferSoldPlanId?.let { soldPlanId ->
+        SoldPlanClassTransferDialog(
+            soldPlanId = soldPlanId,
+            onDismiss = { pendingTransferSoldPlanId = null },
+            onTransferred = { message ->
+                transferMessage = message
+                pendingTransferSoldPlanId = null
+            },
+        )
     }
 
     if (showDeleteConfirm && selectedId != null && (!ui.isLeadPanel || !ui.readOnly)) {
@@ -1344,9 +1369,11 @@ private fun SoldPlanDetailView(
     onOpenBilling: () -> Unit,
     onDelete: () -> Unit,
     onCloneToLead: () -> Unit,
+    onRequestTransfer: () -> Unit,
 ) {
     val enrollment = SoldPlanEnrollmentStore.forSoldPlan(group.id)
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
+    val assignedClass = ClassStore.findClassContainingSoldPlan(group.id)
 
     FormPanelSection(
         title = "Plan",
@@ -1398,6 +1425,37 @@ private fun SoldPlanDetailView(
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(top = spacing.field),
         )
+    }
+
+    if (assignedClass != null) {
+        FormPanelSectionsDivider(label = "Class", spacing = spacing)
+        FormPanelSection(
+            title = "Class assignment",
+            description = "Where this sold plan attends. Move when changing day or class.",
+            spacing = spacing,
+            role = FormPanelSectionRole.Secondary,
+        ) {
+            Text(
+                text = assignedClass.name,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+            )
+            SoldPlanClassScheduleStore.formatSessionDatesLabel(group.id, assignedClass.id)?.let { scheduleLabel ->
+                Spacer(modifier = Modifier.height(spacing.field))
+                Text(
+                    text = scheduleLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(modifier = Modifier.height(spacing.field))
+            GlideOutlinedButton(
+                onClick = onRequestTransfer,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Move to another class…")
+            }
+        }
     }
 
     FormPanelSectionsDivider(label = "Billing & actions", spacing = spacing)
