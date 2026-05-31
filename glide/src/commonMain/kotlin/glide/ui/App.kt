@@ -24,6 +24,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.isShiftPressed
 import glide.backup.DataBackupResult
 import glide.backup.DataBackupService
+import glide.calendar.GoogleCalendarSyncService
 import glide.data.AppSettingsStore
 import glide.data.AppViewMode
 import glide.data.AppViewState
@@ -55,6 +56,7 @@ fun App(
     GlideTheme {
         val appSettings by AppSettingsStore.settingsState
         var showCompanySettings by remember { mutableStateOf(false) }
+        var showCalendarSync by remember { mutableStateOf(false) }
         var backupErrorMessage by remember { mutableStateOf<String?>(null) }
         var showOpenBackupOffer by remember { mutableStateOf(false) }
         var showCloseBackupOffer by remember { mutableStateOf(false) }
@@ -70,6 +72,7 @@ fun App(
             PanelWorkspace.startSession(appSettings.workspaceUi)
             focusRequester.requestFocus()
             RollingPlanBillingService.syncAllActiveRollingPlanBilling()
+            GoogleCalendarSyncService.scheduleSyncIfEnabled()
             if (AppSettingsStore.shouldOfferBackupPrompt()) {
                 showOpenBackupOffer = true
             }
@@ -150,6 +153,7 @@ fun App(
                             is DataBackupResult.Failure -> backupErrorMessage = result.message
                         }
                     },
+                    onOpenCalendarSync = { showCalendarSync = true },
                 )
                 if (viewMode != AppViewMode.SCHEDULING) {
                     PendingAttendanceAlertBanner(pending = pendingAttendance)
@@ -203,6 +207,12 @@ fun App(
                         onExitApplication()
                     }
                 },
+            )
+        }
+
+        if (showCalendarSync) {
+            CalendarSyncDialog(
+                onDismiss = { showCalendarSync = false },
             )
         }
 

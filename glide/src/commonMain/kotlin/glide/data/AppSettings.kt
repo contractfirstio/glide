@@ -9,6 +9,11 @@ data class AppSettings(
     val hasCompletedFirstSession: Boolean = false,
     val windowBounds: WindowBounds = WindowBounds(),
     val workspaceUi: WorkspaceUiSettings = WorkspaceUiSettings(),
+    val googleCalendarSyncEnabled: Boolean = false,
+    val googleCalendarSyncLastSyncMillis: Long = 0L,
+    val googleCalendarSyncLastMessage: String = "",
+    val googleCalendarAccountEmail: String = "",
+    val googleCalendarId: String = "",
 ) {
     val isConfigured: Boolean
         get() = legalCompanyName.isNotBlank() &&

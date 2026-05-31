@@ -1,5 +1,6 @@
 package glide.data.persistence
 
+import glide.calendar.GoogleCalendarSyncService
 import glide.data.AttendanceCreditStore
 import glide.data.AttendanceStore
 import glide.data.BillStore
@@ -67,6 +68,7 @@ object GlideDataRepository {
 
     internal fun onStoresMutated() {
         scheduleSave()
+        GoogleCalendarSyncService.scheduleSyncIfEnabled()
     }
 
     private fun collectSnapshotFromStores(): GlideDataSnapshot = GlideDataSnapshot(

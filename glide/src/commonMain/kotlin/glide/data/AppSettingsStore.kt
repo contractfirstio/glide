@@ -37,10 +37,51 @@ object AppSettingsStore {
             hasCompletedFirstSession = _settings.value.hasCompletedFirstSession,
             windowBounds = _settings.value.windowBounds,
             workspaceUi = _settings.value.workspaceUi,
+            googleCalendarSyncEnabled = _settings.value.googleCalendarSyncEnabled,
+            googleCalendarSyncLastSyncMillis = _settings.value.googleCalendarSyncLastSyncMillis,
+            googleCalendarSyncLastMessage = _settings.value.googleCalendarSyncLastMessage,
+            googleCalendarAccountEmail = _settings.value.googleCalendarAccountEmail,
+            googleCalendarId = _settings.value.googleCalendarId,
         )
         if (!trimmed.isConfigured) return
         _settings.value = trimmed
         persistAppSettings(trimmed)
+    }
+
+    fun saveGoogleCalendarSyncEnabled(enabled: Boolean) {
+        val updated = _settings.value.copy(googleCalendarSyncEnabled = enabled)
+        _settings.value = updated
+        persistAppSettings(updated)
+    }
+
+    fun saveGoogleCalendarSyncStatus(message: String, syncedAtMillis: Long = System.currentTimeMillis()) {
+        val updated = _settings.value.copy(
+            googleCalendarSyncLastMessage = message,
+            googleCalendarSyncLastSyncMillis = syncedAtMillis,
+        )
+        _settings.value = updated
+        persistAppSettings(updated)
+    }
+
+    fun saveGoogleCalendarConnection(accountEmail: String, calendarId: String) {
+        val updated = _settings.value.copy(
+            googleCalendarAccountEmail = accountEmail.trim(),
+            googleCalendarId = calendarId.trim(),
+        )
+        _settings.value = updated
+        persistAppSettings(updated)
+    }
+
+    fun clearGoogleCalendarConnection() {
+        val updated = _settings.value.copy(
+            googleCalendarSyncEnabled = false,
+            googleCalendarAccountEmail = "",
+            googleCalendarId = "",
+            googleCalendarSyncLastMessage = "",
+            googleCalendarSyncLastSyncMillis = 0L,
+        )
+        _settings.value = updated
+        persistAppSettings(updated)
     }
 
     fun saveWindowBounds(bounds: WindowBounds) {
