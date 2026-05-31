@@ -1,5 +1,6 @@
 package glide.billing
 
+import glide.billing.BillingPdfSupport.CONTENT_PADDING
 import glide.billing.BillingPdfSupport.PdfPageContext
 import glide.billing.BillingPdfSupport.SECTION_GAP
 import glide.billing.BillingPdfSupport.colorAccent
@@ -42,7 +43,7 @@ object ReceiptPdfWriter {
             ctx.startFirstPage()
 
             ctx.y = drawAccentBar(ctx.stream, ctx.contentLeftX, ctx.contentRightX, ctx.y, colorPaid)
-            ctx.y -= 14f
+            ctx.y -= 8f
 
             val headerBottomY = drawHeader(
                 stream = ctx.stream,
@@ -51,12 +52,12 @@ object ReceiptPdfWriter {
                 rightX = ctx.contentRightX,
                 y = ctx.y,
             )
-            ctx.y = headerBottomY - SECTION_GAP
+            ctx.y = headerBottomY - 10f
 
             drawHorizontalRule(ctx.stream, ctx.contentLeftX, ctx.contentRightX, ctx.y, colorRule, 0.5f)
-            ctx.y -= SECTION_GAP
+            ctx.y -= 10f
 
-            ctx.y = drawSectionHeading(ctx.stream, ctx.contentLeftX, ctx.y, "Bill to")
+            ctx.y = drawSectionHeading(ctx.stream, ctx.textLeftX, ctx.y, "Bill to")
             ctx.y = drawContactLines(
                 stream = ctx.stream,
                 lines = listOfNotNull(
@@ -64,9 +65,9 @@ object ReceiptPdfWriter {
                     content.billToEmail.takeIf { it.isNotBlank() },
                     content.billToPhone.takeIf { it.isNotBlank() },
                 ),
-                x = ctx.contentLeftX,
+                x = ctx.textLeftX,
                 y = ctx.y,
-                fontSize = 10.5f,
+                fontSize = 9.5f,
             )
             ctx.y -= SECTION_GAP
 
@@ -103,50 +104,76 @@ object ReceiptPdfWriter {
         y: Float,
     ): Float {
         val titleY = y
-        fillRect(stream, leftX, titleY - 76f, rightX - leftX, 70f, colorAccentSoft)
-        strokeRect(stream, leftX, titleY - 76f, rightX - leftX, 70f, colorRule, 0.6f)
+        val verticalPadding = 6f
+        val titleFontSize = 22f
+        val subtitleFontSize = 10f
+        val fromNameFontSize = 12f
+        val contactFontSize = 9f
+        val textLeftX = leftX + CONTENT_PADDING
+        val textRightX = rightX - CONTENT_PADDING
+        val contactLines = listOfNotNull(
+            content.fromEmail.takeIf { it.isNotBlank() },
+            content.fromPhone.takeIf { it.isNotBlank() },
+        )
 
-        drawAt(stream, fontBold, 8.5f, rightX - 12f, titleY - 10f, "CONFIRMATION", align = TextAlign.RIGHT, color = colorMuted)
-        drawAt(stream, fontBold, 26f, rightX, titleY, "RECEIPT", align = TextAlign.RIGHT, color = colorPaid)
-        var metaY = titleY - lineStep(26f) - 8f
+        var metaY = titleY - lineStep(titleFontSize) - 4f
+        metaY = layoutMetaRow(metaY, subtitleFontSize)
+        metaY -= 2f
+        repeat(4) { metaY = layoutMetaRow(metaY) }
+        var leftY = titleY - 4f - lineStep(fromNameFontSize)
+        leftY = layoutContactLines(leftY, contactLines.size, contactFontSize)
+
+        val contentBottomY = minOf(leftY, metaY) - verticalPadding
+        val contentTopY = titleY + 4f
+        val boxHeight = contentTopY - contentBottomY
+        fillRect(stream, leftX, contentBottomY, rightX - leftX, boxHeight, colorAccentSoft)
+        strokeRect(stream, leftX, contentBottomY, rightX - leftX, boxHeight, colorRule, 0.6f)
+
+        drawAt(stream, fontBold, titleFontSize, textRightX, titleY, "RECEIPT", align = TextAlign.RIGHT, color = colorPaid)
+        metaY = titleY - lineStep(titleFontSize) - 4f
         metaY = drawAt(
             stream,
             fontBold,
-            11f,
-            rightX - 12f,
+            subtitleFontSize,
+            textRightX,
             metaY,
             "PAYMENT RECEIPT",
             align = TextAlign.RIGHT,
             color = colorAccent,
         )
-        metaY -= 4f
+        metaY -= 2f
 
-        var leftY = drawAt(stream, fontBold, 14f, leftX + 12f, y - 6f, content.fromName, color = colorInk)
+        leftY = drawAt(stream, fontBold, fromNameFontSize, textLeftX, y - 4f, content.fromName, color = colorInk)
         leftY = drawContactLines(
             stream = stream,
-            lines = listOfNotNull(
-                content.fromEmail.takeIf { it.isNotBlank() },
-                content.fromPhone.takeIf { it.isNotBlank() },
-            ),
-            x = leftX + 12f,
+            lines = contactLines,
+            x = textLeftX,
             y = leftY,
-            fontSize = 9.5f,
+            fontSize = contactFontSize,
             muted = true,
         )
 
-        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Receipt no.", content.receiptNumber)
-        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Payment date", content.paidDateLabel)
-        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Invoice ref.", content.invoiceNumber)
-        metaY = drawMetaRow(stream, rightX - 12f, metaY, "Document", "Payment receipt")
+        metaY = drawMetaRow(stream, textRightX, metaY, "Receipt no.", content.receiptNumber)
+        metaY = drawMetaRow(stream, textRightX, metaY, "Payment date", content.paidDateLabel)
+        metaY = drawMetaRow(stream, textRightX, metaY, "Invoice ref.", content.invoiceNumber)
+        metaY = drawMetaRow(stream, textRightX, metaY, "Document", "Payment receipt")
 
-        return minOf(leftY, metaY) - 10f
+        return minOf(leftY, metaY) - 6f
+    }
+
+    private fun layoutMetaRow(y: Float, fontSize: Float = 9f): Float = y - lineStep(fontSize) - 1f
+
+    private fun layoutContactLines(y: Float, lineCount: Int, fontSize: Float): Float {
+        var rowY = y
+        repeat(lineCount) { rowY -= lineStep(fontSize) }
+        return rowY
     }
 
     private fun drawPaymentReceivedSection(ctx: PdfPageContext, content: ReceiptContent) {
-        val padding = 14f
+        val padding = CONTENT_PADDING
         val leftX = ctx.contentLeftX
         val rightX = ctx.contentRightX
-        val textX = leftX + padding
+        val textX = ctx.textLeftX
         val referenceLine = content.paymentReference.takeIf { it.isNotBlank() }
             ?.let { "Reference: $it" }
         val sectionHeight = layoutPaymentReceivedSectionHeight(padding, referenceLine)
@@ -203,7 +230,7 @@ object ReceiptPdfWriter {
             ctx.stream,
             fontBold,
             9f,
-            ctx.contentLeftX,
+            ctx.textLeftX,
             ctx.y,
             "This is a payment receipt, not an invoice. Please retain for your records.",
             color = colorMuted,

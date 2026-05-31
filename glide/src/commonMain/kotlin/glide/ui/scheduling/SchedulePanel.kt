@@ -886,6 +886,7 @@ private fun ClassCustomerGroupsSection(
     var searchQuery by remember { mutableStateOf("") }
     var enrollmentMessage by remember { mutableStateOf<String?>(null) }
     var pendingRemoveGroupId by remember { mutableStateOf<String?>(null) }
+    var pendingTransferGroupId by remember { mutableStateOf<String?>(null) }
     var pendingWeeklyLink by remember { mutableStateOf<PendingWeeklyPlanLink?>(null) }
     var weeklyLinkBlockedMessage by remember { mutableStateOf<String?>(null) }
 
@@ -1048,10 +1049,13 @@ private fun ClassCustomerGroupsSection(
                                 }
                             }
                         }
-                        GlideTextButton(
-                            onClick = { pendingRemoveGroupId = groupId },
-                        ) {
-                            Text("Remove", color = MaterialTheme.colorScheme.error)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            GlideTextButton(onClick = { pendingTransferGroupId = groupId }) {
+                                Text("Move", color = MaterialTheme.colorScheme.primary)
+                            }
+                            GlideTextButton(onClick = { pendingRemoveGroupId = groupId }) {
+                                Text("Remove", color = MaterialTheme.colorScheme.error)
+                            }
                         }
                     }
                     if (index < assignedIds.lastIndex) {
@@ -1060,6 +1064,18 @@ private fun ClassCustomerGroupsSection(
                 }
             }
         }
+    }
+
+    pendingTransferGroupId?.let { groupId ->
+        SoldPlanClassTransferDialog(
+            soldPlanId = groupId,
+            onDismiss = { pendingTransferGroupId = null },
+            onTransferred = { message ->
+                onCustomerGroupIdsChange(soldPlanIds.filter { it != groupId })
+                enrollmentMessage = message
+                pendingTransferGroupId = null
+            },
+        )
     }
 
     pendingRemoveGroupId?.let { groupId ->

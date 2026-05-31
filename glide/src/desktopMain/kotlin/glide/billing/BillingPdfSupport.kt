@@ -10,12 +10,13 @@ import org.apache.pdfbox.pdmodel.graphics.color.PDColor
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB
 
 internal object BillingPdfSupport {
-    const val MARGIN = 54f
-    const val FOOTER_HEIGHT = 28f
-    const val LINE_GAP = 4f
-    const val SECTION_GAP = 22f
+    const val MARGIN = 48f
+    const val FOOTER_HEIGHT = 24f
+    const val LINE_GAP = 2f
+    const val SECTION_GAP = 14f
+    const val CONTENT_PADDING = 10f
     const val AMOUNT_COLUMN_WIDTH = 96f
-    const val COLUMN_GAP = 16f
+    const val COLUMN_GAP = 12f
     const val META_LABEL_WIDTH = 88f
 
     val fontRegular = PDType1Font(Standard14Fonts.FontName.HELVETICA)
@@ -40,8 +41,10 @@ internal object BillingPdfSupport {
         val pageHeight = PDRectangle.A4.height
         val contentLeftX = MARGIN
         val contentRightX = pageWidth - MARGIN
-        val amountRightX = contentRightX
-        val descriptionMaxWidth = amountRightX - MARGIN - AMOUNT_COLUMN_WIDTH - COLUMN_GAP
+        val textLeftX = contentLeftX + CONTENT_PADDING
+        val textRightX = contentRightX - CONTENT_PADDING
+        val amountColumnRightX = textRightX
+        val descriptionMaxWidth = amountColumnRightX - COLUMN_GAP - AMOUNT_COLUMN_WIDTH - textLeftX
         val minContentBottomY = MARGIN + FOOTER_HEIGHT
 
         lateinit var stream: PDPageContentStream
@@ -81,8 +84,8 @@ internal object BillingPdfSupport {
         }
 
         private fun drawPageFooter() {
-            val footerY = MARGIN + 6f
-            drawHorizontalRule(stream, contentLeftX, contentRightX, footerY + 14f, colorRule, 0.5f)
+            val footerY = MARGIN + 4f
+            drawHorizontalRule(stream, contentLeftX, contentRightX, footerY + 10f, colorRule, 0.5f)
             drawAt(
                 stream,
                 fontRegular,
@@ -109,10 +112,10 @@ internal object BillingPdfSupport {
     data class TableRow(val description: String, val amount: String)
 
     fun drawClassScheduleSection(ctx: PdfPageContext, schedule: InvoiceClassSchedule) {
-        val padding = 12f
+        val padding = CONTENT_PADDING
         val leftX = ctx.contentLeftX
         val rightX = ctx.contentRightX
-        val textX = leftX + padding
+        val textX = ctx.textLeftX
         val innerWidth = rightX - leftX - padding * 2
         val bodyFontSize = 9.5f
         val sessionLabels = schedule.scheduledSessionLabels.ifEmpty { listOf("Not scheduled yet") }
@@ -129,12 +132,12 @@ internal object BillingPdfSupport {
             }
             val introHeight = chunkTopY - introBottomY
             val sessionLineHeight = lineStep(bodyFontSize)
-            val availableForSessions = (chunkTopY - ctx.minContentBottomY - introHeight - padding - 4f)
+            val availableForSessions = (chunkTopY - ctx.minContentBottomY - introHeight - padding - 2f)
                 .coerceAtLeast(sessionLineHeight)
             val maxSessions = (availableForSessions / sessionLineHeight).toInt().coerceAtLeast(1)
             val chunkEnd = minOf(sessionIndex + maxSessions, sessionLabels.size)
             val chunkSessions = sessionLabels.subList(sessionIndex, chunkEnd)
-            val chunkHeight = introHeight + chunkSessions.size * sessionLineHeight + padding + 4f
+            val chunkHeight = introHeight + chunkSessions.size * sessionLineHeight + padding + 2f
 
             ctx.ensureSpace(chunkHeight, continuation = !isFirstChunk)
             val topY = ctx.y
@@ -142,35 +145,35 @@ internal object BillingPdfSupport {
             fillRect(ctx.stream, leftX, contentBottomY, rightX - leftX, chunkHeight, colorFill)
             strokeRect(ctx.stream, leftX, contentBottomY, rightX - leftX, chunkHeight, colorRule, 0.5f)
 
-            var innerY = topY - padding - 9f
+            var innerY = topY - padding - 6f
             if (isFirstChunk) {
                 innerY = drawAt(ctx.stream, fontBold, 9f, textX, innerY, "CLASS DETAILS", color = colorMuted)
-                innerY -= 8f
-                innerY = drawAt(ctx.stream, fontBold, 10.5f, textX, innerY, schedule.className, color = colorInk)
+                innerY -= 4f
+                innerY = drawAt(ctx.stream, fontBold, 10f, textX, innerY, schedule.className, color = colorInk)
                 innerY = drawWrappedLines(ctx.stream, textX, innerY, innerWidth, schedule.classDetails, bodyFontSize, colorMuted)
                 if (schedule.locationAddressLines.isNotEmpty()) {
-                    innerY -= 4f
-                    innerY = drawAt(ctx.stream, fontBold, 9.5f, textX, innerY, "Location address", color = colorInk)
+                    innerY -= 2f
+                    innerY = drawAt(ctx.stream, fontBold, 9f, textX, innerY, "Location address", color = colorInk)
                     for (addressLine in schedule.locationAddressLines) {
                         innerY = drawAt(ctx.stream, fontRegular, bodyFontSize, textX, innerY, addressLine, color = colorMuted)
                     }
                 }
-                innerY -= 6f
-                innerY = drawAt(ctx.stream, fontBold, 9.5f, textX, innerY, "Students", color = colorInk)
+                innerY -= 4f
+                innerY = drawAt(ctx.stream, fontBold, 9f, textX, innerY, "Students", color = colorInk)
                 innerY = drawWrappedLines(ctx.stream, textX, innerY, innerWidth, schedule.studentNamesLabel, bodyFontSize, colorMuted)
                 innerY = drawAt(
                     ctx.stream,
                     fontBold,
                     bodyFontSize,
                     textX,
-                    innerY - 2f,
+                    innerY - 1f,
                     "Plan period starts: ${schedule.billingWindowStartLabel}",
                     color = colorInk,
                 )
-                innerY -= 4f
+                innerY -= 2f
             } else {
                 innerY = drawAt(ctx.stream, fontBold, 9f, textX, innerY, "CLASS DETAILS (CONTINUED)", color = colorMuted)
-                innerY -= 8f
+                innerY -= 4f
             }
             innerY = drawAt(ctx.stream, fontBold, 9.5f, textX, innerY, "Class days to attend", color = colorInk)
             for (sessionLabel in chunkSessions) {
@@ -179,7 +182,7 @@ internal object BillingPdfSupport {
 
             sessionIndex = chunkEnd
             isFirstChunk = false
-            ctx.y = contentBottomY - 4f
+            ctx.y = contentBottomY - 2f
         }
     }
 
@@ -193,11 +196,12 @@ internal object BillingPdfSupport {
     ) {
         val leftX = ctx.contentLeftX
         val rightX = ctx.contentRightX
-        val amountRightX = ctx.amountRightX
+        val amountColumnRightX = ctx.amountColumnRightX
         val descriptionMaxWidth = ctx.descriptionMaxWidth
-        val headerFontSize = 9f
-        val rowFontSize = 10f
-        val headerHeight = 26f
+        val textLeftX = ctx.textLeftX
+        val headerFontSize = 8.5f
+        val rowFontSize = 9.5f
+        val headerHeight = 20f
         val rows = buildList {
             debitLines.forEach { debit ->
                 add(TableRow(debit.description, debit.formattedAmount(currencyCode)))
@@ -206,31 +210,31 @@ internal object BillingPdfSupport {
                 add(TableRow(credit.description, credit.formattedAmount(currencyCode)))
             }
         }
-        val totalBlockHeight = 8f + 16f + lineStep(12f) + 8f
+        val totalBlockHeight = 4f + 10f + lineStep(11f) + 6f + 10f
 
         fun drawTableHeader(atY: Float): Float {
             val headerBottomY = atY - headerHeight
-            val headerTextY = headerBottomY + headerHeight - 7f
+            val headerTextY = headerBottomY + headerHeight - 6f
             fillRect(ctx.stream, leftX, headerBottomY, rightX - leftX, headerHeight, colorAccent)
-            drawAt(ctx.stream, fontBold, headerFontSize, leftX + 10f, headerTextY, "DESCRIPTION", color = rgb(1f, 1f, 1f))
+            drawAt(ctx.stream, fontBold, headerFontSize, textLeftX, headerTextY, "DESCRIPTION", color = rgb(1f, 1f, 1f))
             drawAt(
                 ctx.stream,
                 fontBold,
                 headerFontSize,
-                amountRightX - 10f,
+                amountColumnRightX,
                 headerTextY,
                 "AMOUNT",
                 align = TextAlign.RIGHT,
                 color = rgb(1f, 1f, 1f),
             )
-            return headerBottomY - lineStep(rowFontSize) - 8f
+            return headerBottomY - lineStep(rowFontSize) - 4f
         }
 
         var rowIndex = 0
         var firstTable = true
         var isStriped = false
         while (rowIndex < rows.size || firstTable) {
-            ctx.ensureSpace(headerHeight + lineStep(rowFontSize) + 8f, continuation = !firstTable)
+            ctx.ensureSpace(headerHeight + lineStep(rowFontSize) + 4f, continuation = !firstTable)
             var rowY = drawTableHeader(ctx.y)
             firstTable = false
 
@@ -254,8 +258,8 @@ internal object BillingPdfSupport {
                     description = row.description,
                     amount = row.amount,
                     descriptionMaxWidth = descriptionMaxWidth,
-                    amountRightX = amountRightX - 10f,
-                    descriptionX = leftX + 10f,
+                    amountRightX = amountColumnRightX,
+                    descriptionX = textLeftX,
                     fontSize = rowFontSize,
                 )
                 rowIndex++
@@ -268,35 +272,48 @@ internal object BillingPdfSupport {
 
         ctx.ensureSpace(totalBlockHeight)
         var rowY = ctx.y
-        rowY -= 8f
+        rowY -= 4f
         drawHorizontalRule(ctx.stream, leftX, rightX, rowY, colorRule, 0.75f)
-        rowY -= 16f
+        rowY -= 10f
 
-        val totalFontSize = 12f
+        val totalFontSize = 11f
+        val labelFontSize = 9f
+        val horizontalPadding = 8f
+        val verticalPadding = 5f
         val amountWidth = stringWidth(fontBold, totalFontSize, formattedTotal)
+        val labelWidth = stringWidth(fontRegular, labelFontSize, totalLabel)
+        val labelRightX = amountColumnRightX - amountWidth - COLUMN_GAP
+        val textTopY = rowY + 2f
+        val textBottomY = rowY - totalFontSize - 2f
+        val boxBottomY = textBottomY - verticalPadding
+        val boxTopY = textTopY + verticalPadding
+        val boxHeight = boxTopY - boxBottomY
+        val boxLeftX = labelRightX - labelWidth - horizontalPadding
+        val boxWidth = amountColumnRightX - boxLeftX + horizontalPadding
+
         fillRect(
             ctx.stream,
-            amountRightX - amountWidth - COLUMN_GAP - 102f,
-            rowY - 10f,
-            amountWidth + COLUMN_GAP + 110f,
-            22f,
+            boxLeftX,
+            boxBottomY,
+            boxWidth,
+            boxHeight,
             colorAccentSoft,
         )
         strokeRect(
             ctx.stream,
-            amountRightX - amountWidth - COLUMN_GAP - 102f,
-            rowY - 10f,
-            amountWidth + COLUMN_GAP + 110f,
-            22f,
+            boxLeftX,
+            boxBottomY,
+            boxWidth,
+            boxHeight,
             colorRule,
             0.5f,
         )
         drawAt(
             ctx.stream,
             fontRegular,
-            10f,
-            amountRightX - amountWidth - COLUMN_GAP,
-            rowY + 1f,
+            labelFontSize,
+            labelRightX,
+            rowY,
             totalLabel,
             align = TextAlign.RIGHT,
             color = colorMuted,
@@ -305,13 +322,13 @@ internal object BillingPdfSupport {
             ctx.stream,
             fontBold,
             totalFontSize,
-            amountRightX,
+            amountColumnRightX,
             rowY,
             formattedTotal,
             align = TextAlign.RIGHT,
             color = colorInk,
         )
-        ctx.y = rowY - lineStep(totalFontSize) - 8f
+        ctx.y = boxBottomY - 4f
     }
 
     fun drawMetaRow(
@@ -321,18 +338,18 @@ internal object BillingPdfSupport {
         label: String,
         value: String,
     ): Float {
-        val fontSize = 9.5f
+        val fontSize = 9f
         val valueX = rightX
         val labelX = rightX - META_LABEL_WIDTH
         drawAt(stream, fontRegular, fontSize, labelX, y, label, align = TextAlign.RIGHT, color = colorMuted)
         drawAt(stream, fontBold, fontSize, valueX, y, value, align = TextAlign.RIGHT, color = colorInk)
-        return y - lineStep(fontSize) - 2f
+        return y - lineStep(fontSize) - 1f
     }
 
     fun drawSectionHeading(stream: PDPageContentStream, x: Float, y: Float, title: String): Float {
         val fontSize = 8f
         val bottomY = drawAt(stream, fontBold, fontSize, x, y, title.uppercase(), color = colorMuted)
-        return bottomY - 8f
+        return bottomY - 4f
     }
 
     fun drawContactLines(
@@ -477,31 +494,31 @@ internal object BillingPdfSupport {
         innerWidth: Float,
         bodyFontSize: Float,
     ): Float {
-        var innerY = topY - padding - 9f
+        var innerY = topY - padding - 6f
         innerY = advanceTextY(innerY, 9f)
-        innerY -= 8f
-        innerY = advanceTextY(innerY, 10.5f)
+        innerY -= 4f
+        innerY = advanceTextY(innerY, 10f)
         innerY = advanceWrappedTextY(innerY, bodyFontSize, schedule.classDetails, innerWidth)
         if (schedule.locationAddressLines.isNotEmpty()) {
-            innerY -= 4f
-            innerY = advanceTextY(innerY, 9.5f)
+            innerY -= 2f
+            innerY = advanceTextY(innerY, 9f)
             for (addressLine in schedule.locationAddressLines) {
                 innerY = advanceTextY(innerY, bodyFontSize, addressLine)
             }
         }
-        innerY -= 6f
-        innerY = advanceTextY(innerY, 9.5f)
-        innerY = advanceWrappedTextY(innerY, bodyFontSize, schedule.studentNamesLabel, innerWidth)
-        innerY = advanceTextY(innerY - 2f, bodyFontSize)
         innerY -= 4f
+        innerY = advanceTextY(innerY, 9f)
+        innerY = advanceWrappedTextY(innerY, bodyFontSize, schedule.studentNamesLabel, innerWidth)
+        innerY = advanceTextY(innerY - 1f, bodyFontSize)
+        innerY -= 2f
         innerY = advanceTextY(innerY, 9.5f)
         return innerY
     }
 
     private fun layoutClassScheduleContinuedIntroBottom(topY: Float, padding: Float): Float {
-        var innerY = topY - padding - 9f
+        var innerY = topY - padding - 6f
         innerY = advanceTextY(innerY, 9f)
-        innerY -= 8f
+        innerY -= 4f
         innerY = advanceTextY(innerY, 9.5f)
         return innerY
     }
@@ -510,7 +527,7 @@ internal object BillingPdfSupport {
         val lineCount = wrapLines(fontRegular, fontSize, description, descriptionMaxWidth)
             .count { it.isNotEmpty() }
             .coerceAtLeast(1)
-        return lineCount * lineStep(fontSize) + 6f
+        return lineCount * lineStep(fontSize) + 3f
     }
 
     private fun drawTableRow(
@@ -534,7 +551,7 @@ internal object BillingPdfSupport {
             }
             rowY -= lineStep(fontSize)
         }
-        return rowY - 6f
+        return rowY - 3f
     }
 
     private fun advanceTextY(y: Float, fontSize: Float, text: String = "X"): Float {

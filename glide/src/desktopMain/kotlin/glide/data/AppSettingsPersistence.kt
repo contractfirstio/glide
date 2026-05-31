@@ -39,6 +39,14 @@ internal actual fun persistAppSettings(settings: AppSettings) {
     )
     properties.setProperty(PROPERTY_WINDOW_BOUNDS, glideJson.encodeToString(settings.windowBounds))
     properties.setProperty(PROPERTY_WORKSPACE_UI, glideJson.encodeToString(settings.workspaceUi))
+    properties.setProperty(PROPERTY_GOOGLE_CALENDAR_SYNC_ENABLED, settings.googleCalendarSyncEnabled.toString())
+    properties.setProperty(
+        PROPERTY_GOOGLE_CALENDAR_SYNC_LAST_SYNC_MILLIS,
+        settings.googleCalendarSyncLastSyncMillis.toString(),
+    )
+    properties.setProperty(PROPERTY_GOOGLE_CALENDAR_SYNC_LAST_MESSAGE, settings.googleCalendarSyncLastMessage)
+    properties.setProperty(PROPERTY_GOOGLE_CALENDAR_ACCOUNT_EMAIL, settings.googleCalendarAccountEmail)
+    properties.setProperty(PROPERTY_GOOGLE_CALENDAR_ID, settings.googleCalendarId)
     file.outputStream().use { properties.store(it, "Glide app settings") }
 }
 
@@ -63,6 +71,15 @@ private fun readProperties(file: File): AppSettings = runCatching {
     val workspaceUi = properties.getProperty(PROPERTY_WORKSPACE_UI)?.let { json ->
         runCatching { glideJson.decodeFromString<WorkspaceUiSettings>(json) }.getOrDefault(WorkspaceUiSettings())
     } ?: WorkspaceUiSettings()
+    val googleCalendarSyncEnabled =
+        properties.getProperty(PROPERTY_GOOGLE_CALENDAR_SYNC_ENABLED, "false") == "true"
+    val googleCalendarSyncLastSyncMillis =
+        properties.getProperty(PROPERTY_GOOGLE_CALENDAR_SYNC_LAST_SYNC_MILLIS)?.toLongOrNull() ?: 0L
+    val googleCalendarSyncLastMessage =
+        properties.getProperty(PROPERTY_GOOGLE_CALENDAR_SYNC_LAST_MESSAGE, "").orEmpty()
+    val googleCalendarAccountEmail =
+        properties.getProperty(PROPERTY_GOOGLE_CALENDAR_ACCOUNT_EMAIL, "").orEmpty()
+    val googleCalendarId = properties.getProperty(PROPERTY_GOOGLE_CALENDAR_ID, "").orEmpty()
     AppSettings(
         legalCompanyName = legalCompanyName,
         fpsNumber = fpsNumber,
@@ -71,6 +88,11 @@ private fun readProperties(file: File): AppSettings = runCatching {
         hasCompletedFirstSession = hasCompletedFirstSession,
         windowBounds = windowBounds,
         workspaceUi = workspaceUi,
+        googleCalendarSyncEnabled = googleCalendarSyncEnabled,
+        googleCalendarSyncLastSyncMillis = googleCalendarSyncLastSyncMillis,
+        googleCalendarSyncLastMessage = googleCalendarSyncLastMessage,
+        googleCalendarAccountEmail = googleCalendarAccountEmail,
+        googleCalendarId = googleCalendarId,
     )
 }.getOrDefault(AppSettings())
 
@@ -81,6 +103,11 @@ private const val PROPERTY_COMPANY_PHONE = "companyPhone"
 private const val PROPERTY_HAS_COMPLETED_FIRST_SESSION = "hasCompletedFirstSession"
 private const val PROPERTY_WINDOW_BOUNDS = "windowBounds"
 private const val PROPERTY_WORKSPACE_UI = "workspaceUi"
+private const val PROPERTY_GOOGLE_CALENDAR_SYNC_ENABLED = "googleCalendarSyncEnabled"
+private const val PROPERTY_GOOGLE_CALENDAR_SYNC_LAST_SYNC_MILLIS = "googleCalendarSyncLastSyncMillis"
+private const val PROPERTY_GOOGLE_CALENDAR_SYNC_LAST_MESSAGE = "googleCalendarSyncLastMessage"
+private const val PROPERTY_GOOGLE_CALENDAR_ACCOUNT_EMAIL = "googleCalendarAccountEmail"
+private const val PROPERTY_GOOGLE_CALENDAR_ID = "googleCalendarId"
 
 private fun settingsFile(): File = File(glideApplicationSupportDir(), "settings.properties")
 

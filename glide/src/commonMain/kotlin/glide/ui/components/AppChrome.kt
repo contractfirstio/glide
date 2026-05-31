@@ -52,6 +52,7 @@ fun AppChrome(
     companySettingsConfigured: Boolean = true,
     onOpenCompanySettings: () -> Unit = {},
     onEmailDataBackup: () -> Unit = {},
+    onOpenCalendarSync: () -> Unit = {},
 ) {
     val mode = AppViewState.mode
     val accent = GlideAccents.forViewMode(mode)
@@ -122,6 +123,7 @@ fun AppChrome(
                     companySettingsConfigured = companySettingsConfigured,
                     onOpenCompanySettings = onOpenCompanySettings,
                     onEmailDataBackup = onEmailDataBackup,
+                    onOpenCalendarSync = onOpenCalendarSync,
                 )
             }
         }
@@ -197,6 +199,7 @@ private fun AppMenu(
     companySettingsConfigured: Boolean,
     onOpenCompanySettings: () -> Unit,
     onEmailDataBackup: () -> Unit,
+    onOpenCalendarSync: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     var panelsExpanded by remember { mutableStateOf(false) }
@@ -293,6 +296,14 @@ private fun AppMenu(
                 onClick = {
                     PanelWorkspace.restoreDefaultLayout(viewMode)
                     AppSettingsStore.saveWorkspaceUi(PanelWorkspace.toSettings())
+                },
+            )
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("Google Calendar sync…") },
+                onClick = {
+                    menuExpanded = false
+                    onOpenCalendarSync()
                 },
             )
             HorizontalDivider()
