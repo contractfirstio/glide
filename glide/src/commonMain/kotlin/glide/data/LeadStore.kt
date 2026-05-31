@@ -55,6 +55,24 @@ object LeadStore {
 
     fun findById(id: String): Lead? = _leads.find { it.id == id }
 
+    /**
+     * Creates a lead whose draft main client is copied from a related person (student).
+     * Name, date of birth, and notes are copied; email and phone are left blank.
+     */
+    fun createFromRelatedPerson(studentId: String): Lead? {
+        val student = StudentStore.findById(studentId) ?: return null
+        val lead = Lead(
+            clientName = student.name.trim(),
+            dateOfBirth = student.dateOfBirth.trim(),
+            status = LeadStatus.New,
+            planStartDate = LocalDate.now().toString(),
+            mainClientAttendsClass = true,
+            notes = student.notes.trim(),
+        )
+        create(lead)
+        return lead
+    }
+
     fun removeStudentFromAllLeads(personId: String) {
         _leads.forEachIndexed { index, lead ->
             if (personId in lead.studentIds) {

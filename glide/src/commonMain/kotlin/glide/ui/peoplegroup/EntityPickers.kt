@@ -180,7 +180,8 @@ fun ReadOnlyPlanSection(
 @Composable
 internal fun LeadStudentLinkedRow(
     person: Student,
-    onRemove: () -> Unit,
+    onRemove: (() -> Unit)? = null,
+    onNewLeadAsMainContact: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -199,8 +200,20 @@ internal fun LeadStudentLinkedRow(
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f),
         )
-        GlideTextButton(onClick = onRemove) {
-            Text("Remove", color = MaterialTheme.colorScheme.error)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            onNewLeadAsMainContact?.let { onClick ->
+                GlideTextButton(onClick = onClick) {
+                    Text("New lead")
+                }
+            }
+            onRemove?.let { onClick ->
+                GlideTextButton(onClick = onClick) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
     }
 }
