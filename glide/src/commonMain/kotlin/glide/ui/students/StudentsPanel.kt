@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import glide.data.BillingPanelState
 import glide.data.ClientStore
 import glide.data.ClientsPanelState
+import glide.data.LeadNavigation
+import glide.data.LeadStore
 import glide.data.SoldPlanStore
 import glide.data.PlanStore
 import glide.data.PlansPanelState
@@ -101,6 +103,7 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
     val form = rememberFormDirtyTracker(StudentFormState())
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var leadCreatedMessage by remember { mutableStateOf<String?>(null) }
     val formValidation = rememberFormValidation()
     val saveScope = rememberCoroutineScope()
     var listSearchQuery by remember { mutableStateOf("") }
@@ -165,6 +168,7 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
     fun loadIntoForm(person: Student) {
         StudentsPanelState.onStudentSelected(person.id)
         selectedId = person.id
+        leadCreatedMessage = null
         form.load(
             StudentFormState(
                 name = person.name,
@@ -392,6 +396,41 @@ fun StudentsPanel(modifier: Modifier = Modifier) {
                                     text = "On $soldPlanCount sold plan${if (soldPlanCount == 1) "" else "s"}.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(spacing.section))
+                            FormPanelSectionsDivider(label = "Lead", spacing = spacing)
+                            FormPanelSection(
+                                title = "New lead",
+                                description = "Copy this person as the main contact on a separate lead.",
+                                spacing = spacing,
+                                role = FormPanelSectionRole.Tertiary,
+                            ) {
+                                GlideOutlinedButton(
+                                    onClick = {
+                                        leadCreatedMessage = null
+                                        val lead = LeadStore.createFromRelatedPerson(selectedId!!)
+                                        if (lead != null) {
+                                            LeadNavigation.openLead(lead.id)
+                                            leadCreatedMessage =
+                                                "Lead created with this person as main contact. Open the Leads panel to edit."
+                                        } else {
+                                            leadCreatedMessage = "Could not create a lead from this person."
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text("New lead as main contact")
+                                }
+                            }
+
+                            leadCreatedMessage?.let { message ->
+                                Spacer(modifier = Modifier.height(spacing.field))
+                                Text(
+                                    text = message,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
                                 )
                             }
 

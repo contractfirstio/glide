@@ -32,6 +32,7 @@ fun LeadStudentsSection(
     mainClientId: String?,
     clientName: String,
     onSelectionChange: (List<String>) -> Unit,
+    onNewLeadFromStudent: (Student) -> Unit,
     spacing: GlideLayout.Spacing,
     validation: FormValidationState,
 ) {
@@ -64,7 +65,7 @@ fun LeadStudentsSection(
     FormValidationAnchor(validation = validation, fieldKey = "students") {
     LeadPanelSection(
         title = "Students",
-        description = "Family or others on this lead — separate from the main client.",
+        description = "Family or others on this lead — separate from the main client. Use New lead to copy someone as the main contact on a separate lead.",
         spacing = spacing,
         role = LeadPanelSectionRole.Secondary,
         modifier = Modifier.then(
@@ -82,6 +83,7 @@ fun LeadStudentsSection(
                 linked.forEachIndexed { index, person ->
                     LeadStudentLinkedRow(
                         person = person,
+                        onNewLeadAsMainContact = { onNewLeadFromStudent(person) },
                         onRemove = {
                             onSelectionChange(selectedIds.filter { it != person.id })
                             validation.clearKey("students")

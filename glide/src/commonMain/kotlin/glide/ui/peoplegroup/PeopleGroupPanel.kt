@@ -78,6 +78,7 @@ import glide.data.resolveStudents
 import glide.model.Lead
 import glide.model.LeadStatus
 import glide.model.SoldPlan
+import glide.model.Student
 import glide.model.parseIsoLocalDate
 import glide.model.summaryLine
 import glide.ui.leads.formatIsoDateForDisplay
@@ -448,6 +449,16 @@ private fun PeopleGroupPanel(
         )
         formError = null
         formValidation.clear()
+    }
+
+    fun createLeadFromRelatedPerson(studentId: String) {
+        val lead = LeadStore.createFromRelatedPerson(studentId) ?: return
+        if (ui.isLeadPanel) {
+            loadLeadIntoForm(lead)
+        } else {
+            LeadNavigation.openLead(lead.id)
+            cloneMessage = "Lead created with this person as main contact. Open the Leads panel to edit."
+        }
     }
 
     val pendingLeadId = LeadNavigation.pendingLeadId
@@ -836,6 +847,9 @@ private fun PeopleGroupPanel(
                                                     cloneMessage = "Could not create a lead from this group."
                                                 }
                                             },
+                                            onNewLeadFromStudent = { student ->
+                                                createLeadFromRelatedPerson(student.id)
+                                            },
                                         )
                                     }
                                 }
@@ -866,6 +880,9 @@ private fun PeopleGroupPanel(
                                     showPipelineStatus = ui.showPipelineStatus,
                                     showPlanPicker = ui.showPlanPicker,
                                     validation = formValidation,
+                                    onNewLeadFromStudent = { student ->
+                                        createLeadFromRelatedPerson(student.id)
+                                    },
                                 )
 
                                 formError?.let { error ->
@@ -1370,6 +1387,7 @@ private fun SoldPlanDetailView(
     onDelete: () -> Unit,
     onCloneToLead: () -> Unit,
     onRequestTransfer: () -> Unit,
+    onNewLeadFromStudent: (Student) -> Unit,
 ) {
     val enrollment = SoldPlanEnrollmentStore.forSoldPlan(group.id)
     val outstanding = enrollment?.let { BillStore.outstandingMinorForEnrollment(it.id) } ?: 0L
@@ -1414,11 +1432,28 @@ private fun SoldPlanDetailView(
 
     FormPanelSection(
         title = "Students",
-        description = "Others on this plan besides the main client.",
+        description = "Others on this plan besides the main client. Use New lead to copy someone as the main contact on a separate lead.",
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
-        ReadOnlyStudentsSection(studentIds = group.studentIds, showLabel = false)
+        val students = group.resolveStudents()
+        if (students.isEmpty()) {
+            Text(
+                text = "None linked.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            students.forEachIndexed { index, person ->
+                LeadStudentLinkedRow(
+                    person = person,
+                    onNewLeadAsMainContact = { onNewLeadFromStudent(person) },
+                )
+                if (index < students.lastIndex) {
+                    Spacer(modifier = Modifier.height(spacing.field))
+                }
+            }
+        }
         Text(
             text = "${group.classAttendeeCount()} attending on classes · ${group.memberCount()} in household",
             style = MaterialTheme.typography.labelSmall,
@@ -1565,6 +1600,7 @@ private fun LeadForm(
     showPipelineStatus: Boolean,
     showPlanPicker: Boolean,
     validation: FormValidationState,
+    onNewLeadFromStudent: (Student) -> Unit,
 ) {
     var statusExpanded by remember { mutableStateOf(false) }
 
@@ -1610,6 +1646,7 @@ private fun LeadForm(
             mainClientId = state.mainClientId,
             clientName = state.clientName,
             onSelectionChange = { onStateChange(state.copy(studentIds = it)) },
+            onNewLeadFromStudent = onNewLeadFromStudent,
             spacing = spacing,
             validation = validation,
         )
