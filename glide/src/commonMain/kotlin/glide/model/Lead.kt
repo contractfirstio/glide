@@ -29,7 +29,7 @@ data class Lead(
     /** ISO date (yyyy-MM-dd) when the selected plan starts; required before marking a lead as sold. */
     val planStartDate: String = "",
     /** When false, the main client is not counted on classes; students always attend. */
-    val mainClientAttendsClass: Boolean = true,
+    val mainClientAttendsClass: Boolean = false,
     val notes: String = "",
     val createdAtMillis: Long = System.currentTimeMillis(),
 )
