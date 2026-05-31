@@ -192,7 +192,7 @@ private data class LeadFormState(
     val status: LeadStatus = LeadStatus.New,
     val planId: String? = null,
     val planStartDate: String = "",
-    val mainClientAttendsClass: Boolean = true,
+    val mainClientAttendsClass: Boolean = false,
     val notes: String = "",
 ) {
     fun isValidForLead(): Boolean =
@@ -1607,6 +1607,8 @@ private fun LeadForm(
     } else {
         LeadStudentsSection(
             selectedIds = state.studentIds,
+            mainClientId = state.mainClientId,
+            clientName = state.clientName,
             onSelectionChange = { onStateChange(state.copy(studentIds = it)) },
             spacing = spacing,
             validation = validation,

@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import glide.data.ClientStore
 import glide.data.StudentStore
 import glide.model.Student
 import glide.ui.layout.GlideLayout
@@ -28,14 +29,25 @@ import glide.ui.theme.GlideOutlinedField
 @Composable
 fun LeadStudentsSection(
     selectedIds: List<String>,
+    mainClientId: String?,
+    clientName: String,
     onSelectionChange: (List<String>) -> Unit,
     spacing: GlideLayout.Spacing,
     validation: FormValidationState,
 ) {
     var studentSearchQuery by remember { mutableStateOf("") }
+    var placeholderCountText by remember { mutableStateOf("") }
     var newName by remember { mutableStateOf("") }
     var newDateOfBirth by remember { mutableStateOf("") }
     var addError by remember { mutableStateOf<String?>(null) }
+    var placeholderError by remember { mutableStateOf<String?>(null) }
+
+    val mainContactLabel = remember(mainClientId, clientName, ClientStore.all) {
+        mainClientId
+            ?.let { ClientStore.findById(it)?.name?.trim()?.takeIf { it.isNotBlank() } }
+            ?: clientName.trim().takeIf { it.isNotBlank() }
+    }
+    val placeholderExample = mainContactLabel?.let { "$it Student 1, $it Student 2" } ?: "Main Client Student 1, …"
 
     val linked = selectedIds.mapNotNull { StudentStore.findById(it) }
     val studentSearchResults = remember(studentSearchQuery, selectedIds, StudentStore.all) {
@@ -82,6 +94,58 @@ fun LeadStudentsSection(
             }
             Spacer(modifier = Modifier.height(spacing.section))
         }
+
+        LeadActionSubsection(
+            title = "Add by count",
+            description = "When you know how many people will attend but not their names yet, add placeholders ($placeholderExample). Rename them later in the Students panel.",
+            spacing = spacing,
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                GlideOutlinedField(
+                    value = placeholderCountText,
+                    onValueChange = {
+                        placeholderCountText = it.filter { ch -> ch.isDigit() }
+                        placeholderError = null
+                    },
+                    label = "Number of students",
+                    placeholder = "e.g. 2",
+                )
+                Spacer(modifier = Modifier.height(spacing.field))
+                GlideOutlinedButton(
+                    onClick = {
+                        val count = placeholderCountText.trim().toIntOrNull()
+                        when {
+                            mainContactLabel == null ->
+                                placeholderError = "Link or enter the main client name first."
+                            count == null || count < 1 ->
+                                placeholderError = "Enter a number of at least 1."
+                            count > 20 ->
+                                placeholderError = "Add at most 20 placeholder students at a time."
+                            else -> {
+                                val created = StudentStore.createSynthetic(count, mainContactLabel)
+                                onSelectionChange(selectedIds + created.map { it.id })
+                                validation.clearKey("students")
+                                placeholderCountText = ""
+                                placeholderError = null
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Add placeholder students")
+                }
+                placeholderError?.let { error ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(spacing.section))
 
         LeadActionSubsection(
             title = "Link existing student",

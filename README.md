@@ -1,6 +1,6 @@
 # Glide
 
-Desktop UI app built with Kotlin Multiplatform and Compose Multiplatform (same stack as [day-trader](https://github.com/contractfirstio/day-trader)).
+macOS desktop app for class-based businesses: leads, scheduling, attendance, and billing. Built with Kotlin Multiplatform and Compose Multiplatform (same stack as [day-trader](https://github.com/contractfirstio/day-trader)).
 
 ## Run
 
@@ -8,4 +8,7 @@ Desktop UI app built with Kotlin Multiplatform and Compose Multiplatform (same s
 ./gradlew :glide:run
 ```
 
-The window shows a simple hello panel.
+## Documentation
+
+- [User guide](docs/USER-GUIDE.md) — features and day-to-day workflows
+- [Data persistence](docs/DATA-PERSISTENCE.md) — on-disk layout and schema (developers)

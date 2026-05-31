@@ -31,9 +31,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import glide.GlideDocumentation
 import glide.data.AppSettingsStore
 import glide.data.AppViewMode
 import glide.data.AppViewState
+import glide.platform.openExternalUrl
 import glide.generated.resources.Res
 import glide.generated.resources.glide_logo
 import glide.ui.SaveWorkspaceLayoutDialog
@@ -296,6 +298,21 @@ private fun AppMenu(
                 onClick = {
                     PanelWorkspace.restoreDefaultLayout(viewMode)
                     AppSettingsStore.saveWorkspaceUi(PanelWorkspace.toSettings())
+                },
+            )
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("User guide…") },
+                onClick = {
+                    menuExpanded = false
+                    openExternalUrl(GlideDocumentation.USER_GUIDE)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Documentation on GitHub…") },
+                onClick = {
+                    menuExpanded = false
+                    openExternalUrl(GlideDocumentation.DOCS_TREE)
                 },
             )
             HorizontalDivider()

@@ -15,7 +15,7 @@ data class SoldPlan(
     val planId: String? = null,
     val planStartDate: String = "",
     /** When false, the main client is not counted on classes; students always attend. */
-    val mainClientAttendsClass: Boolean = true,
+    val mainClientAttendsClass: Boolean = false,
     val notes: String = "",
     val createdAtMillis: Long = System.currentTimeMillis(),
 )

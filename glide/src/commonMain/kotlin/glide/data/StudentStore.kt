@@ -8,6 +8,36 @@ object StudentStore {
 
     val all: List<Student> get() = _people
 
+    private fun syntheticNamePattern(prefix: String): Regex =
+        Regex("^${Regex.escape(prefix)} Student (\\d+)$")
+
+    /** Next available placeholder names for a main contact, e.g. Jane Smith Student 1. */
+    fun nextSyntheticNames(count: Int, mainContactName: String): List<String> {
+        require(count > 0) { "count must be positive" }
+        val prefix = mainContactName.trim().replace(Regex("\\s+"), " ")
+        require(prefix.isNotBlank()) { "mainContactName must not be blank" }
+        val pattern = syntheticNamePattern(prefix)
+        val usedNumbers = all.mapNotNull { person ->
+            pattern.matchEntire(person.name.trim())?.groupValues?.get(1)?.toIntOrNull()
+        }.toMutableSet()
+        val names = mutableListOf<String>()
+        var candidate = 1
+        while (names.size < count) {
+            if (candidate !in usedNumbers) {
+                names.add("$prefix Student $candidate")
+                usedNumbers.add(candidate)
+            }
+            candidate++
+        }
+        return names
+    }
+
+    /** Creates [count] students with generated placeholder names and returns them. */
+    fun createSynthetic(count: Int, mainContactName: String): List<Student> =
+        nextSyntheticNames(count, mainContactName).map { name ->
+            Student(name = name).also(::create)
+        }
+
     /** Students linked to at least one sold plan. */
     val onSoldPlans: List<Student> get() =
         _people.filter { isOnSoldPlan(it.id) }
