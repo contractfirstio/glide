@@ -1,15 +1,12 @@
 package glide.ui.scheduling
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -20,7 +17,9 @@ import glide.data.UnassignedSoldPlan
 import glide.data.findSoldPlansNotAssignedToClass
 import glide.data.openUnassignedSoldPlan
 import glide.data.unassignedSoldPlansMessage
-import glide.ui.theme.GlideTextButton
+import glide.data.NotificationAlertKind
+import glide.ui.alerts.NotificationAlertBannerActions
+import glide.ui.alerts.shouldShowNotificationAlert
 
 @Composable
 fun rememberUnassignedSoldPlans(): List<UnassignedSoldPlan> {
@@ -36,6 +35,7 @@ fun UnassignedSoldPlanAlertBanner(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
+    if (!shouldShowNotificationAlert(NotificationAlertKind.UNASSIGNED_SOLD_PLAN)) return
     if (unassigned.isEmpty()) return
     val planCount = unassigned.size
     val first = unassigned.first()
@@ -63,19 +63,13 @@ fun UnassignedSoldPlanAlertBanner(
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            GlideTextButton(onClick = { openUnassignedSoldPlan(first) }) {
-                Text(
-                    text = if (compact) "Open" else "Open first sold plan",
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-            }
-        }
+        NotificationAlertBannerActions(
+            alertKind = NotificationAlertKind.UNASSIGNED_SOLD_PLAN,
+            foreground = MaterialTheme.colorScheme.onTertiaryContainer,
+            primaryLabel = if (compact) "Open" else "Open first sold plan",
+            onPrimaryClick = { openUnassignedSoldPlan(first) },
+            compact = compact,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }

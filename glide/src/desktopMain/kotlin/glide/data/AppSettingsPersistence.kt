@@ -47,6 +47,10 @@ internal actual fun persistAppSettings(settings: AppSettings) {
     properties.setProperty(PROPERTY_GOOGLE_CALENDAR_SYNC_LAST_MESSAGE, settings.googleCalendarSyncLastMessage)
     properties.setProperty(PROPERTY_GOOGLE_CALENDAR_ACCOUNT_EMAIL, settings.googleCalendarAccountEmail)
     properties.setProperty(PROPERTY_GOOGLE_CALENDAR_ID, settings.googleCalendarId)
+    properties.setProperty(
+        PROPERTY_NOTIFICATION_DEFERRALS,
+        glideJson.encodeToString(settings.notificationDeferrals),
+    )
     file.outputStream().use { properties.store(it, "Glide app settings") }
 }
 
@@ -80,6 +84,10 @@ private fun readProperties(file: File): AppSettings = runCatching {
     val googleCalendarAccountEmail =
         properties.getProperty(PROPERTY_GOOGLE_CALENDAR_ACCOUNT_EMAIL, "").orEmpty()
     val googleCalendarId = properties.getProperty(PROPERTY_GOOGLE_CALENDAR_ID, "").orEmpty()
+    val notificationDeferrals = properties.getProperty(PROPERTY_NOTIFICATION_DEFERRALS)?.let { json ->
+        runCatching { glideJson.decodeFromString<NotificationDeferrals>(json) }
+            .getOrDefault(NotificationDeferrals())
+    } ?: NotificationDeferrals()
     AppSettings(
         legalCompanyName = legalCompanyName,
         fpsNumber = fpsNumber,
@@ -93,6 +101,7 @@ private fun readProperties(file: File): AppSettings = runCatching {
         googleCalendarSyncLastMessage = googleCalendarSyncLastMessage,
         googleCalendarAccountEmail = googleCalendarAccountEmail,
         googleCalendarId = googleCalendarId,
+        notificationDeferrals = notificationDeferrals,
     )
 }.getOrDefault(AppSettings())
 
@@ -108,6 +117,7 @@ private const val PROPERTY_GOOGLE_CALENDAR_SYNC_LAST_SYNC_MILLIS = "googleCalend
 private const val PROPERTY_GOOGLE_CALENDAR_SYNC_LAST_MESSAGE = "googleCalendarSyncLastMessage"
 private const val PROPERTY_GOOGLE_CALENDAR_ACCOUNT_EMAIL = "googleCalendarAccountEmail"
 private const val PROPERTY_GOOGLE_CALENDAR_ID = "googleCalendarId"
+private const val PROPERTY_NOTIFICATION_DEFERRALS = "notificationDeferrals"
 
 private fun settingsFile(): File = File(glideApplicationSupportDir(), "settings.properties")
 

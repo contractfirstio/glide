@@ -3,7 +3,6 @@ package glide.ui.scheduling
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -14,7 +13,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -25,8 +23,10 @@ import glide.data.TermStore
 import glide.data.findPastSessionsNeedingAttendance
 import glide.data.millisUntilNextAttendanceReminderCheck
 import glide.data.openPendingAttendanceSession
+import glide.ui.alerts.NotificationAlertBannerActions
+import glide.ui.alerts.shouldShowNotificationAlert
+import glide.data.NotificationAlertKind
 import glide.ui.leads.formatIsoDateForDisplay
-import glide.ui.theme.GlideTextButton
 import kotlinx.coroutines.delay
 
 @Composable
@@ -51,6 +51,7 @@ fun PendingAttendanceAlertBanner(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
+    if (!shouldShowNotificationAlert(NotificationAlertKind.PENDING_ATTENDANCE)) return
     if (pending.isEmpty()) return
     val sessionCount = pending.size
     val first = pending.first()
@@ -82,19 +83,13 @@ fun PendingAttendanceAlertBanner(
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            GlideTextButton(onClick = { openPendingAttendanceSession(first) }) {
-                Text(
-                    text = if (compact) "Open" else "Open first class",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-            }
-        }
+        NotificationAlertBannerActions(
+            alertKind = NotificationAlertKind.PENDING_ATTENDANCE,
+            foreground = MaterialTheme.colorScheme.onErrorContainer,
+            primaryLabel = if (compact) "Open" else "Open first class",
+            onPrimaryClick = { openPendingAttendanceSession(first) },
+            compact = compact,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }

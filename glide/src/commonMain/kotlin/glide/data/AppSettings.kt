@@ -14,6 +14,7 @@ data class AppSettings(
     val googleCalendarSyncLastMessage: String = "",
     val googleCalendarAccountEmail: String = "",
     val googleCalendarId: String = "",
+    val notificationDeferrals: NotificationDeferrals = NotificationDeferrals(),
 ) {
     val isConfigured: Boolean
         get() = legalCompanyName.isNotBlank() &&

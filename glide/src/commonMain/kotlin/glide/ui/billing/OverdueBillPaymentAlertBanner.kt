@@ -1,9 +1,7 @@
 package glide.ui.billing
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -14,7 +12,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -25,7 +22,9 @@ import glide.data.findOverdueBillPayments
 import glide.data.millisUntilNextOverduePaymentCheck
 import glide.data.openOverdueBillPayment
 import glide.data.overdueBillPaymentsMessage
-import glide.ui.theme.GlideTextButton
+import glide.data.NotificationAlertKind
+import glide.ui.alerts.NotificationAlertBannerActions
+import glide.ui.alerts.shouldShowNotificationAlert
 import kotlinx.coroutines.delay
 
 @Composable
@@ -49,6 +48,7 @@ fun OverdueBillPaymentAlertBanner(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
+    if (!shouldShowNotificationAlert(NotificationAlertKind.OVERDUE_BILL_PAYMENT)) return
     if (overdue.isEmpty()) return
     val billCount = overdue.size
     val first = overdue.first()
@@ -76,19 +76,13 @@ fun OverdueBillPaymentAlertBanner(
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            GlideTextButton(onClick = { openOverdueBillPayment(first) }) {
-                Text(
-                    text = if (compact) "Open billing" else "Open first overdue bill",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-            }
-        }
+        NotificationAlertBannerActions(
+            alertKind = NotificationAlertKind.OVERDUE_BILL_PAYMENT,
+            foreground = MaterialTheme.colorScheme.onErrorContainer,
+            primaryLabel = if (compact) "Open billing" else "Open first overdue bill",
+            onPrimaryClick = { openOverdueBillPayment(first) },
+            compact = compact,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }

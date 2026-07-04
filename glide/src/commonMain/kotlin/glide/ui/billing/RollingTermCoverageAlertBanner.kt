@@ -1,15 +1,12 @@
 package glide.ui.billing
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -22,7 +19,9 @@ import glide.data.findRollingTermCoverageAlerts
 import glide.data.openSoldPlanClassAssignment
 import glide.data.rollingTermCoverageWarningMessage
 import glide.data.rollingTermsBlockBillIssuanceMessage
-import glide.ui.theme.GlideTextButton
+import glide.data.NotificationAlertKind
+import glide.ui.alerts.NotificationAlertBannerActions
+import glide.ui.alerts.shouldShowNotificationAlert
 
 @Composable
 fun rememberRollingTermCoverageAlerts(): List<RollingTermCoverageAlert> {
@@ -38,6 +37,7 @@ fun RollingTermCoverageAlertBanner(
     alerts: List<RollingTermCoverageAlert>,
     modifier: Modifier = Modifier,
 ) {
+    if (!shouldShowNotificationAlert(NotificationAlertKind.ROLLING_TERM_COVERAGE)) return
     if (alerts.isEmpty()) return
     val blocking = alerts.filter { it.blocksBilling }
     val warningOnly = alerts.filterNot { it.blocksBilling }
@@ -91,16 +91,12 @@ fun RollingTermCoverageAlertBanner(
             color = foreground,
             modifier = Modifier.padding(top = 2.dp),
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            GlideTextButton(onClick = { openSoldPlanClassAssignment(first.soldPlanId) }) {
-                Text("Open first sold plan", color = foreground)
-            }
-        }
+        NotificationAlertBannerActions(
+            alertKind = NotificationAlertKind.ROLLING_TERM_COVERAGE,
+            foreground = foreground,
+            primaryLabel = "Open first sold plan",
+            onPrimaryClick = { openSoldPlanClassAssignment(first.soldPlanId) },
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }

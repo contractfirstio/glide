@@ -210,7 +210,7 @@ Past sessions without submitted attendance trigger reminders in Customers mode a
 
 ## Alerts (top of window)
 
-Yellow banners summarize work that needs attention. Click **Open** to jump to the right place.
+Yellow banners summarize work that needs attention. Click **Open** to jump to the right place. Use **Remind me on…** to hide an alert until a date you choose; it reappears on that date (or the next time you open the app after that date).
 
 | Alert | Meaning |
 |-------|---------|

@@ -42,6 +42,7 @@ object AppSettingsStore {
             googleCalendarSyncLastMessage = _settings.value.googleCalendarSyncLastMessage,
             googleCalendarAccountEmail = _settings.value.googleCalendarAccountEmail,
             googleCalendarId = _settings.value.googleCalendarId,
+            notificationDeferrals = _settings.value.notificationDeferrals,
         )
         if (!trimmed.isConfigured) return
         _settings.value = trimmed
@@ -99,6 +100,16 @@ object AppSettingsStore {
     fun markFirstSessionCompleted() {
         if (hasCompletedFirstSession) return
         val updated = _settings.value.copy(hasCompletedFirstSession = true)
+        _settings.value = updated
+        persistAppSettings(updated)
+    }
+
+    fun deferNotification(kind: NotificationAlertKind, remindOnIsoDate: String) {
+        val updatedDeferrals = _settings.value.notificationDeferrals.remindOnByKind.toMutableMap()
+        updatedDeferrals[kind.name] = remindOnIsoDate
+        val updated = _settings.value.copy(
+            notificationDeferrals = NotificationDeferrals(remindOnByKind = updatedDeferrals),
+        )
         _settings.value = updated
         persistAppSettings(updated)
     }
