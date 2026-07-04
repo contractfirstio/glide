@@ -40,6 +40,10 @@ compose.desktop {
         jvmArgs("-Dapple.awt.application.name=Glide")
 
         nativeDistributions {
+            // Bundled JRE is built with jlink and omits modules not listed here.
+            // jdk.httpserver is required for Google OAuth loopback (HttpServer on port 8765).
+            modules("java.instrument", "java.management", "jdk.httpserver", "jdk.unsupported")
+
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "Glide"
             packageVersion = "1.0.0"
