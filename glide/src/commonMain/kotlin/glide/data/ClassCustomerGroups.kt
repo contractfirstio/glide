@@ -1,6 +1,8 @@
 package glide.data
 
 import glide.model.Class
+import glide.model.DayOfWeek
+import glide.model.isWeekly
 
 sealed class AddSoldPlanResult {
     data object Success : AddSoldPlanResult()
@@ -13,6 +15,12 @@ sealed class AddSoldPlanResult {
         val availableSessions: Int,
     ) : AddSoldPlanResult()
     data class CapacityExceeded(
+        val currentHeadcount: Int,
+        val groupHeadcount: Int,
+        val maxCapacity: Int,
+    ) : AddSoldPlanResult()
+    data class DailyCapacityExceeded(
+        val day: DayOfWeek,
         val currentHeadcount: Int,
         val groupHeadcount: Int,
         val maxCapacity: Int,
@@ -47,6 +55,7 @@ fun tryAddSoldPlan(
     locationId: String?,
     classId: String? = null,
     scheduledClass: Class? = null,
+    weeklySelectedDays: Set<DayOfWeek>? = null,
 ): AddSoldPlanResult {
     if (groupId in currentGroupIds) return AddSoldPlanResult.AlreadyAssigned
     val group = findSoldPlanById(groupId) ?: return AddSoldPlanResult.GroupNotFound
@@ -70,16 +79,27 @@ fun tryAddSoldPlan(
         }
     }
 
-    val maxCapacity = locationId?.let { LocationStore.findById(it)?.maxCapacity }
-    if (maxCapacity != null) {
-        val current = headcountForSoldPlans(currentGroupIds)
-        val adding = group.classAttendeeCount()
-        if (current + adding > maxCapacity) {
-            return AddSoldPlanResult.CapacityExceeded(
-                currentHeadcount = current,
-                groupHeadcount = adding,
-                maxCapacity = maxCapacity,
-            )
+    if (cls?.isWeekly() == true) {
+        weeklySelectedDays?.let { selectedDays ->
+            validateWeeklyDayCapacity(
+                scheduledClass = cls,
+                addingSoldPlanId = groupId,
+                selectedDays = selectedDays,
+                currentSoldPlanIds = currentGroupIds,
+            )?.let { return it }
+        }
+    } else {
+        val maxCapacity = locationId?.let { LocationStore.findById(it)?.maxCapacity }
+        if (maxCapacity != null) {
+            val current = headcountForSoldPlans(currentGroupIds)
+            val adding = group.classAttendeeCount()
+            if (current + adding > maxCapacity) {
+                return AddSoldPlanResult.CapacityExceeded(
+                    currentHeadcount = current,
+                    groupHeadcount = adding,
+                    maxCapacity = maxCapacity,
+                )
+            }
         }
     }
     return AddSoldPlanResult.Success
@@ -96,5 +116,7 @@ fun AddSoldPlanResult.toUserMessage(): String = when (this) {
         planCannotFullyScheduleMessage(planSessions, availableSessions)
     is AddSoldPlanResult.CapacityExceeded ->
         "Room capacity exceeded ($currentHeadcount + $groupHeadcount > $maxCapacity)."
+    is AddSoldPlanResult.DailyCapacityExceeded ->
+        "${day.label} is full ($currentHeadcount + $groupHeadcount > $maxCapacity)."
     is AddSoldPlanResult.RollingPlanNotAllowedOnClass -> message
 }

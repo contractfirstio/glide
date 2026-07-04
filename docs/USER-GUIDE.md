@@ -175,11 +175,13 @@ Define non-overlapping date ranges. Terms in use by classes cannot be edited or 
 
 ### Locations
 
-Venues for classes. Locations in use cannot be deleted.
+Venues for classes. Set **max capacity** to limit how many attendees can be on a class at once. Locations in use cannot be deleted.
 
 ### Classes
 
 Create classes with schedule, term(s), location, and color. Assign **sold plans** and set which **session dates** each sold plan attends.
+
+**Weekly classes** use **per-day** capacity: each day in the week has its own seat pool equal to the location’s max capacity. When linking a sold plan, choose which days they attend — their attendee count applies only on those days.
 
 Sold plans must be on a class before attendance and many billing steps work.
 

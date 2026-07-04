@@ -45,6 +45,9 @@ import androidx.compose.ui.unit.dp
 import glide.data.LocationStore
 import glide.data.enrolledHeadcount
 import glide.data.headcountForSoldPlans
+import glide.data.formatWeeklyCapacityListSummary
+import glide.data.weeklyDayCapacitiesForClass
+import glide.data.classAttendeeCount
 import glide.data.AddSoldPlanResult
 import glide.data.SoldPlanClassScheduleStore
 import glide.data.RollingPlanBillingService
@@ -853,9 +856,14 @@ private fun ClassListItem(
             )
         }
         if (groupCount > 0) {
-            val capacitySuffix = location?.maxCapacity?.let { max ->
-                " · $enrolledCount/$max"
-            } ?: if (enrolledCount > 0) " · $enrolledCount enrolled" else ""
+            val capacitySuffix = if (scheduledClass.isWeekly()) {
+                formatWeeklyCapacityListSummary(scheduledClass)?.let { " · $it" }
+                    ?: if (enrolledCount > 0) " · $enrolledCount enrolled" else ""
+            } else {
+                location?.maxCapacity?.let { max ->
+                    " · $enrolledCount/$max"
+                } ?: if (enrolledCount > 0) " · $enrolledCount enrolled" else ""
+            }
             Text(
                 text = "$groupCount group${if (groupCount == 1) "" else "s"}$capacitySuffix",
                 style = MaterialTheme.typography.labelSmall,
@@ -872,6 +880,7 @@ private data class PendingWeeklyPlanLink(
     val planName: String,
     val requiredDays: Int,
     val availableDays: List<DayOfWeek>,
+    val addingHeadcount: Int,
 )
 
 @Composable
@@ -894,6 +903,10 @@ private fun ClassCustomerGroupsSection(
     val assignedIds = soldPlanIds
     val location = locationId?.let { LocationStore.findById(it) }
     val headcount = headcountForSoldPlans(soldPlanIds)
+    val isWeeklyClass = classForValidation?.isWeekly() == true
+    val weeklyDayCapacities = remember(classForValidation, soldPlanIds) {
+        classForValidation?.let { weeklyDayCapacitiesForClass(it) } ?: emptyList()
+    }
 
     val searchResults = remember(searchQuery, assignedIds, classId, classForValidation) {
         SoldPlanStore.all
@@ -924,10 +937,14 @@ private fun ClassCustomerGroupsSection(
         spacing = spacing,
         role = FormPanelSectionRole.Secondary,
     ) {
-        ClassCapacityGraphic(
-            occupiedCount = headcount,
-            maxCapacity = location?.maxCapacity,
-        )
+        if (isWeeklyClass) {
+            WeeklyClassCapacityGraphic(dayCapacities = weeklyDayCapacities)
+        } else {
+            ClassCapacityGraphic(
+                occupiedCount = headcount,
+                maxCapacity = location?.maxCapacity,
+            )
+        }
         Spacer(modifier = Modifier.height(spacing.section))
         EntitySearchPicker(
             label = "Sold Plans",
@@ -964,6 +981,7 @@ private fun ClassCustomerGroupsSection(
                         planName = enrollment.planSnapshot.planName,
                         requiredDays = requiredDays,
                         availableDays = cls.weeklyDays.sortedBy { it.sortOrder },
+                        addingHeadcount = findSoldPlanById(groupId)?.classAttendeeCount() ?: 0,
                     )
                     return@EntitySearchPicker
                 }
@@ -992,6 +1010,7 @@ private fun ClassCustomerGroupsSection(
                 style = MaterialTheme.typography.labelSmall,
                 color = if (
                     message.contains("exceeded", ignoreCase = true) ||
+                    message.contains("is full", ignoreCase = true) ||
                     message.contains("already", ignoreCase = true) ||
                     message.contains("Create a new term", ignoreCase = true) ||
                     message.contains("rolling plan", ignoreCase = true) ||
@@ -1108,6 +1127,8 @@ private fun ClassCustomerGroupsSection(
             planName = pending.planName,
             requiredDays = pending.requiredDays,
             availableDays = pending.availableDays,
+            dayCapacities = weeklyDayCapacities,
+            addingHeadcount = pending.addingHeadcount,
             onDismiss = { pendingWeeklyLink = null },
             onConfirm = { selectedDays ->
                 val cls = classForValidation ?: return@WeeklyPlanScheduleDialog
@@ -1117,6 +1138,7 @@ private fun ClassCustomerGroupsSection(
                     locationId = locationId,
                     classId = classId,
                     scheduledClass = cls,
+                    weeklySelectedDays = selectedDays,
                 )
                 if (result != AddSoldPlanResult.Success) {
                     enrollmentMessage = result.toUserMessage()

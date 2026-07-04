@@ -26,10 +26,13 @@ import glide.data.ClassStore
 import glide.data.SoldPlanTransferPreview
 import glide.data.TransferSoldPlanResult
 import glide.data.buildSoldPlanTransferPreview
+import glide.data.classAttendeeCount
 import glide.data.findOutstandingAttendanceForSoldPlanTransfer
+import glide.data.findSoldPlanById
 import glide.data.openPendingAttendanceSession
 import glide.data.toUserMessage
 import glide.data.transferSoldPlanToClass
+import glide.data.weeklyDayCapacitiesForClass
 import glide.model.Class
 import glide.model.DayOfWeek
 import glide.model.compareClasses
@@ -118,6 +121,13 @@ fun SoldPlanClassTransferDialog(
     var weeklySelectedDays by remember(selectedTargetId) { mutableStateOf<Set<DayOfWeek>>(emptySet()) }
 
     val preview = selectedTarget?.let { buildSoldPlanTransferPreview(soldPlanId, it) }
+    val addingHeadcount = remember(soldPlanId) {
+        findSoldPlanById(soldPlanId)?.classAttendeeCount() ?: 0
+    }
+    val weeklyDayCapacities = remember(selectedTargetId) {
+        selectedTarget?.let { weeklyDayCapacitiesForClass(it) } ?: emptyList()
+    }
+    val capacityByDay = remember(weeklyDayCapacities) { weeklyDayCapacities.associateBy { it.day } }
 
     var transferResult by remember { mutableStateOf<TransferSoldPlanResult?>(null) }
 
@@ -176,11 +186,21 @@ fun SoldPlanClassTransferDialog(
                         text = "Select $required ${if (required == 1) "day" else "days"} for remaining sessions:",
                         style = MaterialTheme.typography.labelSmall,
                     )
+                    if (addingHeadcount > 0) {
+                        Text(
+                            text = "This plan has $addingHeadcount " +
+                                if (addingHeadcount == 1) "attendee" else "attendees",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     sortedDays.forEach { day ->
+                        val dayCapacity = capacityByDay[day]
+                        val dayFull = dayCapacity?.wouldExceed(addingHeadcount) == true
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .clickable(enabled = !dayFull) {
                                     weeklySelectedDays = if (day in weeklySelectedDays) {
                                         weeklySelectedDays - day
                                     } else {
@@ -191,7 +211,9 @@ fun SoldPlanClassTransferDialog(
                         ) {
                             Checkbox(
                                 checked = day in weeklySelectedDays,
+                                enabled = !dayFull,
                                 onCheckedChange = { checked ->
+                                    if (dayFull) return@Checkbox
                                     weeklySelectedDays = if (checked) {
                                         weeklySelectedDays + day
                                     } else {
@@ -199,7 +221,15 @@ fun SoldPlanClassTransferDialog(
                                     }
                                 },
                             )
-                            Text(text = day.label, style = MaterialTheme.typography.bodySmall)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = day.label, style = MaterialTheme.typography.bodySmall)
+                                dayCapacity?.let { capacity ->
+                                    WeeklyDayCapacityRow(
+                                        dayCapacity = capacity,
+                                        addingHeadcount = if (day in weeklySelectedDays) addingHeadcount else 0,
+                                    )
+                                }
+                            }
                         }
                     }
                     Text(

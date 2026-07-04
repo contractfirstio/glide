@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import glide.data.DayCapacity
 
 /** Visual room capacity: chairs show occupants when filled. */
 @Composable
@@ -63,6 +64,106 @@ fun ClassCapacityGraphic(
 
         Spacer(modifier = Modifier.height(8.dp))
         CapacityLegend()
+    }
+}
+
+/** Per-day capacity for weekly classes; each day has its own seat pool. */
+@Composable
+fun WeeklyClassCapacityGraphic(
+    dayCapacities: List<DayCapacity>,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = "Capacity is per day",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        dayCapacities.forEachIndexed { index, dayCapacity ->
+            WeeklyDayCapacityRow(dayCapacity = dayCapacity)
+            if (index < dayCapacities.lastIndex) {
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+        }
+        if (dayCapacities.any { it.maxCapacity != null }) {
+            Spacer(modifier = Modifier.height(8.dp))
+            CapacityLegend()
+        }
+    }
+}
+
+@Composable
+fun WeeklyDayCapacityRow(
+    dayCapacity: DayCapacity,
+    addingHeadcount: Int = 0,
+) {
+    val occupied = dayCapacity.occupied
+    val maxCapacity = dayCapacity.maxCapacity
+    val projected = occupied + addingHeadcount
+
+    if (maxCapacity == null) {
+        Text(
+            text = buildString {
+                append(dayCapacity.day.shortLabel)
+                append(" · ")
+                append(if (occupied == 0) "no enrollment" else "$occupied enrolled")
+                if (addingHeadcount > 0) append(" (+$addingHeadcount if linked)")
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    val capacity = maxCapacity.coerceAtLeast(1)
+    val displayOccupied = occupied.coerceIn(0, capacity)
+    val available = (capacity - occupied).coerceAtLeast(0)
+    val wouldExceed = dayCapacity.wouldExceed(addingHeadcount)
+    val isFull = occupied >= capacity
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = buildString {
+                append(dayCapacity.day.shortLabel)
+                append(" · ")
+                if (addingHeadcount > 0) {
+                    append("$occupied of $capacity seats filled")
+                    append(" → $projected if linked")
+                } else {
+                    append("$occupied of $capacity seats filled")
+                    if (available > 0) append(" · $available available")
+                }
+            },
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            color = when {
+                wouldExceed -> MaterialTheme.colorScheme.error
+                isFull -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurface
+            },
+        )
+        if (addingHeadcount == 0) {
+            Spacer(modifier = Modifier.height(6.dp))
+            SeatGrid(
+                capacity = capacity,
+                occupied = displayOccupied,
+            )
+        } else if (wouldExceed) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Full — not enough seats for $addingHeadcount more",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        } else {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "${capacity - projected} seats left after linking",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

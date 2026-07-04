@@ -30,6 +30,12 @@ sealed class TransferSoldPlanResult {
         val groupHeadcount: Int,
         val maxCapacity: Int,
     ) : TransferSoldPlanResult()
+    data class DailyCapacityExceeded(
+        val day: DayOfWeek,
+        val currentHeadcount: Int,
+        val groupHeadcount: Int,
+        val maxCapacity: Int,
+    ) : TransferSoldPlanResult()
     data class RollingPlanNotAllowedOnClass(val message: String) : TransferSoldPlanResult()
     data class WeeklyDayCountMismatch(val requiredDays: Int, val selectedDays: Int) : TransferSoldPlanResult()
     data class ScheduleAssignmentFailed(val message: String) : TransferSoldPlanResult()
@@ -56,6 +62,8 @@ fun TransferSoldPlanResult.toUserMessage(): String = when (this) {
         planCannotFullyScheduleMessage(planSessions, availableSessions)
     is TransferSoldPlanResult.CapacityExceeded ->
         "Room capacity exceeded ($currentHeadcount + $groupHeadcount > $maxCapacity)."
+    is TransferSoldPlanResult.DailyCapacityExceeded ->
+        "${day.label} is full ($currentHeadcount + $groupHeadcount > $maxCapacity)."
     is TransferSoldPlanResult.RollingPlanNotAllowedOnClass -> message
     is TransferSoldPlanResult.WeeklyDayCountMismatch ->
         "Select $requiredDays ${if (requiredDays == 1) "day" else "days"} for the remaining sessions " +
@@ -213,20 +221,6 @@ fun transferSoldPlanToClass(
     }
 
     val group = findSoldPlanById(soldPlanId)!!
-    targetClass.locationId?.let { locationId ->
-        val maxCapacity = LocationStore.findById(locationId)?.maxCapacity
-        if (maxCapacity != null) {
-            val current = headcountForSoldPlans(targetClass.soldPlanIds)
-            val adding = group.classAttendeeCount()
-            if (current + adding > maxCapacity) {
-                return TransferSoldPlanResult.CapacityExceeded(
-                    currentHeadcount = current,
-                    groupHeadcount = adding,
-                    maxCapacity = maxCapacity,
-                )
-            }
-        }
-    }
 
     if (targetClass.isWeekly() && remainingSessions != null) {
         val days = weeklySelectedDays
@@ -242,6 +236,46 @@ fun transferSoldPlanToClass(
         }
         validateWeeklyPlanFitsClass(soldPlanId, targetClass)?.let { message ->
             return TransferSoldPlanResult.RollingPlanNotAllowedOnClass(message)
+        }
+        validateWeeklyDayCapacity(
+            scheduledClass = targetClass,
+            addingSoldPlanId = soldPlanId,
+            selectedDays = days,
+            currentSoldPlanIds = targetClass.soldPlanIds,
+        )?.let { capacityResult ->
+            return when (capacityResult) {
+                is AddSoldPlanResult.DailyCapacityExceeded -> TransferSoldPlanResult.DailyCapacityExceeded(
+                    day = capacityResult.day,
+                    currentHeadcount = capacityResult.currentHeadcount,
+                    groupHeadcount = capacityResult.groupHeadcount,
+                    maxCapacity = capacityResult.maxCapacity,
+                )
+                is AddSoldPlanResult.CapacityExceeded -> TransferSoldPlanResult.CapacityExceeded(
+                    currentHeadcount = capacityResult.currentHeadcount,
+                    groupHeadcount = capacityResult.groupHeadcount,
+                    maxCapacity = capacityResult.maxCapacity,
+                )
+                else -> TransferSoldPlanResult.CapacityExceeded(
+                    currentHeadcount = 0,
+                    groupHeadcount = group.classAttendeeCount(),
+                    maxCapacity = targetClass.locationId?.let { LocationStore.findById(it)?.maxCapacity } ?: 0,
+                )
+            }
+        }
+    } else {
+        targetClass.locationId?.let { locationId ->
+            val maxCapacity = LocationStore.findById(locationId)?.maxCapacity
+            if (maxCapacity != null) {
+                val current = headcountForSoldPlans(targetClass.soldPlanIds)
+                val adding = group.classAttendeeCount()
+                if (current + adding > maxCapacity) {
+                    return TransferSoldPlanResult.CapacityExceeded(
+                        currentHeadcount = current,
+                        groupHeadcount = adding,
+                        maxCapacity = maxCapacity,
+                    )
+                }
+            }
         }
     }
 
